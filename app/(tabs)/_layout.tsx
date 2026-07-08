@@ -1,59 +1,104 @@
-import React from 'react';
-import FontAwesome from '@expo/vector-icons/FontAwesome';
-import { Link, Tabs } from 'expo-router';
-import { Pressable } from 'react-native';
+import { Tabs } from "expo-router";
+import { StatusBar } from "expo-status-bar";
+import { Platform, Text, View } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import Colors from '@/constants/Colors';
-import { useColorScheme } from '@/components/useColorScheme';
-import { useClientOnlyValue } from '@/components/useClientOnlyValue';
-
-// You can explore the built-in icon families and icons on the web at https://icons.expo.fyi/
-function TabBarIcon(props: {
-  name: React.ComponentProps<typeof FontAwesome>['name'];
-  color: string;
-}) {
-  return <FontAwesome size={28} style={{ marginBottom: -3 }} {...props} />;
-}
+// NAVIGATION BAR LAYOUT PURPOSE BUT NOT USED FOR NOW
+// import * as NavigationBar from "expo-navigation-bar";
+// import { useEffect } from "react";
 
 export default function TabLayout() {
-  const colorScheme = useColorScheme();
-
+  const insets = useSafeAreaInsets();
+  // useEffect(() => {
+  //   if (Platform.OS === "android") {
+  //     NavigationBar.setBackgroundColorAsync("#000000");
+  //     NavigationBar.setButtonStyleAsync("light");
+  //   }
+  // }, []);
   return (
-    <Tabs
-      screenOptions={{
-        tabBarActiveTintColor: Colors[colorScheme ?? 'light'].tint,
-        // Disable the static render of the header on web
-        // to prevent a hydration error in React Navigation v6.
-        headerShown: useClientOnlyValue(false, true),
-      }}>
-      <Tabs.Screen
-        name="index"
-        options={{
-          title: 'Tab One',
-          tabBarIcon: ({ color }) => <TabBarIcon name="code" color={color} />,
-          headerRight: () => (
-            <Link href="/modal" asChild>
-              <Pressable>
-                {({ pressed }) => (
-                  <FontAwesome
-                    name="info-circle"
-                    size={25}
-                    color={Colors[colorScheme ?? 'light'].text}
-                    style={{ marginRight: 15, opacity: pressed ? 0.5 : 1 }}
-                  />
-                )}
-              </Pressable>
-            </Link>
-          ),
+    <View style={{ flex: 1, paddingBottom: insets.bottom }}>
+      <StatusBar style="light" backgroundColor="#000000" />
+      <Tabs
+        screenOptions={{
+          headerShown: false, // Hides the default top header
+          tabBarStyle: {
+            backgroundColor: "#121212",
+            borderTopColor: "#2C2C2E",
+            paddingBottom: Platform.OS === "ios" ? 20 : 10,
+            paddingTop: 10,
+            height: Platform.OS === "ios" ? 85 : 65,
+          },
+          tabBarActiveTintColor: "#0A84FF",
+          tabBarInactiveTintColor: "#8E8E93",
         }}
-      />
-      <Tabs.Screen
-        name="two"
-        options={{
-          title: 'Tab Two',
-          tabBarIcon: ({ color }) => <TabBarIcon name="code" color={color} />,
-        }}
-      />
-    </Tabs>
+      >
+        <Tabs.Screen
+          name="index"
+          options={{
+            title: "Kasir",
+            tabBarIcon: ({ color }) => (
+              <Text
+                style={{ fontSize: 22, opacity: color === "#0A84FF" ? 1 : 0.5 }}
+              >
+                🛒
+              </Text>
+            ),
+          }}
+        />
+        <Tabs.Screen
+          name="history"
+          options={{
+            title: "Riwayat",
+            tabBarIcon: ({ color }) => (
+              <Text
+                style={{ fontSize: 22, opacity: color === "#0A84FF" ? 1 : 0.5 }}
+              >
+                🧾
+              </Text>
+            ),
+          }}
+        />
+        <Tabs.Screen
+          name="recap"
+          options={{
+            title: "Recap",
+            tabBarIcon: ({ color }) => (
+              <Text
+                style={{ fontSize: 22, opacity: color === "#0A84FF" ? 1 : 0.5 }}
+              >
+                📊
+              </Text>
+            ),
+          }}
+        />
+        <Tabs.Screen
+          name="manage"
+          options={{
+            title: "Manajemen",
+            tabBarIcon: ({ color }) => (
+              <Text
+                style={{ fontSize: 22, opacity: color === "#0A84FF" ? 1 : 0.5 }}
+              >
+                📋
+              </Text>
+            ),
+          }}
+        />
+        <Tabs.Screen
+          name="settings"
+          options={{
+            title: "Pengaturan",
+            tabBarIcon: ({ color }) => (
+              // Using a slider icon for Settings since Manage already uses a gear
+              <Text
+                style={{ fontSize: 22, opacity: color === "#0A84FF" ? 1 : 0.5 }}
+              >
+                ⚙️
+              </Text>
+            ),
+          }}
+        />
+      </Tabs>
+    </View>
   );
 }
