@@ -13,11 +13,15 @@ import {
 import { db } from "@/database/db";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import { useFocusEffect } from "expo-router";
-import { SafeAreaView } from "react-native-safe-area-context";
+import {
+  SafeAreaView,
+  useSafeAreaInsets,
+} from "react-native-safe-area-context";
 import { printReceiptRaw } from "../../utils/bluetooth";
 import { generateThermalReceiptString } from "../../utils/printer";
 
 export default function RecapScreen() {
+  const insets = useSafeAreaInsets();
   // --- NEW DATE RANGE STATES ---
   const [startDate, setStartDate] = useState<Date>(new Date());
   const [endDate, setEndDate] = useState<Date>(new Date());
@@ -411,7 +415,12 @@ export default function RecapScreen() {
         transparent={true}
         onRequestClose={() => setSelectedTx(null)}
       >
-        <View style={styles.modalOverlay}>
+        <View
+          style={[
+            styles.modalOverlay,
+            { paddingTop: insets.top, paddingBottom: insets.bottom },
+          ]}
+        >
           <View style={styles.receiptPaper}>
             <Text style={styles.receiptTitle}>D'FFOND SALON</Text>
             <Text style={styles.receiptCenter}>
@@ -595,7 +604,12 @@ export default function RecapScreen() {
         transparent={true}
         onRequestClose={() => setShowExpenseModal(false)}
       >
-        <View style={styles.modalOverlay}>
+        <View
+          style={[
+            styles.modalOverlay,
+            { paddingTop: insets.top, paddingBottom: insets.bottom },
+          ]}
+        >
           <View
             style={{
               backgroundColor: "#1C1C1E",

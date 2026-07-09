@@ -14,7 +14,10 @@ import {
 import { printReceiptRaw } from "../../utils/bluetooth";
 import { generateThermalReceiptString } from "../../utils/printer";
 
-import { SafeAreaView } from "react-native-safe-area-context";
+import {
+  SafeAreaView,
+  useSafeAreaInsets,
+} from "react-native-safe-area-context";
 // 🧠 1. IMPORT OUR GLOBAL BRAIN
 import { db } from "@/database/db";
 import { useCart } from "../../context/CartContext";
@@ -50,6 +53,9 @@ export default function RegisterScreen() {
   const [itemStylists, setItemStylists] = useState<string[]>([]);
   const [itemDiscount, setItemDiscount] = useState("");
   const [itemDiscountDesc, setItemDiscountDesc] = useState("");
+
+  // area for the notch bar
+  const insets = useSafeAreaInsets();
 
   useFocusEffect(
     useCallback(() => {
@@ -488,7 +494,12 @@ export default function RegisterScreen() {
             onPress={() => setSelectedItem(null)}
           />
 
-          <View style={styles.sidePanel}>
+          <View
+            style={[
+              styles.sidePanel,
+              { paddingTop: insets.top, paddingBottom: insets.bottom },
+            ]}
+          >
             <View style={styles.sidePanelHeader}>
               <View>
                 <Text style={styles.modalTitle}>{selectedItem?.name}</Text>
@@ -692,7 +703,7 @@ export default function RegisterScreen() {
         onRequestClose={() => setShowCheckout(false)}
       >
         <View style={styles.modalOverlay}>
-          <View style={styles.checkoutModal}>
+          <View style={[styles.checkoutModal, { paddingTop: insets.top }]}>
             <View style={styles.checkoutHeader}>
               <Text style={styles.modalTitle}>Tampilan Checkout</Text>
               <TouchableOpacity onPress={() => setShowCheckout(false)}>

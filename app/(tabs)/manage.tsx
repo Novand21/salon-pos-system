@@ -10,10 +10,14 @@ import {
   View,
 } from "react-native";
 
-import { SafeAreaView } from "react-native-safe-area-context";
+import {
+  SafeAreaView,
+  useSafeAreaInsets,
+} from "react-native-safe-area-context";
 import { db } from "../../database/db";
 
 export default function ManageScreen() {
+  const insets = useSafeAreaInsets();
   const [activeTab, setActiveTab] = useState<"Menu" | "Staff">("Menu");
 
   // Database States
@@ -454,7 +458,9 @@ export default function ManageScreen() {
             flex: 1,
             backgroundColor: "rgba(0,0,0,0.8)",
             justifyContent: "center",
-            padding: 20,
+            paddingHorizontal: 20,
+            paddingTop: insets.top || 20,
+            paddingBottom: insets.bottom || 20,
           }}
         >
           {/* Added maxHeight: '90%' to keep it contained */}
@@ -734,7 +740,9 @@ export default function ManageScreen() {
             flex: 1,
             backgroundColor: "rgba(0,0,0,0.8)",
             justifyContent: "center",
-            padding: 20,
+            paddingHorizontal: 20,
+            paddingTop: insets.top || 20,
+            paddingBottom: insets.bottom || 20,
           }}
         >
           <View

@@ -9,9 +9,13 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
+import {
+  SafeAreaView,
+  useSafeAreaInsets,
+} from "react-native-safe-area-context";
 
 export default function BasketScreen() {
+  const insets = useSafeAreaInsets();
   const [pendingOrders, setPendingOrders] = useState<any[]>([]);
   const [selectedOrder, setSelectedOrder] = useState<any>(null);
 
@@ -161,7 +165,9 @@ export default function BasketScreen() {
         onRequestClose={() => setSelectedOrder(null)}
       >
         <View style={styles.modalOverlay}>
-          <View style={styles.checkoutModal}>
+          <View
+            style={[styles.checkoutModal, { paddingBottom: insets.bottom }]}
+          >
             <View style={styles.checkoutHeader}>
               <Text style={styles.modalTitle}>
                 Antrian #{selectedOrder?.queue_number} -{" "}

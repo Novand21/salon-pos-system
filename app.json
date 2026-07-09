@@ -2,7 +2,7 @@
   "expo": {
     "name": "MyDffond",
     "slug": "MyDffond",
-    "version": "1.0.0",
+    "version": "1.0.1",
     "orientation": "portrait",
     "icon": "./assets/images/logo_salon_menu_screen.png",
     "androidNavigationBar": {
@@ -35,7 +35,8 @@
       ],
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false,
-      "package": "com.dffond.MyDffond"
+      "package": "com.dffond.MyDffond",
+      "versionCode": 2
     },
     "web": {
       "bundler": "metro",

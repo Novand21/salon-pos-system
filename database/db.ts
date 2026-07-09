@@ -47,7 +47,7 @@ export const initDB = () => {
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 name TEXT NOT NULL,
                 role TEXT NOT NULL,
-                commision_rate REAL DEFAULT 0.10
+                commision_rate REAL DEFAULT 0.10,
                 is_active BOOLEAN DEFAULT 1 -- Added here so new installs create it instantly
             );
 
