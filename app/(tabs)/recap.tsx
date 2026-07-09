@@ -421,162 +421,182 @@ export default function RecapScreen() {
             { paddingTop: insets.top, paddingBottom: insets.bottom },
           ]}
         >
-          <View style={styles.receiptPaper}>
-            <Text style={styles.receiptTitle}>D'FFOND SALON</Text>
-            <Text style={styles.receiptCenter}>
-              Jl. Dagopojok No.16, Kota Bandung
-            </Text>
-
-            <Text style={styles.receiptDivider}>
-              --------------------------------
-            </Text>
-            <Text style={styles.receiptLine}>
-              Tanggal:{" "}
-              {selectedTx
-                ? new Date(selectedTx.timestamp).toLocaleDateString("en-GB")
-                : ""}
-            </Text>
-            <Text style={styles.receiptLine}>Waktu: {selectedTx?.time}</Text>
-            {selectedTx?.type === "sale" && (
-              <Text style={styles.receiptLine}>
-                Cashier: {selectedTx?.stylist}
+          <ScrollView
+            style={{ width: "100%", maxHeight: "80%" }}
+            contentContainerStyle={{
+              alignItems: "center",
+              paddingVertical: 10,
+            }}
+            showsVerticalScrollIndicator={true}
+          >
+            <View style={styles.receiptPaper}>
+              <Text style={styles.receiptTitle}>D'FFOND SALON</Text>
+              <Text style={styles.receiptCenter}>
+                Jl. Dagopojok No.16, Kota Bandung
               </Text>
-            )}
-            <Text style={styles.receiptDivider}>
-              --------------------------------
-            </Text>
 
-            {selectedTx?.type === "sale" ? (
-              <View>
-                {receiptItems.map((item: any) => (
+              <Text style={styles.receiptDivider}>
+                --------------------------------
+              </Text>
+              <Text style={styles.receiptLine}>
+                Tanggal:{" "}
+                {selectedTx
+                  ? new Date(selectedTx.timestamp).toLocaleDateString("en-GB")
+                  : ""}
+              </Text>
+              <Text style={styles.receiptLine}>Waktu: {selectedTx?.time}</Text>
+              {selectedTx?.type === "sale" && (
+                <Text style={styles.receiptLine}>
+                  Cashier: {selectedTx?.stylist}
+                </Text>
+              )}
+              <Text style={styles.receiptDivider}>
+                --------------------------------
+              </Text>
+
+              {selectedTx?.type === "sale" ? (
+                <View>
+                  {receiptItems.map((item: any) => (
+                    <View
+                      key={item.id}
+                      style={{
+                        marginBottom: 12,
+                        paddingBottom: 8,
+                        borderBottomWidth: 1,
+                        borderBottomColor: "#F2F2F7",
+                      }}
+                    >
+                      <View
+                        style={{
+                          flexDirection: "row",
+                          justifyContent: "space-between",
+                          alignItems: "flex-start",
+                        }}
+                      >
+                        <Text
+                          style={[
+                            styles.receiptLine,
+                            { flex: 1, fontWeight: "bold" },
+                          ]}
+                        >
+                          {item.item_name}
+                        </Text>
+                      </View>
+
+                      {item.stylists && item.stylists.length > 0 && (
+                        <View style={styles.receiptRowWrap}>
+                          <Text
+                            style={[
+                              styles.receiptTextLeftWrap,
+                              { fontStyle: "italic", paddingLeft: 0 },
+                            ]}
+                          >
+                            {item.stylists
+                              .split(",")
+                              .map((s: string) => `@${s.trim()}`)
+                              .join(", ")}
+                          </Text>
+                        </View>
+                      )}
+
+                      {item.add_ons_list ? (
+                        <View style={styles.receiptRowWrap}>
+                          <Text
+                            style={[
+                              styles.receiptTextLeftWrap,
+                              { paddingLeft: 10 },
+                            ]}
+                          >
+                            + {item.add_ons_list}
+                          </Text>
+                        </View>
+                      ) : null}
+
+                      {item.discount_percent > 0 && (
+                        <View style={styles.receiptRowWrap}>
+                          <Text
+                            style={[
+                              styles.receiptDiscountLeftWrap,
+                              { paddingLeft: 10 },
+                            ]}
+                          >
+                            Disc {item.discount_percent}%{" "}
+                            {item.discount_desc
+                              ? `(${item.discount_desc})`
+                              : ""}
+                          </Text>
+                        </View>
+                      )}
+
+                      <View
+                        style={{
+                          flexDirection: "row",
+                          justifyContent: "flex-end",
+                          marginTop: 4,
+                        }}
+                      >
+                        <Text
+                          style={[styles.receiptLine, { fontWeight: "bold" }]}
+                        >
+                          Subtotal: Rp{" "}
+                          {item.final_price.toLocaleString("id-ID")}
+                        </Text>
+                      </View>
+                    </View>
+                  ))}
+
+                  <Text style={styles.receiptDivider}>
+                    --------------------------------
+                  </Text>
+                  <View style={styles.receiptRowWrap}>
+                    <Text
+                      style={{
+                        color: "#000",
+                        fontSize: 14,
+                        fontWeight: "bold",
+                      }}
+                    >
+                      TOTAL:
+                    </Text>
+                    <Text
+                      style={{
+                        color: "#000",
+                        fontSize: 14,
+                        fontWeight: "bold",
+                      }}
+                    >
+                      Rp {selectedTx?.amount.toLocaleString("id-ID")}
+                    </Text>
+                  </View>
                   <View
-                    key={item.id}
                     style={{
-                      marginBottom: 12,
-                      paddingBottom: 8,
-                      borderBottomWidth: 1,
-                      borderBottomColor: "#F2F2F7",
+                      flexDirection: "row",
+                      justifyContent: "space-between",
+                      marginTop: 5,
                     }}
                   >
-                    <View
-                      style={{
-                        flexDirection: "row",
-                        justifyContent: "space-between",
-                        alignItems: "flex-start",
-                      }}
-                    >
-                      <Text
-                        style={[
-                          styles.receiptLine,
-                          { flex: 1, fontWeight: "bold" },
-                        ]}
-                      >
-                        {item.item_name}
-                      </Text>
-                    </View>
-
-                    {item.stylists && item.stylists.length > 0 && (
-                      <View style={styles.receiptRowWrap}>
-                        <Text
-                          style={[
-                            styles.receiptTextLeftWrap,
-                            { fontStyle: "italic", paddingLeft: 0 },
-                          ]}
-                        >
-                          {item.stylists
-                            .split(",")
-                            .map((s: string) => `@${s.trim()}`)
-                            .join(", ")}
-                        </Text>
-                      </View>
-                    )}
-
-                    {item.add_ons_list ? (
-                      <View style={styles.receiptRowWrap}>
-                        <Text
-                          style={[
-                            styles.receiptTextLeftWrap,
-                            { paddingLeft: 10 },
-                          ]}
-                        >
-                          + {item.add_ons_list}
-                        </Text>
-                      </View>
-                    ) : null}
-
-                    {item.discount_percent > 0 && (
-                      <View style={styles.receiptRowWrap}>
-                        <Text
-                          style={[
-                            styles.receiptDiscountLeftWrap,
-                            { paddingLeft: 10 },
-                          ]}
-                        >
-                          Disc {item.discount_percent}%{" "}
-                          {item.discount_desc ? `(${item.discount_desc})` : ""}
-                        </Text>
-                      </View>
-                    )}
-
-                    <View
-                      style={{
-                        flexDirection: "row",
-                        justifyContent: "flex-end",
-                        marginTop: 4,
-                      }}
-                    >
-                      <Text
-                        style={[styles.receiptLine, { fontWeight: "bold" }]}
-                      >
-                        Subtotal: Rp {item.final_price.toLocaleString("id-ID")}
-                      </Text>
-                    </View>
+                    <Text style={styles.receiptLine}>PEMBAYARAN:</Text>
+                    <Text style={styles.receiptLine}>
+                      {selectedTx?.paymentMethod}
+                    </Text>
                   </View>
-                ))}
-
-                <Text style={styles.receiptDivider}>
-                  --------------------------------
-                </Text>
-                <View style={styles.receiptRowWrap}>
-                  <Text
-                    style={{ color: "#000", fontSize: 14, fontWeight: "bold" }}
-                  >
-                    TOTAL:
-                  </Text>
-                  <Text
-                    style={{ color: "#000", fontSize: 14, fontWeight: "bold" }}
-                  >
-                    Rp {selectedTx?.amount.toLocaleString("id-ID")}
+                </View>
+              ) : (
+                <View>
+                  <Text style={styles.receiptBold}>PENGELUARAN</Text>
+                  <Text style={styles.receiptLine}>{selectedTx?.details}</Text>
+                  <Text style={styles.receiptBold}>
+                    TOTAL: - Rp{" "}
+                    {Math.abs(selectedTx?.amount || 0).toLocaleString("id-ID")}
                   </Text>
                 </View>
-                <View
-                  style={{
-                    flexDirection: "row",
-                    justifyContent: "space-between",
-                    marginTop: 5,
-                  }}
-                >
-                  <Text style={styles.receiptLine}>PEMBAYARAN:</Text>
-                  <Text style={styles.receiptLine}>
-                    {selectedTx?.paymentMethod}
-                  </Text>
-                </View>
-              </View>
-            ) : (
-              <View>
-                <Text style={styles.receiptBold}>PENGELUARAN</Text>
-                <Text style={styles.receiptLine}>{selectedTx?.details}</Text>
-                <Text style={styles.receiptBold}>
-                  TOTAL: - Rp{" "}
-                  {Math.abs(selectedTx?.amount || 0).toLocaleString("id-ID")}
-                </Text>
-              </View>
-            )}
+              )}
 
-            <Text style={styles.receiptDivider}>
-              --------------------------------
-            </Text>
-          </View>
+              <Text style={styles.receiptDivider}>
+                --------------------------------
+              </Text>
+            </View>
+          </ScrollView>
 
           <View style={styles.modalActions}>
             <TouchableOpacity

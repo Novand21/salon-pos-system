@@ -1,7 +1,9 @@
 import { router, useFocusEffect, useLocalSearchParams } from "expo-router";
 import React, { useCallback, useState } from "react";
 import {
+  KeyboardAvoidingView,
   Modal,
+  Platform,
   ScrollView,
   StyleSheet,
   Text,
@@ -494,7 +496,8 @@ export default function RegisterScreen() {
             onPress={() => setSelectedItem(null)}
           />
 
-          <View
+          <KeyboardAvoidingView
+            behavior={Platform.OS === "ios" ? "padding" : "height"}
             style={[
               styles.sidePanel,
               { paddingTop: insets.top, paddingBottom: insets.bottom },
@@ -691,7 +694,7 @@ export default function RegisterScreen() {
                 </Text>
               </TouchableOpacity>
             </View>
-          </View>
+          </KeyboardAvoidingView>
         </View>
       </Modal>
 

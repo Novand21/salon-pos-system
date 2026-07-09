@@ -1,7 +1,9 @@
 import { useFocusEffect } from "expo-router";
 import React, { useCallback, useState } from "react";
 import {
+  KeyboardAvoidingView,
   Modal,
+  Platform,
   ScrollView,
   StyleSheet,
   Text,
@@ -453,279 +455,288 @@ export default function ManageScreen() {
         transparent={true}
         onRequestClose={() => setShowAddMenuModal(false)}
       >
-        <View
-          style={{
-            flex: 1,
-            backgroundColor: "rgba(0,0,0,0.8)",
-            justifyContent: "center",
-            paddingHorizontal: 20,
-            paddingTop: insets.top || 20,
-            paddingBottom: insets.bottom || 20,
-          }}
+        <KeyboardAvoidingView
+          style={{ flex: 1 }}
+          behavior={Platform.OS === "ios" ? "padding" : "height"}
         >
-          {/* Added maxHeight: '90%' to keep it contained */}
           <View
             style={{
-              backgroundColor: "#1C1C1E",
-              padding: 20,
-              borderRadius: 15,
-              width: "100%",
-              maxWidth: 400,
-              alignSelf: "center",
-              maxHeight: "90%",
+              flex: 1,
+              backgroundColor: "rgba(0,0,0,0.8)",
+              justifyContent: "center",
+              paddingHorizontal: 20,
+              paddingTop: insets.top || 20,
+              paddingBottom: insets.bottom || 20,
             }}
           >
-            <Text
+            {/* Added maxHeight: '90%' to keep it contained */}
+            <View
               style={{
-                color: "#FFF",
-                fontSize: 20,
-                fontWeight: "bold",
-                marginBottom: 20,
+                backgroundColor: "#1C1C1E",
+                padding: 20,
+                borderRadius: 15,
+                width: "100%",
+                maxWidth: 400,
+                alignSelf: "center",
+                maxHeight: "90%",
               }}
             >
-              {editingItemId ? "Edit Menu" : "Menu Baru"}
-            </Text>
-
-            {/* --- WRAP ALL INPUTS IN A SCROLLVIEW --- */}
-            <ScrollView
-              style={{ marginBottom: 20 }}
-              showsVerticalScrollIndicator={false}
-            >
-              {/* Category Selector & Input */}
-              <TextInput
-                style={{
-                  backgroundColor: "#121212",
-                  color: "#FFF",
-                  padding: 15,
-                  borderRadius: 8,
-                  marginBottom: 15,
-                  borderWidth: 1,
-                  borderColor: "#2C2C2E",
-                }}
-                placeholder="Nama Menu (e.g., Potong Rambut)"
-                placeholderTextColor="#8E8E93"
-                value={newItemName}
-                onChangeText={setNewItemName}
-              />
               <Text
                 style={{
-                  color: "#8E8E93",
-                  fontSize: 12,
+                  color: "#FFF",
+                  fontSize: 20,
                   fontWeight: "bold",
-                  marginBottom: 10,
+                  marginBottom: 20,
                 }}
               >
-                KATEGORI
+                {editingItemId ? "Edit Menu" : "Menu Baru"}
               </Text>
-              {categories.length > 0 && (
-                <ScrollView
-                  horizontal
-                  showsHorizontalScrollIndicator={false}
-                  style={{ flexDirection: "row", marginBottom: 10 }}
-                >
-                  {categories.map((cat) => (
-                    <TouchableOpacity
-                      key={cat}
-                      onPress={() => setNewItemCategory(cat)}
-                      style={{
-                        padding: 10,
-                        paddingHorizontal: 15,
-                        borderRadius: 10,
-                        borderWidth: 2,
-                        borderColor:
-                          newItemCategory === cat ? "#0A84FF" : "#2C2C2E",
-                        backgroundColor:
-                          newItemCategory === cat
-                            ? "rgba(10,132,255,0.2)"
-                            : "#1C1C1E",
-                        marginRight: 10,
-                      }}
-                    >
-                      <Text
-                        style={
-                          newItemCategory === cat
-                            ? styles.textWhiteBold
-                            : styles.textGray
-                        }
-                      >
-                        {cat}
-                      </Text>
-                    </TouchableOpacity>
-                  ))}
-                </ScrollView>
-              )}
-              <TextInput
-                style={{
-                  backgroundColor: "#121212",
-                  color: "#FFF",
-                  padding: 15,
-                  borderRadius: 8,
-                  marginBottom: 15,
-                  borderWidth: 1,
-                  borderColor: "#2C2C2E",
-                }}
-                placeholder="Atau tambah kategori baru..."
-                placeholderTextColor="#8E8E93"
-                value={newItemCategory}
-                onChangeText={setNewItemCategory}
-              />
 
-              {/* Basic Item Details */}
-              <TextInput
-                style={{
-                  backgroundColor: "#121212",
-                  color: "#FFF",
-                  padding: 15,
-                  borderRadius: 8,
-                  marginBottom: 15,
-                  borderWidth: 1,
-                  borderColor: "#2C2C2E",
-                }}
-                placeholder="Harga Dasar (e.g., 50000)"
-                placeholderTextColor="#8E8E93"
-                keyboardType="numeric"
-                value={newItemPrice}
-                onChangeText={setNewItemPrice}
-              />
-              <TextInput
-                style={{
-                  backgroundColor: "#121212",
-                  color: "#FFF",
-                  padding: 15,
-                  borderRadius: 8,
-                  marginBottom: 25,
-                  borderWidth: 1,
-                  borderColor: "#2C2C2E",
-                  height: 80,
-                }}
-                placeholder="Deskripsi (Optional)"
-                placeholderTextColor="#8E8E93"
-                multiline
-                value={newItemDesc}
-                onChangeText={setNewItemDesc}
-              />
-
-              {/* 3. Dynamic Add-Ons */}
-              <View
-                style={{
-                  flexDirection: "row",
-                  justifyContent: "space-between",
-                  alignItems: "center",
-                  marginBottom: 10,
-                }}
+              {/* --- WRAP ALL INPUTS IN A SCROLLVIEW --- */}
+              <ScrollView
+                style={{ marginBottom: 20 }}
+                showsVerticalScrollIndicator={false}
               >
+                {/* Category Selector & Input */}
+                <TextInput
+                  style={{
+                    backgroundColor: "#121212",
+                    color: "#FFF",
+                    padding: 15,
+                    borderRadius: 8,
+                    marginBottom: 15,
+                    borderWidth: 1,
+                    borderColor: "#2C2C2E",
+                  }}
+                  placeholder="Nama Menu (e.g., Potong Rambut)"
+                  placeholderTextColor="#8E8E93"
+                  value={newItemName}
+                  onChangeText={setNewItemName}
+                />
                 <Text
-                  style={{ color: "#8E8E93", fontSize: 12, fontWeight: "bold" }}
+                  style={{
+                    color: "#8E8E93",
+                    fontSize: 12,
+                    fontWeight: "bold",
+                    marginBottom: 10,
+                  }}
                 >
-                  TAMBAHAN LAINNYA
+                  KATEGORI
                 </Text>
-                <TouchableOpacity onPress={handleAddAddOnRow}>
+                {categories.length > 0 && (
+                  <ScrollView
+                    horizontal
+                    showsHorizontalScrollIndicator={false}
+                    style={{ flexDirection: "row", marginBottom: 10 }}
+                  >
+                    {categories.map((cat) => (
+                      <TouchableOpacity
+                        key={cat}
+                        onPress={() => setNewItemCategory(cat)}
+                        style={{
+                          padding: 10,
+                          paddingHorizontal: 15,
+                          borderRadius: 10,
+                          borderWidth: 2,
+                          borderColor:
+                            newItemCategory === cat ? "#0A84FF" : "#2C2C2E",
+                          backgroundColor:
+                            newItemCategory === cat
+                              ? "rgba(10,132,255,0.2)"
+                              : "#1C1C1E",
+                          marginRight: 10,
+                        }}
+                      >
+                        <Text
+                          style={
+                            newItemCategory === cat
+                              ? styles.textWhiteBold
+                              : styles.textGray
+                          }
+                        >
+                          {cat}
+                        </Text>
+                      </TouchableOpacity>
+                    ))}
+                  </ScrollView>
+                )}
+                <TextInput
+                  style={{
+                    backgroundColor: "#121212",
+                    color: "#FFF",
+                    padding: 15,
+                    borderRadius: 8,
+                    marginBottom: 15,
+                    borderWidth: 1,
+                    borderColor: "#2C2C2E",
+                  }}
+                  placeholder="Atau tambah kategori baru..."
+                  placeholderTextColor="#8E8E93"
+                  value={newItemCategory}
+                  onChangeText={setNewItemCategory}
+                />
+
+                {/* Basic Item Details */}
+                <TextInput
+                  style={{
+                    backgroundColor: "#121212",
+                    color: "#FFF",
+                    padding: 15,
+                    borderRadius: 8,
+                    marginBottom: 15,
+                    borderWidth: 1,
+                    borderColor: "#2C2C2E",
+                  }}
+                  placeholder="Harga Dasar (e.g., 50000)"
+                  placeholderTextColor="#8E8E93"
+                  keyboardType="numeric"
+                  value={newItemPrice}
+                  onChangeText={setNewItemPrice}
+                />
+                <TextInput
+                  style={{
+                    backgroundColor: "#121212",
+                    color: "#FFF",
+                    padding: 15,
+                    borderRadius: 8,
+                    marginBottom: 25,
+                    borderWidth: 1,
+                    borderColor: "#2C2C2E",
+                    height: 80,
+                  }}
+                  placeholder="Deskripsi (Optional)"
+                  placeholderTextColor="#8E8E93"
+                  multiline
+                  value={newItemDesc}
+                  onChangeText={setNewItemDesc}
+                />
+
+                {/* 3. Dynamic Add-Ons */}
+                <View
+                  style={{
+                    flexDirection: "row",
+                    justifyContent: "space-between",
+                    alignItems: "center",
+                    marginBottom: 10,
+                  }}
+                >
                   <Text
                     style={{
-                      color: "#0A84FF",
+                      color: "#8E8E93",
                       fontSize: 12,
                       fontWeight: "bold",
                     }}
                   >
-                    + Tambah Baris
+                    TAMBAHAN LAINNYA
                   </Text>
-                </TouchableOpacity>
-              </View>
-
-              {itemAddOns.map((addon, index) => (
-                <View
-                  key={index}
-                  style={{ flexDirection: "row", gap: 10, marginBottom: 15 }}
-                >
-                  <TextInput
-                    style={{
-                      flex: 2,
-                      backgroundColor: "#121212",
-                      color: "#FFF",
-                      padding: 12,
-                      borderRadius: 8,
-                      borderWidth: 1,
-                      borderColor: "#2C2C2E",
-                    }}
-                    placeholder="Name (e.g. Styling)"
-                    placeholderTextColor="#8E8E93"
-                    value={addon.name}
-                    onChangeText={(text) =>
-                      handleUpdateAddOn(index, "name", text)
-                    }
-                  />
-                  <TextInput
-                    style={{
-                      flex: 1.5,
-                      backgroundColor: "#121212",
-                      color: "#FFF",
-                      padding: 12,
-                      borderRadius: 8,
-                      borderWidth: 1,
-                      borderColor: "#2C2C2E",
-                    }}
-                    placeholder="Price"
-                    placeholderTextColor="#8E8E93"
-                    keyboardType="numeric"
-                    value={addon.additional_price}
-                    onChangeText={(text) =>
-                      handleUpdateAddOn(index, "additional_price", text)
-                    }
-                  />
-                  <TouchableOpacity
-                    style={{
-                      justifyContent: "center",
-                      alignItems: "center",
-                      paddingHorizontal: 10,
-                    }}
-                    onPress={() => handleRemoveAddOn(index)}
-                  >
+                  <TouchableOpacity onPress={handleAddAddOnRow}>
                     <Text
                       style={{
-                        color: "#FF453A",
-                        fontSize: 18,
+                        color: "#0A84FF",
+                        fontSize: 12,
                         fontWeight: "bold",
                       }}
                     >
-                      X
+                      + Tambah Baris
                     </Text>
                   </TouchableOpacity>
                 </View>
-              ))}
-            </ScrollView>
 
-            {/* 4. PINNED BOTTOM BUTTONS */}
-            <View style={{ flexDirection: "row", gap: 10 }}>
-              <TouchableOpacity
-                style={{
-                  flex: 1,
-                  padding: 15,
-                  borderRadius: 8,
-                  backgroundColor: "#2C2C2E",
-                  alignItems: "center",
-                }}
-                onPress={() => setShowAddMenuModal(false)}
-              >
-                <Text style={styles.textWhiteBold}>Cancel</Text>
-              </TouchableOpacity>
+                {itemAddOns.map((addon, index) => (
+                  <View
+                    key={index}
+                    style={{ flexDirection: "row", gap: 10, marginBottom: 15 }}
+                  >
+                    <TextInput
+                      style={{
+                        flex: 2,
+                        backgroundColor: "#121212",
+                        color: "#FFF",
+                        padding: 12,
+                        borderRadius: 8,
+                        borderWidth: 1,
+                        borderColor: "#2C2C2E",
+                      }}
+                      placeholder="Name (e.g. Styling)"
+                      placeholderTextColor="#8E8E93"
+                      value={addon.name}
+                      onChangeText={(text) =>
+                        handleUpdateAddOn(index, "name", text)
+                      }
+                    />
+                    <TextInput
+                      style={{
+                        flex: 1.5,
+                        backgroundColor: "#121212",
+                        color: "#FFF",
+                        padding: 12,
+                        borderRadius: 8,
+                        borderWidth: 1,
+                        borderColor: "#2C2C2E",
+                      }}
+                      placeholder="Price"
+                      placeholderTextColor="#8E8E93"
+                      keyboardType="numeric"
+                      value={addon.additional_price}
+                      onChangeText={(text) =>
+                        handleUpdateAddOn(index, "additional_price", text)
+                      }
+                    />
+                    <TouchableOpacity
+                      style={{
+                        justifyContent: "center",
+                        alignItems: "center",
+                        paddingHorizontal: 10,
+                      }}
+                      onPress={() => handleRemoveAddOn(index)}
+                    >
+                      <Text
+                        style={{
+                          color: "#FF453A",
+                          fontSize: 18,
+                          fontWeight: "bold",
+                        }}
+                      >
+                        X
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
+                ))}
+              </ScrollView>
 
-              <TouchableOpacity
-                style={{
-                  flex: 1,
-                  padding: 15,
-                  borderRadius: 8,
-                  backgroundColor: "#34C759",
-                  alignItems: "center",
-                }}
-                onPress={handleSaveMenuItem}
-              >
-                <Text style={styles.textWhiteBold}>
-                  {editingItemId ? "Update Item" : "Save Item"}
-                </Text>
-              </TouchableOpacity>
+              {/* 4. PINNED BOTTOM BUTTONS */}
+              <View style={{ flexDirection: "row", gap: 10 }}>
+                <TouchableOpacity
+                  style={{
+                    flex: 1,
+                    padding: 15,
+                    borderRadius: 8,
+                    backgroundColor: "#2C2C2E",
+                    alignItems: "center",
+                  }}
+                  onPress={() => setShowAddMenuModal(false)}
+                >
+                  <Text style={styles.textWhiteBold}>Cancel</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={{
+                    flex: 1,
+                    padding: 15,
+                    borderRadius: 8,
+                    backgroundColor: "#34C759",
+                    alignItems: "center",
+                  }}
+                  onPress={handleSaveMenuItem}
+                >
+                  <Text style={styles.textWhiteBold}>
+                    {editingItemId ? "Update Item" : "Save Item"}
+                  </Text>
+                </TouchableOpacity>
+              </View>
             </View>
           </View>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
 
       {/* --- ADD STAFF MODAL --- */}
@@ -735,118 +746,123 @@ export default function ManageScreen() {
         transparent={true}
         onRequestClose={() => setShowAddStaffModal(false)}
       >
-        <View
-          style={{
-            flex: 1,
-            backgroundColor: "rgba(0,0,0,0.8)",
-            justifyContent: "center",
-            paddingHorizontal: 20,
-            paddingTop: insets.top || 20,
-            paddingBottom: insets.bottom || 20,
-          }}
+        <KeyboardAvoidingView
+          style={{ flex: 1 }}
+          behavior={Platform.OS === "ios" ? "padding" : "height"}
         >
           <View
             style={{
-              backgroundColor: "#1C1C1E",
-              padding: 20,
-              borderRadius: 15,
-              width: "100%",
-              maxWidth: 400,
-              alignSelf: "center",
+              flex: 1,
+              backgroundColor: "rgba(0,0,0,0.8)",
+              justifyContent: "center",
+              paddingHorizontal: 20,
+              paddingTop: insets.top || 20,
+              paddingBottom: insets.bottom || 20,
             }}
           >
-            <Text
+            <View
               style={{
-                color: "#FFF",
-                fontSize: 20,
-                fontWeight: "bold",
-                marginBottom: 20,
+                backgroundColor: "#1C1C1E",
+                padding: 20,
+                borderRadius: 15,
+                width: "100%",
+                maxWidth: 400,
+                alignSelf: "center",
               }}
             >
-              Tambah Staff Baru
-            </Text>
-
-            <Text
-              style={{
-                color: "#8E8E93",
-                fontSize: 12,
-                fontWeight: "bold",
-                marginBottom: 10,
-              }}
-            >
-              NAMA STAFF
-            </Text>
-            <TextInput
-              style={{
-                backgroundColor: "#121212",
-                color: "#FFF",
-                padding: 15,
-                borderRadius: 8,
-                marginBottom: 15,
-                borderWidth: 1,
-                borderColor: "#2C2C2E",
-              }}
-              placeholder="e.g., Arlina"
-              placeholderTextColor="#8E8E93"
-              value={newStaffName}
-              onChangeText={setNewStaffName}
-            />
-
-            <Text
-              style={{
-                color: "#8E8E93",
-                fontSize: 12,
-                fontWeight: "bold",
-                marginBottom: 10,
-              }}
-            >
-              POSISI / ROLE
-            </Text>
-            <TextInput
-              style={{
-                backgroundColor: "#121212",
-                color: "#FFF",
-                padding: 15,
-                borderRadius: 8,
-                marginBottom: 25,
-                borderWidth: 1,
-                borderColor: "#2C2C2E",
-              }}
-              placeholder="e.g., Stylist, Cashier"
-              placeholderTextColor="#8E8E93"
-              value={newStaffRole}
-              onChangeText={setNewStaffRole}
-            />
-
-            <View style={{ flexDirection: "row", gap: 10 }}>
-              <TouchableOpacity
+              <Text
                 style={{
-                  flex: 1,
+                  color: "#FFF",
+                  fontSize: 20,
+                  fontWeight: "bold",
+                  marginBottom: 20,
+                }}
+              >
+                Tambah Staff Baru
+              </Text>
+
+              <Text
+                style={{
+                  color: "#8E8E93",
+                  fontSize: 12,
+                  fontWeight: "bold",
+                  marginBottom: 10,
+                }}
+              >
+                NAMA STAFF
+              </Text>
+              <TextInput
+                style={{
+                  backgroundColor: "#121212",
+                  color: "#FFF",
                   padding: 15,
                   borderRadius: 8,
-                  backgroundColor: "#2C2C2E",
-                  alignItems: "center",
+                  marginBottom: 15,
+                  borderWidth: 1,
+                  borderColor: "#2C2C2E",
                 }}
-                onPress={() => setShowAddStaffModal(false)}
-              >
-                <Text style={styles.textWhiteBold}>Cancel</Text>
-              </TouchableOpacity>
+                placeholder="e.g., Arlina"
+                placeholderTextColor="#8E8E93"
+                value={newStaffName}
+                onChangeText={setNewStaffName}
+              />
 
-              <TouchableOpacity
+              <Text
                 style={{
-                  flex: 1,
+                  color: "#8E8E93",
+                  fontSize: 12,
+                  fontWeight: "bold",
+                  marginBottom: 10,
+                }}
+              >
+                POSISI / ROLE
+              </Text>
+              <TextInput
+                style={{
+                  backgroundColor: "#121212",
+                  color: "#FFF",
                   padding: 15,
                   borderRadius: 8,
-                  backgroundColor: "#34C759",
-                  alignItems: "center",
+                  marginBottom: 25,
+                  borderWidth: 1,
+                  borderColor: "#2C2C2E",
                 }}
-                onPress={handleSaveStaff}
-              >
-                <Text style={styles.textWhiteBold}>Save Staff</Text>
-              </TouchableOpacity>
+                placeholder="e.g., Stylist, Cashier"
+                placeholderTextColor="#8E8E93"
+                value={newStaffRole}
+                onChangeText={setNewStaffRole}
+              />
+
+              <View style={{ flexDirection: "row", gap: 10 }}>
+                <TouchableOpacity
+                  style={{
+                    flex: 1,
+                    padding: 15,
+                    borderRadius: 8,
+                    backgroundColor: "#2C2C2E",
+                    alignItems: "center",
+                  }}
+                  onPress={() => setShowAddStaffModal(false)}
+                >
+                  <Text style={styles.textWhiteBold}>Cancel</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={{
+                    flex: 1,
+                    padding: 15,
+                    borderRadius: 8,
+                    backgroundColor: "#34C759",
+                    alignItems: "center",
+                  }}
+                  onPress={handleSaveStaff}
+                >
+                  <Text style={styles.textWhiteBold}>Save Staff</Text>
+                </TouchableOpacity>
+              </View>
             </View>
           </View>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
     </SafeAreaView>
   );
