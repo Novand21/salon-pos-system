@@ -45,6 +45,7 @@ export default function RegisterScreen() {
   const [activeCategory, setActiveCategory] = useState("");
   const [selectedItem, setSelectedItem] = useState<any>(null);
   const [selectedAddOns, setSelectedAddOns] = useState<any[]>([]);
+  const [searchQuery, setSearchQuery] = useState("");
 
   // States for Checkout Modal
   const [quantity, setQuantity] = useState(1);
@@ -117,10 +118,14 @@ export default function RegisterScreen() {
     }, [params.editTxId]),
   );
 
-  // Derived Values
-  const displayedItems = menuItems.filter(
-    (item) => item.category === activeCategory,
-  );
+  // Filters items by BOTH Category AND Search Query (case-insensitive)
+  const displayedItems = menuItems.filter((item) => {
+    const matchesCategory = item.category === activeCategory;
+    const matchesSearch = item.name
+      .toLowerCase()
+      .includes(searchQuery.toLowerCase());
+    return matchesCategory && matchesSearch;
+  });
 
   // 1. Calculate the base cost before discounts
   const baseItemCost = selectedItem
@@ -411,6 +416,26 @@ export default function RegisterScreen() {
             </TouchableOpacity>
           ))}
         </ScrollView>
+      </View>
+
+      {/* Search Bar Input */}
+      <View style={styles.searchContainer}>
+        <TextInput
+          style={styles.searchInput}
+          placeholder="Cari menu atau produk..."
+          placeholderTextColor="#8E8E93"
+          value={searchQuery}
+          onChangeText={setSearchQuery}
+          clearButtonMode="while-editing" // Adds a native "X" clear button on iOS
+        />
+        {searchQuery.length > 0 && (
+          <TouchableOpacity
+            onPress={() => setSearchQuery("")}
+            style={styles.clearSearchBtn}
+          >
+            <Text style={{ color: "#0A84FF", fontWeight: "bold" }}>Clear</Text>
+          </TouchableOpacity>
+        )}
       </View>
 
       {/* Item Grid */}
@@ -1472,5 +1497,27 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#2C2C2E",
     marginTop: 10,
+  },
+  searchContainer: {
+    flexDirection: "row",
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    backgroundColor: "#121212",
+    alignItems: "center",
+    gap: 10,
+  },
+  searchInput: {
+    flex: 1,
+    backgroundColor: "#1C1C1E",
+    color: "#FFF",
+    paddingVertical: 10,
+    paddingHorizontal: 15,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "#2C2C2E",
+    fontSize: 14,
+  },
+  clearSearchBtn: {
+    paddingHorizontal: 5,
   },
 });
