@@ -63,6 +63,8 @@ export const initDB = () => {
                 cart_json TEXT,
                 queue_number INTEGER,
                 trx_code TEXT,
+                amount_tendered INTEGER DEFAULT 0,
+                change_amount INTEGER DEFAULT 0,
                 FOREIGN KEY (employee_id) REFERENCES Employees(id)
             );
 
@@ -107,10 +109,21 @@ export const initDB = () => {
       currentVersion = 1;
     }
 
-    // If you do another update next year:
-    // if (currentVersion === 1) {
-    //    ALTER TABLE... PRAGMA user_version = 2;
-    // }
+    // new version
+    if (currentVersion === 1) {
+      console.log("Migrating database to version 2");
+      try {
+        db.execSync(`
+          ALTER TABLE Transactions ADD COLUMN amount_tendered INTEGER DEFAULT 0;
+          ALTER TABLE Transactions ADD COLUMN change_amount INTEGER DEFAULT 0;
+        `);
+        db.execSync("PRAGMA user_version = 2;");
+        currentVersion = 2;
+        console.log("Database migrated to version 2 succesfully");
+      } catch (e) {
+        console.error("Failed executing Version 2 migration", e);
+      }
+    }
 
     console.log("Database ready at version:", currentVersion);
   } catch (e) {

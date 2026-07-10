@@ -293,13 +293,15 @@ export default function RegisterScreen() {
         currentCode = existing?.trx_code || generateTrxCode();
 
         db.runSync(
-          "UPDATE Transactions SET timestamp = ?, total_amount = ?, payment_method = ?, employee_id = ?, status = 'completed', cart_json = ? WHERE id = ?",
+          "UPDATE Transactions SET timestamp = ?, total_amount = ?, payment_method = ?, employee_id = ?, status = 'completed', cart_json = ?, amount_tendered = ?, change_amount = ? WHERE id = ?",
           [
             timestamp,
             cartTotal,
             paymentMethod,
             employeeId,
             cartJsonStr,
+            Number(amountTendered) || cartTotal, // default to pas if left empty
+            change,
             pendingTxId,
           ],
         );
@@ -307,8 +309,9 @@ export default function RegisterScreen() {
         currentQueue = getNextQueueNumber();
         currentCode = generateTrxCode();
 
+        // Add amount_tendered and change_amount columns
         const result = db.runSync(
-          "INSERT INTO Transactions (timestamp, total_amount, payment_method, employee_id, status, cart_json, queue_number, trx_code) VALUES (?, ?, ?, ?, 'completed', ?, ?, ?)",
+          "INSERT INTO Transactions (timestamp, total_amount, payment_method, employee_id, status, cart_json, queue_number, trx_code, amount_tendered, change_amount) VALUES (?, ?, ?, ?, 'completed', ?, ?, ?, ?, ?)",
           [
             timestamp,
             cartTotal,
@@ -317,6 +320,8 @@ export default function RegisterScreen() {
             cartJsonStr,
             currentQueue,
             currentCode,
+            Number(amountTendered) || cartTotal,
+            change,
           ],
         );
         targetId = result.lastInsertRowId;
@@ -705,122 +710,160 @@ export default function RegisterScreen() {
         transparent={true}
         onRequestClose={() => setShowCheckout(false)}
       >
-        <View style={styles.modalOverlay}>
-          <View style={[styles.checkoutModal, { paddingTop: insets.top }]}>
-            <View style={styles.checkoutHeader}>
-              <Text style={styles.modalTitle}>Tampilan Checkout</Text>
-              <TouchableOpacity onPress={() => setShowCheckout(false)}>
-                <Text style={styles.closeBtn}>×</Text>
-              </TouchableOpacity>
-            </View>
+        <KeyboardAvoidingView
+          style={{ flex: 1 }}
+          behavior={Platform.OS === "ios" ? "padding" : "height"}
+        >
+          <View style={styles.modalOverlay}>
+            <View style={[styles.checkoutModal, { paddingTop: insets.top }]}>
+              <View style={styles.checkoutHeader}>
+                <Text style={styles.modalTitle}>Tampilan Checkout</Text>
+                <TouchableOpacity onPress={() => setShowCheckout(false)}>
+                  <Text style={styles.closeBtn}>×</Text>
+                </TouchableOpacity>
+              </View>
 
-            <ScrollView style={styles.checkoutBody}>
-              {/* Receipt Preview */}
-              <View style={styles.receiptPaper}>
-                <Text style={styles.receiptTitle}>D'FFOND SALON</Text>
-                <Text style={styles.receiptCenter}>
-                  Jl. Dagopojok No.16, Kota Bandung
-                </Text>
+              <ScrollView style={styles.checkoutBody}>
+                {/* Receipt Preview */}
+                <View style={styles.receiptPaper}>
+                  <Text style={styles.receiptTitle}>D'FFOND SALON</Text>
+                  <Text style={styles.receiptCenter}>
+                    Jl. Dagopojok No.16, Kota Bandung
+                  </Text>
 
-                <Text style={styles.receiptDivider}>
-                  --------------------------------
-                </Text>
-                <Text style={styles.receiptLine}>
-                  Tanggal: {new Date().toLocaleDateString("en-GB")}
-                </Text>
-                <Text style={styles.receiptLine}>
-                  Waktu:{" "}
-                  {new Date().toLocaleTimeString([], {
-                    hour: "2-digit",
-                    minute: "2-digit",
-                  })}
-                </Text>
-                <Text style={styles.receiptLine}>Cashier: {cashier}</Text>
-                <Text style={styles.receiptDivider}>
-                  --------------------------------
-                </Text>
+                  <Text style={styles.receiptDivider}>
+                    --------------------------------
+                  </Text>
+                  <Text style={styles.receiptLine}>
+                    Tanggal: {new Date().toLocaleDateString("en-GB")}
+                  </Text>
+                  <Text style={styles.receiptLine}>
+                    Waktu:{" "}
+                    {new Date().toLocaleTimeString([], {
+                      hour: "2-digit",
+                      minute: "2-digit",
+                    })}
+                  </Text>
+                  <Text style={styles.receiptLine}>Cashier: {cashier}</Text>
+                  <Text style={styles.receiptDivider}>
+                    --------------------------------
+                  </Text>
 
-                {/* LOOP THROUGH ACTUAL CART ITEMS*/}
-                {cart.map((cartItem: any, index: number) => {
-                  const addOnsTotal =
-                    cartItem.selectedAddOns &&
-                    cartItem.selectedAddOns.length > 0
-                      ? cartItem.selectedAddOns.reduce(
-                          (sum: number, addon: any) => sum + addon.price,
-                          0,
-                        )
-                      : 0;
-                  const basePriceWithAddons = cartItem.price + addOnsTotal;
-                  const discountNominal = Math.round(
-                    basePriceWithAddons *
-                      cartItem.quantity *
-                      (cartItem.discountPercent / 100),
-                  );
+                  {/* LOOP THROUGH ACTUAL CART ITEMS*/}
+                  {cart.map((cartItem: any, index: number) => {
+                    const addOnsTotal =
+                      cartItem.selectedAddOns &&
+                      cartItem.selectedAddOns.length > 0
+                        ? cartItem.selectedAddOns.reduce(
+                            (sum: number, addon: any) => sum + addon.price,
+                            0,
+                          )
+                        : 0;
+                    const basePriceWithAddons = cartItem.price + addOnsTotal;
+                    const discountNominal = Math.round(
+                      basePriceWithAddons *
+                        cartItem.quantity *
+                        (cartItem.discountPercent / 100),
+                    );
 
-                  return (
-                    <View
-                      key={cartItem.cartId}
-                      style={{
-                        marginBottom: 12,
-                        paddingBottom: 8,
-                        borderBottomWidth: 1,
-                        borderBottomColor: "#F2F2F7",
-                      }}
-                    >
-                      {/* Item Name & Delete Button */}
+                    return (
                       <View
+                        key={cartItem.cartId}
                         style={{
-                          flexDirection: "row",
-                          justifyContent: "space-between",
-                          alignItems: "flex-start",
+                          marginBottom: 12,
+                          paddingBottom: 8,
+                          borderBottomWidth: 1,
+                          borderBottomColor: "#F2F2F7",
                         }}
                       >
-                        <Text
-                          style={[
-                            styles.receiptLine,
-                            { flex: 1, fontWeight: "bold" },
-                          ]}
+                        {/* Item Name & Delete Button */}
+                        <View
+                          style={{
+                            flexDirection: "row",
+                            justifyContent: "space-between",
+                            alignItems: "flex-start",
+                          }}
                         >
-                          {cartItem.quantity}x {cartItem.name}
-                        </Text>
-                        <TouchableOpacity
-                          onPress={() => removeFromCart(cartItem.cartId)}
-                          style={{ paddingLeft: 10 }}
-                        >
-                          <Text
-                            style={{
-                              color: "#FF453A",
-                              fontSize: 18,
-                              fontWeight: "bold",
-                              lineHeight: 18,
-                            }}
-                          >
-                            ×
-                          </Text>
-                        </TouchableOpacity>
-                      </View>
-
-                      {/* Display Multiple Stylists */}
-                      {cartItem.stylists && cartItem.stylists.length > 0 && (
-                        <View style={styles.receiptRow}>
                           <Text
                             style={[
-                              styles.receiptAddon,
-                              { fontStyle: "italic", paddingLeft: 0 },
+                              styles.receiptLine,
+                              { flex: 1, fontWeight: "bold" },
                             ]}
                           >
-                            {cartItem.stylists
-                              .map((s: string) => `@${s}`)
-                              .join(", ")}
+                            {cartItem.quantity}x {cartItem.name}
                           </Text>
+                          <TouchableOpacity
+                            onPress={() => removeFromCart(cartItem.cartId)}
+                            style={{ paddingLeft: 10 }}
+                          >
+                            <Text
+                              style={{
+                                color: "#FF453A",
+                                fontSize: 18,
+                                fontWeight: "bold",
+                                lineHeight: 18,
+                              }}
+                            >
+                              ×
+                            </Text>
+                          </TouchableOpacity>
                         </View>
-                      )}
 
-                      {/* Map Add-ons (Flex wrapping added to prevent overlap) */}
-                      {cartItem.selectedAddOns.map(
-                        (addon: any, idx: number) => (
+                        {/* Display Multiple Stylists */}
+                        {cartItem.stylists && cartItem.stylists.length > 0 && (
+                          <View style={styles.receiptRow}>
+                            <Text
+                              style={[
+                                styles.receiptAddon,
+                                { fontStyle: "italic", paddingLeft: 0 },
+                              ]}
+                            >
+                              {cartItem.stylists
+                                .map((s: string) => `@${s}`)
+                                .join(", ")}
+                            </Text>
+                          </View>
+                        )}
+
+                        {/* Map Add-ons (Flex wrapping added to prevent overlap) */}
+                        {cartItem.selectedAddOns.map(
+                          (addon: any, idx: number) => (
+                            <View
+                              key={idx}
+                              style={{
+                                flexDirection: "row",
+                                justifyContent: "space-between",
+                                alignItems: "flex-start",
+                                marginVertical: 2,
+                              }}
+                            >
+                              <Text
+                                style={{
+                                  color: "#555",
+                                  fontSize: 12,
+                                  flex: 1,
+                                  flexShrink: 1,
+                                  paddingRight: 15,
+                                }}
+                              >
+                                + {addon.name}
+                              </Text>
+                              <Text
+                                style={{
+                                  color: "#555",
+                                  fontSize: 12,
+                                  textAlign: "right",
+                                }}
+                              >
+                                Rp {addon.price.toLocaleString("id-ID")}
+                              </Text>
+                            </View>
+                          ),
+                        )}
+
+                        {/* Display Discount Data & Subtracted Amount (Fixed Overlap Solution) */}
+                        {cartItem.discountPercent > 0 && (
                           <View
-                            key={idx}
                             style={{
                               flexDirection: "row",
                               justifyContent: "space-between",
@@ -830,211 +873,163 @@ export default function RegisterScreen() {
                           >
                             <Text
                               style={{
-                                color: "#555",
+                                color: "#FF453A",
                                 fontSize: 12,
                                 flex: 1,
                                 flexShrink: 1,
                                 paddingRight: 15,
                               }}
                             >
-                              + {addon.name}
+                              Disc {cartItem.discountPercent}%{" "}
+                              {cartItem.discountDesc
+                                ? `(${cartItem.discountDesc})`
+                                : ""}
                             </Text>
                             <Text
                               style={{
-                                color: "#555",
+                                color: "#FF453A",
                                 fontSize: 12,
                                 textAlign: "right",
                               }}
                             >
-                              Rp {addon.price.toLocaleString("id-ID")}
+                              -Rp {discountNominal.toLocaleString("id-ID")}
                             </Text>
                           </View>
-                        ),
-                      )}
+                        )}
 
-                      {/* Display Discount Data & Subtracted Amount (Fixed Overlap Solution) */}
-                      {cartItem.discountPercent > 0 && (
+                        {/* Subtotal Positioned at Flex-End like RecapScreen */}
                         <View
                           style={{
                             flexDirection: "row",
-                            justifyContent: "space-between",
-                            alignItems: "flex-start",
-                            marginVertical: 2,
+                            justifyContent: "flex-end",
+                            marginTop: 4,
                           }}
                         >
                           <Text
-                            style={{
-                              color: "#FF453A",
-                              fontSize: 12,
-                              flex: 1,
-                              flexShrink: 1,
-                              paddingRight: 15,
-                            }}
+                            style={[styles.receiptLine, { fontWeight: "bold" }]}
                           >
-                            Disc {cartItem.discountPercent}%{" "}
-                            {cartItem.discountDesc
-                              ? `(${cartItem.discountDesc})`
-                              : ""}
-                          </Text>
-                          <Text
-                            style={{
-                              color: "#FF453A",
-                              fontSize: 12,
-                              textAlign: "right",
-                            }}
-                          >
-                            -Rp {discountNominal.toLocaleString("id-ID")}
+                            Subtotal: Rp{" "}
+                            {cartItem.itemTotal.toLocaleString("id-ID")}
                           </Text>
                         </View>
-                      )}
-
-                      {/* Subtotal Positioned at Flex-End like RecapScreen */}
-                      <View
-                        style={{
-                          flexDirection: "row",
-                          justifyContent: "flex-end",
-                          marginTop: 4,
-                        }}
-                      >
-                        <Text
-                          style={[styles.receiptLine, { fontWeight: "bold" }]}
-                        >
-                          Subtotal: Rp{" "}
-                          {cartItem.itemTotal.toLocaleString("id-ID")}
-                        </Text>
                       </View>
-                    </View>
-                  );
-                })}
+                    );
+                  })}
 
-                <Text style={styles.receiptDivider}>
-                  --------------------------------
-                </Text>
-
-                <View style={styles.receiptRow}>
-                  <Text style={styles.receiptBold}>TOTAL:</Text>
-                  <Text style={styles.receiptBold}>
-                    Rp {cartTotal.toLocaleString("id-ID")}
+                  <Text style={styles.receiptDivider}>
+                    --------------------------------
                   </Text>
+
+                  <View style={styles.receiptRow}>
+                    <Text style={styles.receiptBold}>TOTAL:</Text>
+                    <Text style={styles.receiptBold}>
+                      Rp {cartTotal.toLocaleString("id-ID")}
+                    </Text>
+                  </View>
+
+                  <Text style={styles.receiptDivider}>
+                    --------------------------------
+                  </Text>
+
+                  <View style={styles.receiptRow}>
+                    <Text style={styles.receiptLine}>PEMBAYARAN:</Text>
+                    <Text style={styles.receiptLine}>{paymentMethod}</Text>
+                  </View>
                 </View>
 
-                <Text style={styles.receiptDivider}>
-                  --------------------------------
-                </Text>
-
-                <View style={styles.receiptRow}>
-                  <Text style={styles.receiptLine}>PEMBAYARAN:</Text>
-                  <Text style={styles.receiptLine}>{paymentMethod}</Text>
-                </View>
-              </View>
-
-              {/* Payment Settings Container */}
-              <View style={styles.paymentContainer}>
-                {/* Payment Method Selector */}
-                <Text style={styles.sectionTitle}>METODE PEMBAYARAN</Text>
-                <View style={styles.paymentRow}>
-                  {/* QRIS Button */}
-                  <TouchableOpacity
-                    onPress={() => setPaymentMethod("QRIS")}
-                    style={[
-                      styles.paymentBtn,
-                      paymentMethod === "QRIS" ? styles.paymentBtnActive : {},
-                    ]}
-                  >
-                    <Text
-                      style={
-                        paymentMethod === "QRIS"
-                          ? styles.textWhiteBold
-                          : styles.textGray
-                      }
-                    >
-                      QRIS
-                    </Text>
-                  </TouchableOpacity>
-
-                  {/* Cash Button */}
-                  <TouchableOpacity
-                    onPress={() => setPaymentMethod("Cash")}
-                    style={[
-                      styles.paymentBtn,
-                      paymentMethod === "Cash" ? styles.paymentBtnActive : {},
-                    ]}
-                  >
-                    <Text
-                      style={
-                        paymentMethod === "Cash"
-                          ? styles.textWhiteBold
-                          : styles.textGray
-                      }
-                    >
-                      Cash
-                    </Text>
-                  </TouchableOpacity>
-                  {/* Transfer Button */}
-                  <TouchableOpacity
-                    onPress={() => setPaymentMethod("Transfer")}
-                    style={[
-                      styles.paymentBtn,
-                      paymentMethod === "Transfer"
-                        ? styles.paymentBtnActive
-                        : {},
-                    ]}
-                  >
-                    <Text
+                {/* Payment Settings Container */}
+                <View style={styles.paymentContainer}>
+                  {/* Payment Method Selector */}
+                  <Text style={styles.sectionTitle}>METODE PEMBAYARAN</Text>
+                  <View style={styles.paymentRow}>
+                    {/* QRIS Button */}
+                    <TouchableOpacity
+                      onPress={() => setPaymentMethod("QRIS")}
                       style={[
-                        paymentMethod === "Transfer"
-                          ? styles.textWhiteBold
-                          : styles.textGray,
+                        styles.paymentBtn,
+                        paymentMethod === "QRIS" ? styles.paymentBtnActive : {},
                       ]}
                     >
-                      Transfer
-                    </Text>
-                  </TouchableOpacity>
-                </View>
-
-                {/* Cash Input */}
-                <View style={styles.cashInputContainer}>
-                  <Text style={styles.sectionTitle}>JUMLAH DIBAYAR (Rp)</Text>
-                  <TextInput
-                    style={styles.cashInput}
-                    keyboardType="numeric"
-                    value={amountTendered}
-                    onChangeText={setAmountTendered}
-                    placeholder={cartTotal.toLocaleString("id-ID")}
-                    placeholderTextColor="#8E8E93"
-                  />
-
-                  {Number(amountTendered) > 0 &&
-                    Number(amountTendered) < cartTotal && (
                       <Text
-                        style={{
-                          color: "#FF453A",
-                          marginTop: 5,
-                          fontSize: 12,
-                        }}
+                        style={
+                          paymentMethod === "QRIS"
+                            ? styles.textWhiteBold
+                            : styles.textGray
+                        }
                       >
-                        Kurang Rp{" "}
-                        {(cartTotal - Number(amountTendered)).toLocaleString(
-                          "id-ID",
-                        )}
+                        QRIS
                       </Text>
-                    )}
+                    </TouchableOpacity>
 
-                  {Number(amountTendered) > cartTotal && (
-                    <Text
-                      style={{
-                        color: "#34C759",
-                        marginTop: 5,
-                        fontSize: 12,
-                        fontWeight: "bold",
-                      }}
+                    {/* Cash Button */}
+                    <TouchableOpacity
+                      onPress={() => setPaymentMethod("Cash")}
+                      style={[
+                        styles.paymentBtn,
+                        paymentMethod === "Cash" ? styles.paymentBtnActive : {},
+                      ]}
                     >
-                      Kembalian: Rp {change.toLocaleString("id-ID")}
-                    </Text>
-                  )}
+                      <Text
+                        style={
+                          paymentMethod === "Cash"
+                            ? styles.textWhiteBold
+                            : styles.textGray
+                        }
+                      >
+                        Cash
+                      </Text>
+                    </TouchableOpacity>
+                    {/* Transfer Button */}
+                    <TouchableOpacity
+                      onPress={() => setPaymentMethod("Transfer")}
+                      style={[
+                        styles.paymentBtn,
+                        paymentMethod === "Transfer"
+                          ? styles.paymentBtnActive
+                          : {},
+                      ]}
+                    >
+                      <Text
+                        style={[
+                          paymentMethod === "Transfer"
+                            ? styles.textWhiteBold
+                            : styles.textGray,
+                        ]}
+                      >
+                        Transfer
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
 
-                  {Number(amountTendered) > 0 &&
-                    Number(amountTendered) === cartTotal && (
+                  {/* Cash Input */}
+                  <View style={styles.cashInputContainer}>
+                    <Text style={styles.sectionTitle}>JUMLAH DIBAYAR (Rp)</Text>
+                    <TextInput
+                      style={styles.cashInput}
+                      keyboardType="numeric"
+                      value={amountTendered}
+                      onChangeText={setAmountTendered}
+                      placeholder={cartTotal.toLocaleString("id-ID")}
+                      placeholderTextColor="#8E8E93"
+                    />
+
+                    {Number(amountTendered) > 0 &&
+                      Number(amountTendered) < cartTotal && (
+                        <Text
+                          style={{
+                            color: "#FF453A",
+                            marginTop: 5,
+                            fontSize: 12,
+                          }}
+                        >
+                          Kurang Rp{" "}
+                          {(cartTotal - Number(amountTendered)).toLocaleString(
+                            "id-ID",
+                          )}
+                        </Text>
+                      )}
+
+                    {Number(amountTendered) > cartTotal && (
                       <Text
                         style={{
                           color: "#34C759",
@@ -1043,88 +1038,106 @@ export default function RegisterScreen() {
                           fontWeight: "bold",
                         }}
                       >
-                        Uang Pas
+                        Kembalian: Rp {change.toLocaleString("id-ID")}
                       </Text>
                     )}
-                </View>
 
-                {/* STYLIST SELECTION UI */}
-                <View style={{ marginTop: 25 }}>
-                  <Text style={styles.sectionTitle}>CASHIER</Text>
-                  <ScrollView
-                    horizontal
-                    showsHorizontalScrollIndicator={false}
-                    style={{ flexDirection: "row" }}
-                  >
-                    {staffList.map((employee) => (
-                      <TouchableOpacity
-                        key={employee.id}
-                        onPress={() => setCashier(employee.name)}
-                        style={[
-                          styles.paymentBtn,
-                          { marginRight: 10, paddingHorizontal: 25, flex: 0 },
-                          cashier === employee.name
-                            ? styles.paymentBtnActive
-                            : {},
-                        ]}
-                      >
+                    {Number(amountTendered) > 0 &&
+                      Number(amountTendered) === cartTotal && (
                         <Text
-                          style={
-                            cashier === employee.name
-                              ? styles.textWhiteBold
-                              : styles.textGray
-                          }
+                          style={{
+                            color: "#34C759",
+                            marginTop: 5,
+                            fontSize: 12,
+                            fontWeight: "bold",
+                          }}
                         >
-                          {employee.name}
+                          Uang Pas
                         </Text>
-                      </TouchableOpacity>
-                    ))}
-                  </ScrollView>
+                      )}
+                  </View>
+
+                  {/* STYLIST SELECTION UI */}
+                  <View style={{ marginTop: 25 }}>
+                    <Text style={styles.sectionTitle}>CASHIER</Text>
+                    <ScrollView
+                      horizontal
+                      showsHorizontalScrollIndicator={false}
+                      style={{ flexDirection: "row" }}
+                    >
+                      {staffList.map((employee) => (
+                        <TouchableOpacity
+                          key={employee.id}
+                          onPress={() => setCashier(employee.name)}
+                          style={[
+                            styles.paymentBtn,
+                            { marginRight: 10, paddingHorizontal: 25, flex: 0 },
+                            cashier === employee.name
+                              ? styles.paymentBtnActive
+                              : {},
+                          ]}
+                        >
+                          <Text
+                            style={
+                              cashier === employee.name
+                                ? styles.textWhiteBold
+                                : styles.textGray
+                            }
+                          >
+                            {employee.name}
+                          </Text>
+                        </TouchableOpacity>
+                      ))}
+                    </ScrollView>
+                  </View>
                 </View>
+              </ScrollView>
+
+              <View
+                style={[
+                  styles.checkoutFooter,
+                  { flexDirection: "row", gap: 10 },
+                ]}
+              >
+                <TouchableOpacity
+                  style={[
+                    styles.printBtn,
+                    { flex: 1, backgroundColor: "#0A84FF" },
+                    Number(amountTendered) > 0 &&
+                      Number(amountTendered) < cartTotal && {
+                        backgroundColor: "#2C2C2E",
+                      },
+                  ]}
+                  onPress={() => finalizeTransaction(true)} // Confirm & Print Flow
+                  disabled={
+                    Number(amountTendered) > 0 &&
+                    Number(amountTendered) < cartTotal
+                  }
+                >
+                  <Text style={styles.textWhiteBold}>🖨️ Selesai & Print</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={[
+                    styles.printBtn,
+                    { flex: 1 },
+                    paymentMethod === "Cash" &&
+                      Number(amountTendered) < cartTotal && {
+                        backgroundColor: "#2C2C2E",
+                      },
+                  ]}
+                  onPress={() => finalizeTransaction(false)} // Confirm Only Flow
+                  disabled={
+                    Number(amountTendered) > 0 &&
+                    Number(amountTendered) < cartTotal
+                  }
+                >
+                  <Text style={styles.textWhiteBold}>✅ Selesai</Text>
+                </TouchableOpacity>
               </View>
-            </ScrollView>
-
-            <View
-              style={[styles.checkoutFooter, { flexDirection: "row", gap: 10 }]}
-            >
-              <TouchableOpacity
-                style={[
-                  styles.printBtn,
-                  { flex: 1, backgroundColor: "#0A84FF" },
-                  Number(amountTendered) > 0 &&
-                    Number(amountTendered) < cartTotal && {
-                      backgroundColor: "#2C2C2E",
-                    },
-                ]}
-                onPress={() => finalizeTransaction(true)} // Confirm & Print Flow
-                disabled={
-                  Number(amountTendered) > 0 &&
-                  Number(amountTendered) < cartTotal
-                }
-              >
-                <Text style={styles.textWhiteBold}>🖨️ Selesai & Print</Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={[
-                  styles.printBtn,
-                  { flex: 1 },
-                  paymentMethod === "Cash" &&
-                    Number(amountTendered) < cartTotal && {
-                      backgroundColor: "#2C2C2E",
-                    },
-                ]}
-                onPress={() => finalizeTransaction(false)} // Confirm Only Flow
-                disabled={
-                  Number(amountTendered) > 0 &&
-                  Number(amountTendered) < cartTotal
-                }
-              >
-                <Text style={styles.textWhiteBold}>✅ Selesai</Text>
-              </TouchableOpacity>
             </View>
           </View>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
     </SafeAreaView>
   );

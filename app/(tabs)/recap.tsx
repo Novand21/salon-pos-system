@@ -161,6 +161,8 @@ export default function RecapScreen() {
             paymentMethod: tx.payment_method,
             timestamp: tx.timestamp,
             cart_json: tx.cart_json,
+            amountTendered: tx.amount_tendered || tx.total_amount,
+            changeAmount: tx.change_amount || 0,
           };
         });
 
@@ -290,8 +292,8 @@ export default function RecapScreen() {
         selectedTx.amount,
         selectedTx.paymentMethod,
         selectedTx.stylist,
-        selectedTx.amount,
-        0,
+        selectedTx.amountTendered,
+        selectedTx.changeAmount,
       );
 
       const printed = await printReceiptRaw(rawPrinterText);
@@ -501,98 +503,173 @@ export default function RecapScreen() {
 
               {selectedTx?.type === "sale" ? (
                 <View>
-                  {receiptItems.map((item: any) => (
-                    <View
-                      key={item.id}
-                      style={{
-                        marginBottom: 12,
-                        paddingBottom: 8,
-                        borderBottomWidth: 1,
-                        borderBottomColor: "#F2F2F7",
-                      }}
-                    >
+                  {/* USE THE FULL CART JSON INSTEAD OF THE FLATTENED TRANSACTION ITEMS */}
+                  {(selectedTx.cart_json
+                    ? JSON.parse(selectedTx.cart_json)
+                    : []
+                  ).map((cartItem: any, index: number) => {
+                    const addOnsTotal =
+                      cartItem.selectedAddOns &&
+                      cartItem.selectedAddOns.length > 0
+                        ? cartItem.selectedAddOns.reduce(
+                            (sum: number, addon: any) => sum + addon.price,
+                            0,
+                          )
+                        : 0;
+                    const basePriceWithAddons = cartItem.price + addOnsTotal;
+                    const discountNominal = Math.round(
+                      basePriceWithAddons *
+                        cartItem.quantity *
+                        (cartItem.discountPercent / 100),
+                    );
+
+                    return (
                       <View
+                        key={cartItem.cartId || index}
                         style={{
-                          flexDirection: "row",
-                          justifyContent: "space-between",
-                          alignItems: "flex-start",
+                          marginBottom: 12,
+                          paddingBottom: 8,
+                          borderBottomWidth: 1,
+                          borderBottomColor: "#F2F2F7",
                         }}
                       >
-                        <Text
-                          style={[
-                            styles.receiptLine,
-                            { flex: 1, fontWeight: "bold" },
-                          ]}
+                        {/* Item Name & Quantity */}
+                        <View
+                          style={{
+                            flexDirection: "row",
+                            justifyContent: "space-between",
+                            alignItems: "flex-start",
+                          }}
                         >
-                          {item.item_name}
-                        </Text>
-                      </View>
-
-                      {item.stylists && item.stylists.length > 0 && (
-                        <View style={styles.receiptRowWrap}>
                           <Text
                             style={[
-                              styles.receiptTextLeftWrap,
-                              { fontStyle: "italic", paddingLeft: 0 },
+                              styles.receiptLine,
+                              { flex: 1, fontWeight: "bold" },
                             ]}
                           >
-                            {item.stylists
-                              .split(",")
-                              .map((s: string) => `@${s.trim()}`)
-                              .join(", ")}
+                            {cartItem.quantity}x {cartItem.name}
                           </Text>
                         </View>
-                      )}
 
-                      {item.add_ons_list ? (
-                        <View style={styles.receiptRowWrap}>
-                          <Text
-                            style={[
-                              styles.receiptTextLeftWrap,
-                              { paddingLeft: 10 },
-                            ]}
-                          >
-                            + {item.add_ons_list}
-                          </Text>
-                        </View>
-                      ) : null}
+                        {/* Stylists */}
+                        {cartItem.stylists && cartItem.stylists.length > 0 && (
+                          <View style={styles.receiptRowWrap}>
+                            <Text
+                              style={[
+                                styles.receiptTextLeftWrap,
+                                { fontStyle: "italic", paddingLeft: 0 },
+                              ]}
+                            >
+                              {cartItem.stylists
+                                .map((s: string) => `@${s}`)
+                                .join(", ")}
+                            </Text>
+                          </View>
+                        )}
 
-                      {item.discount_percent > 0 && (
-                        <View style={styles.receiptRowWrap}>
-                          <Text
-                            style={[
-                              styles.receiptDiscountLeftWrap,
-                              { paddingLeft: 10 },
-                            ]}
-                          >
-                            Disc {item.discount_percent}%{" "}
-                            {item.discount_desc
-                              ? `(${item.discount_desc})`
-                              : ""}
-                          </Text>
-                        </View>
-                      )}
+                        {/* INDIVIDUAL ADD-ONS LIST WITH EXACT PRICES */}
+                        {cartItem.selectedAddOns &&
+                          cartItem.selectedAddOns.map(
+                            (addon: any, idx: number) => (
+                              <View key={idx} style={styles.receiptRowWrap}>
+                                <Text
+                                  style={[
+                                    styles.receiptTextLeftWrap,
+                                    { paddingLeft: 10 },
+                                  ]}
+                                >
+                                  + {addon.name}
+                                </Text>
+                                <Text style={styles.receiptTextRight}>
+                                  Rp {addon.price.toLocaleString("id-ID")}
+                                </Text>
+                              </View>
+                            ),
+                          )}
 
-                      <View
-                        style={{
-                          flexDirection: "row",
-                          justifyContent: "flex-end",
-                          marginTop: 4,
-                        }}
-                      >
-                        <Text
-                          style={[styles.receiptLine, { fontWeight: "bold" }]}
+                        {/* INDIVIDUAL DISCOUNT PERCENTAGE & NOMINAL AMOUNT */}
+                        {cartItem.discountPercent > 0 && (
+                          <View style={styles.receiptRowWrap}>
+                            <Text
+                              style={[
+                                styles.receiptDiscountLeftWrap,
+                                { paddingLeft: 10 },
+                              ]}
+                            >
+                              Disc {cartItem.discountPercent}%{" "}
+                              {cartItem.discountDesc
+                                ? `(${cartItem.discountDesc})`
+                                : ""}
+                            </Text>
+                            <Text style={styles.receiptDiscountRight}>
+                              -Rp {discountNominal.toLocaleString("id-ID")}
+                            </Text>
+                          </View>
+                        )}
+
+                        {/* Subtotal */}
+                        <View
+                          style={{
+                            flexDirection: "row",
+                            justifyContent: "flex-end",
+                            marginTop: 4,
+                          }}
                         >
-                          Subtotal: Rp{" "}
-                          {item.final_price.toLocaleString("id-ID")}
-                        </Text>
+                          <Text
+                            style={[styles.receiptLine, { fontWeight: "bold" }]}
+                          >
+                            Subtotal: Rp{" "}
+                            {cartItem.itemTotal.toLocaleString("id-ID")}
+                          </Text>
+                        </View>
                       </View>
-                    </View>
-                  ))}
+                    );
+                  })}
 
                   <Text style={styles.receiptDivider}>
                     --------------------------------
                   </Text>
+
+                  {/* Payment Method Details */}
+                  <View style={styles.receiptRowWrap}>
+                    <Text style={styles.receiptLine}>PEMBAYARAN:</Text>
+                    <Text style={styles.receiptLine}>
+                      {selectedTx?.paymentMethod}
+                    </Text>
+                  </View>
+
+                  {/* 3. TOTAL CHANGE FOR CUSTOMER (IF CASH) */}
+
+                  <View>
+                    <View style={[styles.receiptRowWrap, { marginTop: 4 }]}>
+                      <Text style={styles.receiptLine}>UANG TUNAI:</Text>
+                      <Text style={styles.receiptLine}>
+                        Rp {selectedTx?.amountTendered.toLocaleString("id-ID")}
+                      </Text>
+                    </View>
+                    <View style={[styles.receiptRowWrap, { marginTop: 4 }]}>
+                      <Text
+                        style={[
+                          styles.receiptLine,
+                          { fontWeight: "bold", color: "#cf2d18" },
+                        ]}
+                      >
+                        KEMBALIAN:
+                      </Text>
+                      <Text
+                        style={[
+                          styles.receiptLine,
+                          { fontWeight: "bold", color: "#cf2d18" },
+                        ]}
+                      >
+                        Rp {selectedTx?.changeAmount.toLocaleString("id-ID")}
+                      </Text>
+                    </View>
+                  </View>
+                  <Text style={styles.receiptDivider}>
+                    --------------------------------
+                  </Text>
+                  {/* Grand Total Row */}
                   <View style={styles.receiptRowWrap}>
                     <Text
                       style={{
@@ -611,18 +688,6 @@ export default function RecapScreen() {
                       }}
                     >
                       Rp {selectedTx?.amount.toLocaleString("id-ID")}
-                    </Text>
-                  </View>
-                  <View
-                    style={{
-                      flexDirection: "row",
-                      justifyContent: "space-between",
-                      marginTop: 5,
-                    }}
-                  >
-                    <Text style={styles.receiptLine}>PEMBAYARAN:</Text>
-                    <Text style={styles.receiptLine}>
-                      {selectedTx?.paymentMethod}
                     </Text>
                   </View>
                 </View>
