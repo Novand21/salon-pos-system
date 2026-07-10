@@ -1,5 +1,6 @@
 import React, { useCallback, useState } from "react";
 import {
+  Alert,
   Modal,
   Platform,
   ScrollView,
@@ -172,6 +173,7 @@ export default function RecapScreen() {
           const expDate = new Date(exp.timestamp);
           return {
             id: `exp-${exp.id}`,
+            dbId: exp.id,
             type: "expense",
             title: exp.description,
             dateStr: expDate.toLocaleDateString("id-ID", {
@@ -227,6 +229,49 @@ export default function RecapScreen() {
     .reduce((sum, d) => sum + Math.abs(d.amount), 0);
 
   const netEarning = totalEarnings - totalExpenses;
+
+  const handleDeleteTransaction = () => {
+    if (!selectedTx) return;
+
+    Alert.alert(
+      "Hapus Data",
+      "Apakah Anda yakin ingin menghapus data ini? Aksi ini tidak dapat dibatalkan.",
+      [
+        { text: "Batal", style: "cancel" },
+        {
+          text: "Hapus",
+          style: "destructive", // Makes the button red on iOS
+          onPress: () => {
+            try {
+              if (selectedTx.type === "sale") {
+                // 1. Delete associated items first to satisfy Foreign Key constraints
+                db.runSync(
+                  "DELETE FROM Transaction_Items WHERE transaction_id = ?",
+                  [selectedTx.dbId],
+                );
+                // 2. Delete the main transaction
+                db.runSync("DELETE FROM Transactions WHERE id = ?", [
+                  selectedTx.dbId,
+                ]);
+              } else if (selectedTx.type === "expense") {
+                // Expenses have no child tables, so just delete them directly
+                db.runSync("DELETE FROM Expenditures WHERE id = ?", [
+                  selectedTx.dbId,
+                ]);
+              }
+
+              alert("Data berhasil dihapus!");
+              setSelectedTx(null); // Close the modal
+              fetchDayData(); // Refresh the UI
+            } catch (error) {
+              console.error("Error deleting record:", error);
+              alert("Gagal menghapus data.");
+            }
+          },
+        },
+      ],
+    );
+  };
 
   const handleReprint = async () => {
     if (!selectedTx || selectedTx.type !== "sale") return;
@@ -614,6 +659,12 @@ export default function RecapScreen() {
                 <Text style={styles.textWhiteBold}>🖨️ Reprint</Text>
               </TouchableOpacity>
             )}
+            <TouchableOpacity
+              style={styles.deleteBtn}
+              onPress={handleDeleteTransaction}
+            >
+              <Text style={styles.textWhiteBold}>🗑️ Hapus</Text>
+            </TouchableOpacity>
           </View>
         </View>
       </Modal>
@@ -964,19 +1015,27 @@ const styles = StyleSheet.create({
   modalActions: {
     flexDirection: "row",
     justifyContent: "center",
+    width: "100%",
+    paddingHorizontal: 20,
     gap: 15,
     marginTop: 30,
   },
   closeBtn: {
     backgroundColor: "#2C2C2E",
     paddingVertical: 12,
-    paddingHorizontal: 30,
+    paddingHorizontal: 20,
     borderRadius: 30,
   },
   reprintBtn: {
     backgroundColor: "#34C759",
     paddingVertical: 12,
-    paddingHorizontal: 30,
+    paddingHorizontal: 20,
+    borderRadius: 30,
+  },
+  deleteBtn: {
+    backgroundColor: "#FF453A",
+    paddingVertical: 12,
+    paddingHorizontal: 20,
     borderRadius: 30,
   },
 });

@@ -3,7 +3,7 @@
     "name": "MyDffond",
     "slug": "MyDffond",
     "version": "1.0.1",
-    "orientation": "portrait",
+    "orientation": "default",
     "icon": "./assets/images/logo_salon_menu_screen.png",
     "androidNavigationBar": {
       "backgroundColor": "#000000",
