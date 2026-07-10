@@ -57,6 +57,11 @@ export default function RegisterScreen() {
   const [itemDiscount, setItemDiscount] = useState("");
   const [itemDiscountDesc, setItemDiscountDesc] = useState("");
 
+  // for editing purposes
+  const [isEditingItem, setIsEditingItem] = useState(false);
+  const [editItemName, setEditItemName] = useState("");
+  const [editItemPrice, setEditItemPrice] = useState("");
+
   // area for the notch bar
   const insets = useSafeAreaInsets();
 
@@ -182,6 +187,43 @@ export default function RegisterScreen() {
     setItemStylists([]); // Reset array
     setItemDiscount("");
     setItemDiscountDesc("");
+  };
+
+  const handleQuickEditSave = () => {
+    if (!editItemName || !editItemPrice) {
+      return alert("Nama dan Harga tidak boleh kosong!");
+    }
+
+    try {
+      // Update the permanent database
+      db.runSync(
+        "UPDATE Services_Products SET name = ?, base_price = ? WHERE id = ?",
+        [editItemName, Number(editItemPrice), selectedItem.id],
+      );
+
+      // Update the live item in the side panel so checkout math uses the new price
+      const updatedItem = {
+        ...selectedItem,
+        name: editItemName,
+        price: Number(editItemPrice),
+      };
+      setSelectedItem(updatedItem);
+
+      // Update the global menu grid instantly without a database reload
+      setMenuItems((prev) =>
+        prev.map((item) =>
+          item.id === selectedItem.id
+            ? { ...item, name: editItemName, price: Number(editItemPrice) }
+            : item,
+        ),
+      );
+
+      // Close edit mode
+      setIsEditingItem(false);
+    } catch (error) {
+      console.error("Quick edit failed:", error);
+      alert("Gagal menyimpan perubahan menu.");
+    }
   };
 
   // Helper to generate a simple unique transaction code
@@ -448,6 +490,9 @@ export default function RegisterScreen() {
               setSelectedItem(item);
               setSelectedAddOns([]);
               setQuantity(1);
+              setIsEditingItem(false);
+              setEditItemName(item.name);
+              setEditItemPrice(item.price.toString());
             }}
             style={styles.itemCard}
           >
@@ -535,20 +580,75 @@ export default function RegisterScreen() {
             ]}
           >
             <View style={styles.sidePanelHeader}>
-              <View>
-                <Text style={styles.modalTitle}>{selectedItem?.name}</Text>
-                <Text style={styles.itemPrice}>
-                  Rp {selectedItem?.price.toLocaleString("id-ID")}
-                </Text>
+              <View style={{ flex: 1, paddingRight: 10 }}>
+                {isEditingItem ? (
+                  <View style={{ gap: 10 }}>
+                    <TextInput
+                      style={styles.quickEditInput}
+                      value={editItemName}
+                      onChangeText={setEditItemName}
+                      placeholder="Nama Menu"
+                      placeholderTextColor="#8E8E93"
+                    />
+                    <TextInput
+                      style={styles.quickEditInput}
+                      value={editItemPrice}
+                      onChangeText={setEditItemPrice}
+                      keyboardType="numeric"
+                      placeholder="Harga"
+                      placeholderTextColor="#8E8E93"
+                    />
+                  </View>
+                ) : (
+                  <View>
+                    <Text style={styles.modalTitle}>{selectedItem?.name}</Text>
+                    <Text style={styles.itemPrice}>
+                      Rp {selectedItem?.price.toLocaleString("id-ID")}
+                    </Text>
+                  </View>
+                )}
               </View>
-              <TouchableOpacity
-                onPress={() => {
-                  setSelectedItem(null);
-                  setItemStylists([]);
+
+              <View
+                style={{
+                  alignItems: "flex-end",
+                  justifyContent: "space-between",
                 }}
               >
-                <Text style={styles.closeBtn}>×</Text>
-              </TouchableOpacity>
+                <TouchableOpacity
+                  onPress={() => {
+                    setSelectedItem(null);
+                    setItemStylists([]);
+                    setIsEditingItem(false); // Reset on close
+                  }}
+                >
+                  <Text style={styles.closeBtn}>×</Text>
+                </TouchableOpacity>
+
+                {isEditingItem ? (
+                  <TouchableOpacity
+                    onPress={handleQuickEditSave}
+                    style={styles.quickSaveBtn}
+                  >
+                    <Text style={styles.textWhiteBold}>Simpan</Text>
+                  </TouchableOpacity>
+                ) : (
+                  <TouchableOpacity
+                    onPress={() => setIsEditingItem(true)}
+                    style={styles.quickEditBtn}
+                  >
+                    <Text
+                      style={{
+                        color: "#0A84FF",
+                        fontWeight: "bold",
+                        fontSize: 12,
+                      }}
+                    >
+                      ✏️ Edit
+                    </Text>
+                  </TouchableOpacity>
+                )}
+              </View>
             </View>
 
             <ScrollView style={styles.sidePanelBody}>
@@ -1520,5 +1620,29 @@ const styles = StyleSheet.create({
   },
   clearSearchBtn: {
     paddingHorizontal: 5,
+  },
+  quickEditInput: {
+    backgroundColor: "#121212",
+    color: "#FFF",
+    padding: 10,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "#0A84FF",
+    fontSize: 16,
+    fontWeight: "bold",
+  },
+  quickEditBtn: {
+    backgroundColor: "rgba(10,132,255,0.1)",
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: "#0A84FF",
+  },
+  quickSaveBtn: {
+    backgroundColor: "#34C759",
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 6,
   },
 });
