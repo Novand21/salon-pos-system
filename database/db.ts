@@ -99,10 +99,15 @@ export const initDB = () => {
         "Migrating database to version 1: Adding Staff active status...",
       );
 
-      // ALTER the existing table to add the new feature safely
-      db.execSync(`
-        ALTER TABLE Employees ADD COLUMN is_active BOOLEAN DEFAULT 1;
-      `);
+      try {
+        // ALTER the existing table to add the new feature safely
+        db.execSync(`
+          ALTER TABLE Employees ADD COLUMN is_active BOOLEAN DEFAULT 1;
+        `);
+      } catch (error) {
+        // If the column already exists, just skip
+        console.log("Column is_active already exists, skipping alter...");
+      }
 
       // Update the version tracker so this only runs once
       db.execSync("PRAGMA user_version = 1;");
@@ -117,12 +122,12 @@ export const initDB = () => {
           ALTER TABLE Transactions ADD COLUMN amount_tendered INTEGER DEFAULT 0;
           ALTER TABLE Transactions ADD COLUMN change_amount INTEGER DEFAULT 0;
         `);
-        db.execSync("PRAGMA user_version = 2;");
-        currentVersion = 2;
-        console.log("Database migrated to version 2 succesfully");
       } catch (e) {
         console.error("Failed executing Version 2 migration", e);
       }
+      db.execSync("PRAGMA user_version = 2;");
+      currentVersion = 2;
+      console.log("Database migrated to version 2 succesfully");
     }
 
     console.log("Database ready at version:", currentVersion);

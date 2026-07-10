@@ -1,6 +1,8 @@
 import React, { useEffect, useState } from "react";
 import {
   ActivityIndicator,
+  PermissionsAndroid,
+  Platform,
   ScrollView,
   StyleSheet,
   Text,
@@ -31,6 +33,22 @@ export default function SettingsScreen() {
 
   const loadPrinters = async () => {
     setIsLoading(true);
+
+    if (Platform.OS === "android" && Platform.Version >= 31) {
+      const granted = await PermissionsAndroid.requestMultiple([
+        PermissionsAndroid.PERMISSIONS.BLUETOOTH_SCAN,
+        PermissionsAndroid.PERMISSIONS.BLUETOOTH_CONNECT,
+      ]);
+
+      if (
+        granted[PermissionsAndroid.PERMISSIONS.BLUETOOTH_CONNECT] !==
+        PermissionsAndroid.RESULTS.GRANTED
+      ) {
+        alert("Izin Bluetooth diperlukan untuk mencari printer salon!");
+        setIsLoading(false);
+        return; // Stops the code so it doesn't crash!
+      }
+    }
 
     // Dynamically fetch paired printers, which automatically fires BLEPrinter.init() again
     const pairedDevices = await fetchPairedPrinters();
