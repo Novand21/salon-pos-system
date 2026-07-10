@@ -533,7 +533,7 @@ export default function RecapScreen() {
                           borderBottomColor: "#F2F2F7",
                         }}
                       >
-                        {/* Item Name & Quantity */}
+                        {/* 1. JUST THE ITEM NAME (Removed quantity from here) */}
                         <View
                           style={{
                             flexDirection: "row",
@@ -547,7 +547,27 @@ export default function RecapScreen() {
                               { flex: 1, fontWeight: "bold" },
                             ]}
                           >
-                            {cartItem.quantity}x {cartItem.name}
+                            {cartItem.name}
+                          </Text>
+                        </View>
+
+                        {/* QUANTITY & BASE TOTAL ROW */}
+                        <View
+                          style={{
+                            flexDirection: "row",
+                            justifyContent: "space-between",
+                            marginTop: 4,
+                          }}
+                        >
+                          <Text style={styles.receiptLine}>
+                            {cartItem.quantity}x Rp{" "}
+                            {cartItem.price.toLocaleString("id-ID")}
+                          </Text>
+                          <Text style={styles.receiptLine}>
+                            Rp{" "}
+                            {(
+                              cartItem.quantity * cartItem.price
+                            ).toLocaleString("id-ID")}
                           </Text>
                         </View>
 
@@ -567,7 +587,7 @@ export default function RecapScreen() {
                           </View>
                         )}
 
-                        {/* INDIVIDUAL ADD-ONS LIST WITH EXACT PRICES */}
+                        {/* Add-ons List */}
                         {cartItem.selectedAddOns &&
                           cartItem.selectedAddOns.map(
                             (addon: any, idx: number) => (
@@ -587,7 +607,7 @@ export default function RecapScreen() {
                             ),
                           )}
 
-                        {/* INDIVIDUAL DISCOUNT PERCENTAGE & NOMINAL AMOUNT */}
+                        {/* Discount Info */}
                         {cartItem.discountPercent > 0 && (
                           <View style={styles.receiptRowWrap}>
                             <Text
@@ -607,12 +627,12 @@ export default function RecapScreen() {
                           </View>
                         )}
 
-                        {/* Subtotal */}
+                        {/* SUBTOTAL ROW */}
                         <View
                           style={{
                             flexDirection: "row",
                             justifyContent: "flex-end",
-                            marginTop: 4,
+                            marginTop: 2,
                           }}
                         >
                           <Text

@@ -118,13 +118,14 @@ export default function RegisterScreen() {
     }, [params.editTxId]),
   );
 
-  // Filters items by BOTH Category AND Search Query (case-insensitive)
+  // Filters items by Search Query (case-insensitive)
   const displayedItems = menuItems.filter((item) => {
-    const matchesCategory = item.category === activeCategory;
-    const matchesSearch = item.name
-      .toLowerCase()
-      .includes(searchQuery.toLowerCase());
-    return matchesCategory && matchesSearch;
+    // If the search bar has text, search the ENTIRE database by item name only
+    if (searchQuery.length > 0) {
+      return item.name.toLowerCase().includes(searchQuery.toLowerCase());
+    }
+    // If the search bar is empty, just show the currently selected category
+    return item.category === activeCategory;
   });
 
   // 1. Calculate the base cost before discounts
