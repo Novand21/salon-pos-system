@@ -31,6 +31,8 @@ export const initDB = () => {
                 category TEXT NOT NULL,
                 base_price INTEGER NOT NULL,
                 description TEXT,
+                is_stock_enabled BOOLEAN DEFAULT 0,
+                stock_quantity INTEGER DEFAULT 0,
                 add_ons TEXT
             );
 
@@ -114,7 +116,7 @@ export const initDB = () => {
       currentVersion = 1;
     }
 
-    // new version
+    // VERSION 2: ADDED TWO NEW COLUMNS FOR THE TRANSACTIONS TABLE -> AMOUNT_TENDERED AND CHANGE_AMOUNT
     if (currentVersion === 1) {
       console.log("Migrating database to version 2");
       try {
@@ -128,6 +130,23 @@ export const initDB = () => {
       db.execSync("PRAGMA user_version = 2;");
       currentVersion = 2;
       console.log("Database migrated to version 2 succesfully");
+    }
+
+    // VERSION 3: ADDED TWO NEW COLUMNS FOR THE Services_Products Table -> Invetory Tracking
+    if (currentVersion === 2) {
+      console.log("Migrating database to version 3: Adding Inventory Stock...");
+      try {
+        db.execSync(`
+          ALTER TABLE Services_Products ADD COLUMN is_stock_enabled BOOLEAN DEFAULT 0;
+          ALTER TABLE Services_Products ADD COLUMN stock_quantity INTEGER DEFAULT 0;
+        `);
+      } catch (e) {
+        console.log("Stock columns already exist, skipping alter...");
+      }
+
+      db.execSync("PRAGMA user_version = 3;");
+      currentVersion = 3;
+      console.log("Database migrated to version 3 successfully");
     }
 
     console.log("Database ready at version:", currentVersion);

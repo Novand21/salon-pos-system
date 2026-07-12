@@ -6,6 +6,7 @@ import {
   Platform,
   ScrollView,
   StyleSheet,
+  Switch,
   Text,
   TextInput,
   TouchableOpacity,
@@ -29,10 +30,15 @@ export default function ManageScreen() {
   // filter states
   const [categories, setCategories] = useState<any[]>([]);
   const [activeCategory, setActiveCategory] = useState("");
+  // filter states for searching
+  const [searchQuery, setSearchQuery] = useState("");
   // logic for selected category
-  const displayedMenuItems = menuItems.filter(
-    (item) => item.category === activeCategory,
-  );
+  const displayedMenuItems = menuItems.filter((item) => {
+    if (searchQuery.length > 0) {
+      return item.name.toLowerCase().includes(searchQuery.toLowerCase());
+    }
+    return item.category === activeCategory;
+  });
 
   // menu management states
   const [showAddMenuModal, setShowAddMenuModal] = useState(false);
@@ -41,8 +47,11 @@ export default function ManageScreen() {
   const [newItemCategory, setNewItemCategory] = useState("");
   const [newItemPrice, setNewItemPrice] = useState("");
   const [newItemDesc, setNewItemDesc] = useState("");
+  const [isStockEnabled, setIsStockEnabled] = useState(false);
+  const [stockQuantity, setStockQuantity] = useState("");
   const [itemAddOns, setItemAddOns] = useState<any[]>([]);
 
+  // staff menagement states
   const [showAddStaffModal, setShowAddStaffModal] = useState(false);
   const [newStaffName, setNewStaffName] = useState("");
   const [newStaffRole, setNewStaffRole] = useState("Stylist");
@@ -68,6 +77,8 @@ export default function ManageScreen() {
     setNewItemCategory(item.category);
     setNewItemPrice(item.base_price.toString());
     setNewItemDesc(item.description || "");
+    setIsStockEnabled(!!item.is_stock_enabled);
+    setStockQuantity(item.stock_quantity ? item.stock_quantity.toString() : "");
     setShowAddMenuModal(true);
     // fetch from addons table
     const existingAddOns = db.getAllSync(
@@ -83,35 +94,6 @@ export default function ManageScreen() {
     );
   };
 
-  // const handleSaveMenuItem = () => {
-  //   if (!newItemName || !newItemCategory || !newItemPrice)
-  //     return alert("Name, category, and price are required!");
-
-  //   try {
-  //     if (editingItemId) {
-  //       db.runSync(
-  //         "UPDATE Services_Products SET name = ?, category = ?, base_price = ?, description = ? WHERE id = ?",
-  //         newItemName,
-  //         newItemCategory,
-  //         Number(newItemPrice),
-  //         newItemDesc,
-  //         editingItemId,
-  //       );
-  //     } else {
-  //       db.runSync(
-  //         "INSERT INTO Services_Products (name, category, base_price, description) VALUES (?, ?, ?, ?)",
-  //         newItemName,
-  //         newItemCategory,
-  //         Number(newItemPrice),
-  //         newItemDesc,
-  //       );
-  //     }
-  //     setEditingItemId(null);
-  //   } catch (e) {
-  //     console.error("Error editing menu item:", e);
-  //   }
-  // };
-
   // add menu handler
   const handleSaveMenuItem = () => {
     if (!newItemName || !newItemCategory || !newItemPrice)
@@ -121,12 +103,16 @@ export default function ManageScreen() {
       if (editingItemId) {
         // 1. UPDATE EXISTING ITEM
         db.runSync(
-          "UPDATE Services_Products SET name = ?, category = ?, base_price = ?, description = ? WHERE id = ?",
-          newItemName,
-          newItemCategory,
-          Number(newItemPrice),
-          newItemDesc,
-          editingItemId,
+          "UPDATE Services_Products SET name = ?, category = ?, base_price = ?, description = ?, is_stock_enabled = ?, stock_quantity = ? WHERE id = ?",
+          [
+            newItemName,
+            newItemCategory,
+            Number(newItemPrice),
+            newItemDesc,
+            isStockEnabled ? 1 : 0,
+            Number(stockQuantity) || 0,
+            editingItemId,
+          ],
         );
 
         // 2. Wipe old add-ons for this item
@@ -146,11 +132,15 @@ export default function ManageScreen() {
       } else {
         // 1. INSERT BRAND NEW ITEM
         const result = db.runSync(
-          "INSERT INTO Services_Products (name, category, base_price, description) VALUES (?, ?, ?, ?)",
-          newItemName,
-          newItemCategory,
-          Number(newItemPrice),
-          newItemDesc,
+          "INSERT INTO Services_Products (name, category, base_price, description, is_stock_enabled, stock_quantity) VALUES (?, ?, ?, ?, ?, ?)",
+          [
+            newItemName,
+            newItemCategory,
+            Number(newItemPrice),
+            newItemDesc,
+            isStockEnabled ? 1 : 0,
+            Number(stockQuantity) || 0,
+          ],
         );
 
         const newServiceId = result.lastInsertRowId;
@@ -342,10 +332,34 @@ export default function ManageScreen() {
                 setNewItemDesc("");
                 setItemAddOns([]);
                 setEditingItemId(null);
+                setIsStockEnabled(false);
+                setStockQuantity("");
               }}
             >
               <Text style={styles.textWhiteBold}>+ Tambah Menu Baru</Text>
             </TouchableOpacity>
+
+            {/* SEARCH BAR UI */}
+            <View style={styles.searchContainer}>
+              <TextInput
+                style={styles.searchInput}
+                placeholder="Cari menu atau produk..."
+                placeholderTextColor="#8E8E93"
+                value={searchQuery}
+                onChangeText={setSearchQuery}
+                clearButtonMode="while-editing"
+              />
+              {searchQuery.length > 0 && (
+                <TouchableOpacity
+                  onPress={() => setSearchQuery("")}
+                  style={styles.clearSearchBtn}
+                >
+                  <Text style={{ color: "#0A84FF", fontWeight: "bold" }}>
+                    Hapus
+                  </Text>
+                </TouchableOpacity>
+              )}
+            </View>
 
             {/* CATEGORY SCROLL VIEW */}
             <ScrollView
@@ -611,7 +625,39 @@ export default function ManageScreen() {
                   onChangeText={setNewItemDesc}
                 />
 
-                {/* 3. Dynamic Add-Ons */}
+                {/* INVENTORY TRACKING UI */}
+                <View style={styles.stockContainer}>
+                  <View style={styles.stockHeader}>
+                    <View>
+                      <Text style={styles.stockTitle}>Stok?</Text>
+                    </View>
+                    <Switch
+                      trackColor={{ false: "#2C2C2E", true: "#34C759" }}
+                      thumbColor={"#FFF"}
+                      onValueChange={setIsStockEnabled}
+                      value={isStockEnabled}
+                    />
+                  </View>
+
+                  {/* Conditionally render the quantity input only if the switch is ON */}
+                  {isStockEnabled && (
+                    <View style={styles.stockQuantityContainer}>
+                      <Text style={styles.stockQuantityLabel}>
+                        JUMLAH STOK SAAT INI
+                      </Text>
+                      <TextInput
+                        style={styles.stockQuantityInput}
+                        placeholder="e.g. 50"
+                        placeholderTextColor="#8E8E93"
+                        keyboardType="numeric"
+                        value={stockQuantity}
+                        onChangeText={setStockQuantity}
+                      />
+                    </View>
+                  )}
+                </View>
+
+                {/* Dynamic Add-Ons */}
                 <View
                   style={{
                     flexDirection: "row",
@@ -704,7 +750,7 @@ export default function ManageScreen() {
                 ))}
               </ScrollView>
 
-              {/* 4. PINNED BOTTOM BUTTONS */}
+              {/* PINNED BOTTOM BUTTONS */}
               <View style={{ flexDirection: "row", gap: 10 }}>
                 <TouchableOpacity
                   style={{
@@ -716,7 +762,7 @@ export default function ManageScreen() {
                   }}
                   onPress={() => setShowAddMenuModal(false)}
                 >
-                  <Text style={styles.textWhiteBold}>Cancel</Text>
+                  <Text style={styles.textWhiteBold}>Batal</Text>
                 </TouchableOpacity>
 
                 <TouchableOpacity
@@ -730,7 +776,7 @@ export default function ManageScreen() {
                   onPress={handleSaveMenuItem}
                 >
                   <Text style={styles.textWhiteBold}>
-                    {editingItemId ? "Update Item" : "Save Item"}
+                    {editingItemId ? "Update" : "Simpan"}
                   </Text>
                 </TouchableOpacity>
               </View>
@@ -739,7 +785,7 @@ export default function ManageScreen() {
         </KeyboardAvoidingView>
       </Modal>
 
-      {/* --- ADD STAFF MODAL --- */}
+      {/* ADD STAFF MODAL */}
       <Modal
         visible={showAddStaffModal}
         animationType="slide"
@@ -844,7 +890,7 @@ export default function ManageScreen() {
                   }}
                   onPress={() => setShowAddStaffModal(false)}
                 >
-                  <Text style={styles.textWhiteBold}>Cancel</Text>
+                  <Text style={styles.textWhiteBold}>Batal</Text>
                 </TouchableOpacity>
 
                 <TouchableOpacity
@@ -857,7 +903,7 @@ export default function ManageScreen() {
                   }}
                   onPress={handleSaveStaff}
                 >
-                  <Text style={styles.textWhiteBold}>Save Staff</Text>
+                  <Text style={styles.textWhiteBold}>Simpan</Text>
                 </TouchableOpacity>
               </View>
             </View>
@@ -962,5 +1008,69 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: "bold",
     color: "#FF453A",
+  },
+  searchContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#1C1C1E",
+    paddingHorizontal: 15,
+    paddingVertical: 10,
+    borderRadius: 10,
+    marginBottom: 20,
+    borderWidth: 1,
+    borderColor: "#2C2C2E",
+  },
+  searchInput: {
+    flex: 1,
+    color: "#FFF",
+    fontSize: 14,
+  },
+  clearSearchBtn: {
+    paddingHorizontal: 5,
+    marginLeft: 10,
+  },
+
+  stockContainer: {
+    backgroundColor: "#1C1C1E",
+    borderWidth: 1,
+    borderColor: "#2C2C2E",
+    borderRadius: 8,
+    padding: 15,
+    marginBottom: 25,
+  },
+  stockHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
+  stockTitle: {
+    color: "#FFF",
+    fontWeight: "bold",
+    fontSize: 14,
+  },
+  stockSubtitle: {
+    color: "#8E8E93",
+    fontSize: 12,
+    marginTop: 4,
+  },
+  stockQuantityContainer: {
+    marginTop: 15,
+    paddingTop: 15,
+    borderTopWidth: 1,
+    borderTopColor: "#2C2C2E",
+  },
+  stockQuantityLabel: {
+    color: "#8E8E93",
+    fontSize: 12,
+    fontWeight: "bold",
+    marginBottom: 10,
+  },
+  stockQuantityInput: {
+    backgroundColor: "#121212",
+    color: "#FFF",
+    padding: 15,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "#0A84FF",
   },
 });

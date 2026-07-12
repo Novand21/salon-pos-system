@@ -23,16 +23,18 @@ import { generateThermalReceiptString } from "../../utils/printer";
 
 export default function RecapScreen() {
   const insets = useSafeAreaInsets();
-  // --- NEW DATE RANGE STATES ---
+  // DATE RANGE STATES
   const [startDate, setStartDate] = useState<Date>(new Date());
   const [endDate, setEndDate] = useState<Date>(new Date());
   const [activePicker, setActivePicker] = useState<"start" | "end" | null>(
     null,
   );
 
+  // SORTING STATE
+  const [sortMode, setSortMode] = useState<"desc" | "asc">("desc");
+
   const [selectedTx, setSelectedTx] = useState<any>(null);
   const [ledgerData, setLedgerData] = useState<any[]>([]);
-  const [receiptItems, setReceiptItems] = useState<any[]>([]);
 
   const [staffList, setStaffList] = useState<any[]>([]);
   const [showExpenseModal, setShowExpenseModal] = useState(false);
@@ -103,19 +105,6 @@ export default function RecapScreen() {
 
   const openTransactionDetails = (tx: any) => {
     setSelectedTx(tx);
-    if (tx.type === "sale") {
-      try {
-        const items = db.getAllSync(
-          "SELECT * FROM Transaction_Items WHERE transaction_id = ?",
-          [tx.dbId],
-        );
-        setReceiptItems(items);
-      } catch (error) {
-        console.error("Error fetching transaction items:", error);
-      }
-    } else {
-      setReceiptItems([]);
-    }
   };
 
   // Main data gathering isolated to a re-runnable function
@@ -231,6 +220,34 @@ export default function RecapScreen() {
     .reduce((sum, d) => sum + Math.abs(d.amount), 0);
 
   const netEarning = totalEarnings - totalExpenses;
+
+  // SORTING LOGIC
+  const sortedLedgerData = [...ledgerData].sort((a, b) => {
+    // 1. Get the pure Date (Midnight) to group days together
+    const dateA = new Date(a.timestamp).setHours(0, 0, 0, 0);
+    const dateB = new Date(b.timestamp).setHours(0, 0, 0, 0);
+
+    // 2. Primary Sort: By Date
+    if (dateA !== dateB) {
+      return sortMode === "desc" ? dateB - dateA : dateA - dateB;
+    }
+
+    // 3. Secondary Sort: If they are on the SAME day, separate Sales and Expenses
+    if (a.type === "expense" && b.type === "sale") return 1; // Push expenses down
+    if (a.type === "sale" && b.type === "expense") return -1; // Keep sales up top
+
+    // 4. Tertiary Sort: If both are Sales, sort by No. Urut
+    if (a.type === "sale" && b.type === "sale") {
+      return sortMode === "desc"
+        ? (b.queue_number || 0) - (a.queue_number || 0)
+        : (a.queue_number || 0) - (b.queue_number || 0);
+    }
+
+    // 5. If both are Expenses, just sort them by exact time
+    return sortMode === "desc"
+      ? new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
+      : new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime();
+  });
 
   const handleDeleteTransaction = () => {
     if (!selectedTx) return;
@@ -383,12 +400,48 @@ export default function RecapScreen() {
       <ScrollView contentContainerStyle={styles.listContainer}>
         <Text style={styles.sectionLabel}>BUKU KAS</Text>
 
-        {ledgerData.length === 0 ? (
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          style={{ marginBottom: 15, flexDirection: "row" }}
+        >
+          {[
+            { id: "desc", label: "↓ Terbaru" },
+            { id: "asc", label: "↑ Terlama" },
+          ].map((sort) => (
+            <TouchableOpacity
+              key={sort.id}
+              onPress={() => setSortMode(sort.id as any)}
+              style={{
+                paddingHorizontal: 12,
+                paddingVertical: 6,
+                borderRadius: 15,
+                marginRight: 8,
+                borderWidth: 1,
+                borderColor: sortMode === sort.id ? "#0A84FF" : "#2C2C2E",
+                backgroundColor:
+                  sortMode === sort.id ? "rgba(10,132,255,0.2)" : "#1C1C1E",
+              }}
+            >
+              <Text
+                style={{
+                  color: sortMode === sort.id ? "#0A84FF" : "#8E8E93",
+                  fontSize: 12,
+                  fontWeight: "bold",
+                }}
+              >
+                {sort.label}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </ScrollView>
+
+        {sortedLedgerData.length === 0 ? (
           <Text style={styles.textGrayCenter}>
             Tidak ada data transaksi pada rentang tanggal ini.
           </Text>
         ) : (
-          ledgerData.map((tx) => (
+          sortedLedgerData.map((tx) => (
             <TouchableOpacity
               key={tx.id}
               onPress={() => openTransactionDetails(tx)}
@@ -642,6 +695,27 @@ export default function RecapScreen() {
                             {cartItem.itemTotal.toLocaleString("id-ID")}
                           </Text>
                         </View>
+                        {/* DISPLAY CUSTOM NOTE IN RECAP */}
+                        {cartItem.customNote ? (
+                          <View
+                            style={{
+                              marginTop: 4,
+                              paddingTop: 4,
+                              borderTopWidth: 1,
+                              borderTopColor: "#F2F2F7",
+                              borderStyle: "dashed",
+                            }}
+                          >
+                            <Text
+                              style={[
+                                styles.receiptLine,
+                                { fontStyle: "italic", color: "#555" },
+                              ]}
+                            >
+                              Catatan: {cartItem.customNote}
+                            </Text>
+                          </View>
+                        ) : null}
                       </View>
                     );
                   })}

@@ -139,7 +139,7 @@ export default function BasketScreen() {
               >
                 <View style={{ flex: 1, marginRight: 10 }}>
                   <Text style={styles.listCardTitle}>
-                    Queue #{order.queue_number} ({order.trx_code})
+                    Antrian #{order.queue_number} ({order.trx_code})
                   </Text>
                   <Text style={styles.listCardSubtitle}>
                     {new Date(order.timestamp).toLocaleTimeString([], {
@@ -318,6 +318,29 @@ export default function BasketScreen() {
                           Rp {cartItem.itemTotal.toLocaleString("id-ID")}
                         </Text>
                       </View>
+
+                      {/* DISPLAY CUSTOM NOTE */}
+                      {cartItem.customNote ? (
+                        <View
+                          style={{
+                            marginTop: 4,
+                            marginLeft: 10,
+                            paddingTop: 4,
+                            borderTopWidth: 1,
+                            borderTopColor: "#F2F2F7",
+                            borderStyle: "dashed",
+                          }}
+                        >
+                          <Text
+                            style={[
+                              styles.receiptLine,
+                              { fontStyle: "italic", color: "#555" },
+                            ]}
+                          >
+                            Catatan: {cartItem.customNote}
+                          </Text>
+                        </View>
+                      ) : null}
 
                       {/* Dashed Line Separator */}
                       {index < activeCartItems.length - 1 && (

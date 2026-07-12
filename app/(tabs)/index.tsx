@@ -56,6 +56,7 @@ export default function RegisterScreen() {
   const [itemStylists, setItemStylists] = useState<string[]>([]);
   const [itemDiscount, setItemDiscount] = useState("");
   const [itemDiscountDesc, setItemDiscountDesc] = useState("");
+  const [itemNote, setItemNote] = useState("");
 
   // for editing purposes
   const [isEditingItem, setIsEditingItem] = useState(false);
@@ -177,6 +178,7 @@ export default function RegisterScreen() {
       stylists: itemStylists, // array of names!
       discountPercent: Number(itemDiscount || 0),
       discountDesc: itemDiscountDesc,
+      customNote: itemNote,
     };
 
     addToCart(customizedItem, selectedAddOns, quantity);
@@ -187,6 +189,7 @@ export default function RegisterScreen() {
     setItemStylists([]); // Reset array
     setItemDiscount("");
     setItemDiscountDesc("");
+    setItemNote("");
   };
 
   const handleQuickEditSave = () => {
@@ -397,6 +400,12 @@ export default function RegisterScreen() {
             cartItem.itemTotal,
           ],
         );
+        if (cartItem.is_stock_enabled) {
+          db.runSync(
+            "UPDATE Services_Products SET stock_quantity = stock_quantity - ? WHERE id = ?",
+            [cartItem.quantity, cartItem.id],
+          );
+        }
       });
 
       if (shouldPrint) {
@@ -417,6 +426,20 @@ export default function RegisterScreen() {
       }
 
       alert(`Order ${currentCode} Selesai! ✅`);
+
+      const refreshedServices = db.getAllSync(
+        "SELECT * FROM Services_Products",
+      );
+      const addOns = db.getAllSync("SELECT * FROM Add_Ons");
+      const formattedMenu = refreshedServices.map((service: any) => ({
+        ...service,
+        price: service.base_price,
+        addOns: addOns
+          .filter((a: any) => a.service_id === service.id)
+          .map((a: any) => ({ ...a, price: a.additional_price })),
+      }));
+
+      setMenuItems(formattedMenu);
       clearCart();
       setShowCheckout(false);
       setPendingTxId(null);
@@ -476,7 +499,7 @@ export default function RegisterScreen() {
             onPress={() => setSearchQuery("")}
             style={styles.clearSearchBtn}
           >
-            <Text style={{ color: "#0A84FF", fontWeight: "bold" }}>Clear</Text>
+            <Text style={{ color: "#0A84FF", fontWeight: "bold" }}>Hapus</Text>
           </TouchableOpacity>
         )}
       </View>
@@ -493,6 +516,7 @@ export default function RegisterScreen() {
               setIsEditingItem(false);
               setEditItemName(item.name);
               setEditItemPrice(item.price.toString());
+              setItemNote("");
             }}
             style={styles.itemCard}
           >
@@ -501,6 +525,18 @@ export default function RegisterScreen() {
             <Text style={styles.itemPrice}>
               Rp {item.price.toLocaleString("id-ID")}
             </Text>
+            {!!item.is_stock_enabled && (
+              <Text
+                style={{
+                  color: item.stock_quantity > 0 ? "#8E8E93" : "#FF453A",
+                  fontSize: 12,
+                  marginTop: 4,
+                  fontWeight: item.stock_quantity <= 0 ? "bold" : "normal",
+                }}
+              >
+                Stok: {item.stock_quantity}
+              </Text>
+            )}
             <View style={styles.addButton}>
               <Text style={styles.addButtonText}>+</Text>
             </View>
@@ -768,6 +804,27 @@ export default function RegisterScreen() {
                   onChangeText={setItemDiscountDesc}
                 />
               </View>
+
+              {/* CUSTOM NOTE INPUT */}
+              <View style={{ marginBottom: 30 }}>
+                <Text style={styles.sectionTitle}>
+                  CATATAN PESANAN (OPTIONAL)
+                </Text>
+                <TextInput
+                  style={{
+                    backgroundColor: "#121212",
+                    color: "#FFF",
+                    padding: 15,
+                    borderRadius: 8,
+                    borderWidth: 1,
+                    borderColor: "#2C2C2E",
+                  }}
+                  placeholder="..."
+                  placeholderTextColor="#8E8E93"
+                  value={itemNote}
+                  onChangeText={setItemNote}
+                />
+              </View>
             </ScrollView>
 
             <View style={styles.sidePanelFooter}>
@@ -1023,7 +1080,7 @@ export default function RegisterScreen() {
                           </View>
                         )}
 
-                        {/* Subtotal Positioned at Flex-End like RecapScreen */}
+                        {/* Subtotal Positioned at Flex-End */}
                         <View
                           style={{
                             flexDirection: "row",
@@ -1038,6 +1095,27 @@ export default function RegisterScreen() {
                             {cartItem.itemTotal.toLocaleString("id-ID")}
                           </Text>
                         </View>
+                        {/* DISPLAY CUSTOM NOTE AT THE VERY BOTTOM */}
+                        {cartItem.customNote ? (
+                          <View
+                            style={{
+                              marginTop: 4,
+                              paddingTop: 4,
+                              borderTopWidth: 1,
+                              borderTopColor: "#F2F2F7",
+                              borderStyle: "dashed",
+                            }}
+                          >
+                            <Text
+                              style={[
+                                styles.receiptLine,
+                                { fontStyle: "italic", color: "#555" },
+                              ]}
+                            >
+                              Catatan: {cartItem.customNote}
+                            </Text>
+                          </View>
+                        ) : null}
                       </View>
                     );
                   })}
