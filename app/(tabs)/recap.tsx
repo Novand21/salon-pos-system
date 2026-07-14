@@ -40,7 +40,7 @@ export default function RecapScreen() {
   const [showExpenseModal, setShowExpenseModal] = useState(false);
   const [expenseDesc, setExpenseDesc] = useState("");
   const [expenseAmount, setExpenseAmount] = useState("");
-  const [expenseStaff, setExpenseStaff] = useState("");
+  const [expenseStaffs, setExpenseStaffs] = useState<string[]>([]);
 
   // ==========================================
   // DATE RANGE NAVIGATION FUNCTIONS
@@ -79,13 +79,15 @@ export default function RecapScreen() {
   // EXPENSE & TRANSACTION LOGIC
   // ==========================================
   const handleSaveExpense = () => {
-    if (!expenseDesc || !expenseAmount || !expenseStaff)
-      return alert("Tolong isi seluruh deskripsi!");
+    if (!expenseDesc || !expenseAmount)
+      return alert("Tolong isi seluruh deskripsi dan jumlah pengeluaran!");
 
     try {
-      // Expenses are now logged at the exact current time they are entered
       const timestamp = new Date();
-      const finalDescription = `${expenseDesc} (by ${expenseStaff})`;
+
+      const staffString =
+        expenseStaffs.length > 0 ? ` (by ${expenseStaffs.join(", ")})` : "";
+      const finalDescription = `${expenseDesc}${staffString}`;
 
       db.runSync(
         "INSERT INTO Expenditures (timestamp, description, amount) VALUES (?, ?, ?)",
@@ -96,7 +98,7 @@ export default function RecapScreen() {
 
       setExpenseDesc("");
       setExpenseAmount("");
-      setExpenseStaff("");
+      setExpenseStaffs([]);
       setShowExpenseModal(false);
     } catch (error) {
       console.error("Error saving expense:", error);
@@ -149,7 +151,7 @@ export default function RecapScreen() {
             amount: tx.total_amount,
             paymentMethod: tx.payment_method,
             timestamp: tx.timestamp,
-            cart_json: tx.cart_json,
+            parsedCart: JSON.parse(tx.cart_json || "[]"),
             amountTendered: tx.amount_tendered || tx.total_amount,
             changeAmount: tx.change_amount || 0,
           };
@@ -364,7 +366,7 @@ export default function RecapScreen() {
           style={styles.addExpenseBtn}
           onPress={() => setShowExpenseModal(true)}
         >
-          <Text style={styles.textWhite}>+ Keluaran</Text>
+          <Text style={styles.textWhite}>+ Pengeluaran</Text>
         </TouchableOpacity>
       </View>
 
@@ -557,168 +559,171 @@ export default function RecapScreen() {
               {selectedTx?.type === "sale" ? (
                 <View>
                   {/* USE THE FULL CART JSON INSTEAD OF THE FLATTENED TRANSACTION ITEMS */}
-                  {(selectedTx.cart_json
-                    ? JSON.parse(selectedTx.cart_json)
-                    : []
-                  ).map((cartItem: any, index: number) => {
-                    const addOnsTotal =
-                      cartItem.selectedAddOns &&
-                      cartItem.selectedAddOns.length > 0
-                        ? cartItem.selectedAddOns.reduce(
-                            (sum: number, addon: any) => sum + addon.price,
-                            0,
-                          )
-                        : 0;
-                    const basePriceWithAddons = cartItem.price + addOnsTotal;
-                    const discountNominal = Math.round(
-                      basePriceWithAddons *
-                        cartItem.quantity *
-                        (cartItem.discountPercent / 100),
-                    );
+                  {(selectedTx.parsedCart || []).map(
+                    (cartItem: any, index: number) => {
+                      const addOnsTotal =
+                        cartItem.selectedAddOns &&
+                        cartItem.selectedAddOns.length > 0
+                          ? cartItem.selectedAddOns.reduce(
+                              (sum: number, addon: any) => sum + addon.price,
+                              0,
+                            )
+                          : 0;
+                      const basePriceWithAddons = cartItem.price + addOnsTotal;
+                      const discountNominal = Math.round(
+                        basePriceWithAddons *
+                          cartItem.quantity *
+                          (cartItem.discountPercent / 100),
+                      );
 
-                    return (
-                      <View
-                        key={cartItem.cartId || index}
-                        style={{
-                          marginBottom: 12,
-                          paddingBottom: 8,
-                          borderBottomWidth: 1,
-                          borderBottomColor: "#F2F2F7",
-                        }}
-                      >
-                        {/* 1. JUST THE ITEM NAME (Removed quantity from here) */}
+                      return (
                         <View
+                          key={cartItem.cartId || index}
                           style={{
-                            flexDirection: "row",
-                            justifyContent: "space-between",
-                            alignItems: "flex-start",
+                            marginBottom: 12,
+                            paddingBottom: 8,
+                            borderBottomWidth: 1,
+                            borderBottomColor: "#F2F2F7",
                           }}
                         >
-                          <Text
-                            style={[
-                              styles.receiptLine,
-                              { flex: 1, fontWeight: "bold" },
-                            ]}
-                          >
-                            {cartItem.name}
-                          </Text>
-                        </View>
-
-                        {/* QUANTITY & BASE TOTAL ROW */}
-                        <View
-                          style={{
-                            flexDirection: "row",
-                            justifyContent: "space-between",
-                            marginTop: 4,
-                          }}
-                        >
-                          <Text style={styles.receiptLine}>
-                            {cartItem.quantity}x Rp{" "}
-                            {cartItem.price.toLocaleString("id-ID")}
-                          </Text>
-                          <Text style={styles.receiptLine}>
-                            Rp{" "}
-                            {(
-                              cartItem.quantity * cartItem.price
-                            ).toLocaleString("id-ID")}
-                          </Text>
-                        </View>
-
-                        {/* Stylists */}
-                        {cartItem.stylists && cartItem.stylists.length > 0 && (
-                          <View style={styles.receiptRowWrap}>
-                            <Text
-                              style={[
-                                styles.receiptTextLeftWrap,
-                                { fontStyle: "italic", paddingLeft: 0 },
-                              ]}
-                            >
-                              {cartItem.stylists
-                                .map((s: string) => `@${s}`)
-                                .join(", ")}
-                            </Text>
-                          </View>
-                        )}
-
-                        {/* Add-ons List */}
-                        {cartItem.selectedAddOns &&
-                          cartItem.selectedAddOns.map(
-                            (addon: any, idx: number) => (
-                              <View key={idx} style={styles.receiptRowWrap}>
-                                <Text
-                                  style={[
-                                    styles.receiptTextLeftWrap,
-                                    { paddingLeft: 10 },
-                                  ]}
-                                >
-                                  + {addon.name}
-                                </Text>
-                                <Text style={styles.receiptTextRight}>
-                                  Rp {addon.price.toLocaleString("id-ID")}
-                                </Text>
-                              </View>
-                            ),
-                          )}
-
-                        {/* Discount Info */}
-                        {cartItem.discountPercent > 0 && (
-                          <View style={styles.receiptRowWrap}>
-                            <Text
-                              style={[
-                                styles.receiptDiscountLeftWrap,
-                                { paddingLeft: 10 },
-                              ]}
-                            >
-                              Disc {cartItem.discountPercent}%{" "}
-                              {cartItem.discountDesc
-                                ? `(${cartItem.discountDesc})`
-                                : ""}
-                            </Text>
-                            <Text style={styles.receiptDiscountRight}>
-                              -Rp {discountNominal.toLocaleString("id-ID")}
-                            </Text>
-                          </View>
-                        )}
-
-                        {/* SUBTOTAL ROW */}
-                        <View
-                          style={{
-                            flexDirection: "row",
-                            justifyContent: "flex-end",
-                            marginTop: 2,
-                          }}
-                        >
-                          <Text
-                            style={[styles.receiptLine, { fontWeight: "bold" }]}
-                          >
-                            Subtotal: Rp{" "}
-                            {cartItem.itemTotal.toLocaleString("id-ID")}
-                          </Text>
-                        </View>
-                        {/* DISPLAY CUSTOM NOTE IN RECAP */}
-                        {cartItem.customNote ? (
+                          {/* 1. JUST THE ITEM NAME (Removed quantity from here) */}
                           <View
                             style={{
-                              marginTop: 4,
-                              paddingTop: 4,
-                              borderTopWidth: 1,
-                              borderTopColor: "#F2F2F7",
-                              borderStyle: "dashed",
+                              flexDirection: "row",
+                              justifyContent: "space-between",
+                              alignItems: "flex-start",
                             }}
                           >
                             <Text
                               style={[
                                 styles.receiptLine,
-                                { fontStyle: "italic", color: "#555" },
+                                { flex: 1, fontWeight: "bold" },
                               ]}
                             >
-                              Catatan: {cartItem.customNote}
+                              {cartItem.name}
                             </Text>
                           </View>
-                        ) : null}
-                      </View>
-                    );
-                  })}
+
+                          {/* QUANTITY & BASE TOTAL ROW */}
+                          <View
+                            style={{
+                              flexDirection: "row",
+                              justifyContent: "space-between",
+                              marginTop: 4,
+                            }}
+                          >
+                            <Text style={styles.receiptLine}>
+                              {cartItem.quantity}x Rp{" "}
+                              {cartItem.price.toLocaleString("id-ID")}
+                            </Text>
+                            <Text style={styles.receiptLine}>
+                              Rp{" "}
+                              {(
+                                cartItem.quantity * cartItem.price
+                              ).toLocaleString("id-ID")}
+                            </Text>
+                          </View>
+
+                          {/* Stylists */}
+                          {cartItem.stylists &&
+                            cartItem.stylists.length > 0 && (
+                              <View style={styles.receiptRowWrap}>
+                                <Text
+                                  style={[
+                                    styles.receiptTextLeftWrap,
+                                    { fontStyle: "italic", paddingLeft: 0 },
+                                  ]}
+                                >
+                                  {cartItem.stylists
+                                    .map((s: string) => `@${s}`)
+                                    .join(", ")}
+                                </Text>
+                              </View>
+                            )}
+
+                          {/* Add-ons List */}
+                          {cartItem.selectedAddOns &&
+                            cartItem.selectedAddOns.map(
+                              (addon: any, idx: number) => (
+                                <View key={idx} style={styles.receiptRowWrap}>
+                                  <Text
+                                    style={[
+                                      styles.receiptTextLeftWrap,
+                                      { paddingLeft: 10 },
+                                    ]}
+                                  >
+                                    + {addon.name}
+                                  </Text>
+                                  <Text style={styles.receiptTextRight}>
+                                    Rp {addon.price.toLocaleString("id-ID")}
+                                  </Text>
+                                </View>
+                              ),
+                            )}
+
+                          {/* Discount Info */}
+                          {cartItem.discountPercent > 0 && (
+                            <View style={styles.receiptRowWrap}>
+                              <Text
+                                style={[
+                                  styles.receiptDiscountLeftWrap,
+                                  { paddingLeft: 10 },
+                                ]}
+                              >
+                                Disc {cartItem.discountPercent}%{" "}
+                                {cartItem.discountDesc
+                                  ? `(${cartItem.discountDesc})`
+                                  : ""}
+                              </Text>
+                              <Text style={styles.receiptDiscountRight}>
+                                -Rp {discountNominal.toLocaleString("id-ID")}
+                              </Text>
+                            </View>
+                          )}
+
+                          {/* SUBTOTAL ROW */}
+                          <View
+                            style={{
+                              flexDirection: "row",
+                              justifyContent: "flex-end",
+                              marginTop: 2,
+                            }}
+                          >
+                            <Text
+                              style={[
+                                styles.receiptLine,
+                                { fontWeight: "bold" },
+                              ]}
+                            >
+                              Subtotal: Rp{" "}
+                              {cartItem.itemTotal.toLocaleString("id-ID")}
+                            </Text>
+                          </View>
+                          {/* DISPLAY CUSTOM NOTE IN RECAP */}
+                          {cartItem.customNote ? (
+                            <View
+                              style={{
+                                marginTop: 4,
+                                paddingTop: 4,
+                                borderTopWidth: 1,
+                                borderTopColor: "#F2F2F7",
+                                borderStyle: "dashed",
+                              }}
+                            >
+                              <Text
+                                style={[
+                                  styles.receiptLine,
+                                  { fontStyle: "italic", color: "#555" },
+                                ]}
+                              >
+                                Catatan: {cartItem.customNote}
+                              </Text>
+                            </View>
+                          ) : null}
+                        </View>
+                      );
+                    },
+                  )}
 
                   <Text style={styles.receiptDivider}>
                     --------------------------------
@@ -876,35 +881,45 @@ export default function RecapScreen() {
               showsHorizontalScrollIndicator={false}
               style={{ flexDirection: "row", marginBottom: 20 }}
             >
-              {staffList.map((employee) => (
-                <TouchableOpacity
-                  key={employee.id}
-                  onPress={() => setExpenseStaff(employee.name)}
-                  style={{
-                    padding: 10,
-                    paddingHorizontal: 20,
-                    borderRadius: 10,
-                    borderWidth: 2,
-                    borderColor:
-                      expenseStaff === employee.name ? "#0A84FF" : "#2C2C2E",
-                    backgroundColor:
-                      expenseStaff === employee.name
+              {staffList.map((employee) => {
+                const isSelected = expenseStaffs.includes(employee.name);
+
+                return (
+                  <TouchableOpacity
+                    key={employee.id}
+                    onPress={() => {
+                      if (isSelected) {
+                        setExpenseStaffs(
+                          expenseStaffs.filter(
+                            (name) => name !== employee.name,
+                          ),
+                        );
+                      } else {
+                        setExpenseStaffs([...expenseStaffs, employee.name]);
+                      }
+                    }}
+                    style={{
+                      padding: 10,
+                      paddingHorizontal: 20,
+                      borderRadius: 10,
+                      borderWidth: 2,
+                      borderColor: isSelected ? "#0A84FF" : "#2C2C2E",
+                      backgroundColor: isSelected
                         ? "rgba(10,132,255,0.2)"
                         : "#1C1C1E",
-                    marginRight: 10,
-                  }}
-                >
-                  <Text
-                    style={
-                      expenseStaff === employee.name
-                        ? styles.textWhiteBold
-                        : styles.textGray
-                    }
+                      marginRight: 10,
+                    }}
                   >
-                    {employee.name}
-                  </Text>
-                </TouchableOpacity>
-              ))}
+                    <Text
+                      style={
+                        isSelected ? styles.textWhiteBold : styles.textGray
+                      }
+                    >
+                      {employee.name}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
             </ScrollView>
 
             <Text
@@ -996,6 +1011,7 @@ export default function RecapScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#000000" },
   header: {
+    flexWrap: "wrap",
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "flex-end", // Aligns the button cleanly with the bottom of the date boxes
@@ -1052,6 +1068,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     borderRadius: 8,
     alignSelf: "flex-end", // Safely locks button to the lower right corner
+    flexShrink: 0,
   },
   listContainer: { padding: 15, gap: 10, paddingBottom: 120 },
   sectionLabel: {
@@ -1102,7 +1119,7 @@ const styles = StyleSheet.create({
   },
   netBoxLabel: { color: "#FFF", fontSize: 18, fontWeight: "bold" },
   netBoxValue: { color: "#34C759", fontSize: 24, fontWeight: "bold" },
-  textWhite: { color: "#FFF" },
+  textWhite: { color: "#FFF", fontSize: 12 },
   textWhiteBold: { color: "#FFF", fontWeight: "bold", fontSize: 16 },
   textGray: { color: "#8E8E93" },
   textGreen: { color: "#34C759" },

@@ -29,13 +29,17 @@ export default function ManageScreen() {
 
   // filter states
   const [categories, setCategories] = useState<any[]>([]);
-  const [activeCategory, setActiveCategory] = useState("");
+  const [activeCategory, setActiveCategory] = useState("Semua");
   // filter states for searching
   const [searchQuery, setSearchQuery] = useState("");
   // logic for selected category
   const displayedMenuItems = menuItems.filter((item) => {
     if (searchQuery.length > 0) {
       return item.name.toLowerCase().includes(searchQuery.toLowerCase());
+    }
+
+    if (activeCategory === "Semua") {
+      return true;
     }
     return item.category === activeCategory;
   });
@@ -161,7 +165,7 @@ export default function ManageScreen() {
       // refresh the ui
       // 2. Refresh the UI list immediately
       const refreshedItems = db.getAllSync(
-        "SELECT * FROM Services_Products ORDER BY category, name",
+        "SELECT * FROM Services_Products ORDER BY name ASC",
       );
       setMenuItems(refreshedItems);
 
@@ -169,7 +173,7 @@ export default function ManageScreen() {
       const uniqueCats = Array.from(
         new Set(refreshedItems.map((s: any) => s.category)),
       ) as string[];
-      setCategories(uniqueCats);
+      setCategories(["Semua", ...uniqueCats]);
       setActiveCategory(newItemCategory); // <-- Force UI to snap to this category instantly!
 
       // 3. Clear inputs and close
@@ -199,11 +203,11 @@ export default function ManageScreen() {
       const uniqueCats = Array.from(
         new Set(refreshedItems.map((s: any) => s.category)),
       ) as string[];
-      setCategories(uniqueCats);
+      setCategories(["Semua", ...uniqueCats]);
 
       // If the current category was wiped out completely, fallback to the first available category
-      if (!uniqueCats.includes(activeCategory) && uniqueCats.length > 0) {
-        setActiveCategory(uniqueCats[0]);
+      if (!uniqueCats.includes(activeCategory)) {
+        setActiveCategory("Semua");
       }
     } catch (e) {
       console.error("Error deleting menu item:", e);
@@ -258,18 +262,14 @@ export default function ManageScreen() {
     useCallback(() => {
       try {
         const services = db.getAllSync(
-          "SELECT * FROM Services_Products ORDER BY category, name",
+          "SELECT * FROM Services_Products ORDER BY name ASC",
         );
         setMenuItems(services);
 
         const uniqueCategories = Array.from(
           new Set(services.map((s: any) => s.category)),
         ) as string[];
-        setCategories(uniqueCategories);
-        if (uniqueCategories.length > 0) {
-          // keep the selected category if selected, otherwise default to the first category
-          setActiveCategory((prev) => prev || uniqueCategories[0]);
-        }
+        setCategories(["Semua", ...uniqueCategories]);
 
         const employees = db.getAllSync(
           "SELECT * FROM Employees ORDER BY name",

@@ -42,7 +42,7 @@ export default function RegisterScreen() {
   const [staffList, setStaffList] = useState<any[]>([]);
 
   // States for Menu and Side Panel
-  const [activeCategory, setActiveCategory] = useState("");
+  const [activeCategory, setActiveCategory] = useState("Semua");
   const [selectedItem, setSelectedItem] = useState<any>(null);
   const [selectedAddOns, setSelectedAddOns] = useState<any[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
@@ -62,6 +62,9 @@ export default function RegisterScreen() {
   const [isEditingItem, setIsEditingItem] = useState(false);
   const [editItemName, setEditItemName] = useState("");
   const [editItemPrice, setEditItemPrice] = useState("");
+  const [isEditingAddOns, setIsEditingAddOns] = useState(false);
+  const [customAddOns, setCustomAddOns] = useState<any[]>([]);
+  // ---------------------------------
 
   // area for the notch bar
   const insets = useSafeAreaInsets();
@@ -92,7 +95,9 @@ export default function RegisterScreen() {
 
       // 2. Fetch the standard menu data
       try {
-        const services = db.getAllSync("SELECT * FROM Services_Products");
+        const services = db.getAllSync(
+          "SELECT * FROM Services_Products ORDER BY name ASC",
+        );
         const addOns = db.getAllSync("SELECT * FROM Add_Ons");
         const employees = db.getAllSync("SELECT * FROM Employees");
 
@@ -108,10 +113,10 @@ export default function RegisterScreen() {
         const uniqueCategories = Array.from(
           new Set(services.map((s: any) => s.category)),
         ) as string[];
-        setCategories(uniqueCategories);
+        setCategories(["Semua", ...uniqueCategories]);
 
-        if (uniqueCategories.length > 0 && !activeCategory) {
-          setActiveCategory(uniqueCategories[0]);
+        if (!activeCategory) {
+          setActiveCategory("Semua");
         }
 
         setStaffList(employees);
@@ -131,6 +136,9 @@ export default function RegisterScreen() {
       return item.name.toLowerCase().includes(searchQuery.toLowerCase());
     }
     // If the search bar is empty, just show the currently selected category
+    if (activeCategory === "Semua") {
+      return true;
+    }
     return item.category === activeCategory;
   });
 
@@ -428,7 +436,7 @@ export default function RegisterScreen() {
       alert(`Order ${currentCode} Selesai! ✅`);
 
       const refreshedServices = db.getAllSync(
-        "SELECT * FROM Services_Products",
+        "SELECT * FROM Services_Products ORDER BY name ASC",
       );
       const addOns = db.getAllSync("SELECT * FROM Add_Ons");
       const formattedMenu = refreshedServices.map((service: any) => ({
@@ -447,6 +455,76 @@ export default function RegisterScreen() {
       setPaymentMethod("QRIS");
     } catch (error) {
       console.error("Error finalising order:", error);
+    }
+  };
+
+  // ADD-ONS EDITING LOGICS
+  const handleAddCustomRow = () => {
+    // Generate a temporary ID for the cart receipt
+    setCustomAddOns([
+      ...customAddOns,
+      { id: `custom-${Date.now()}`, name: "", price: 0 },
+    ]);
+  };
+
+  const updateCustomAddOn = (index: number, field: string, value: string) => {
+    const updated = [...customAddOns];
+    updated[index] = { ...updated[index] };
+
+    if (field === "price") {
+      updated[index].price = Number(value) || 0;
+    } else {
+      updated[index].name = value;
+    }
+    setCustomAddOns(updated);
+  };
+
+  const removeCustomAddOn = (index: number) => {
+    const updated = [...customAddOns];
+    const removedItem = updated[index];
+
+    // 1. Remove it from the custom list
+    updated.splice(index, 1);
+    setCustomAddOns(updated);
+
+    // 2. Uncheck it automatically if it was already selected
+    setSelectedAddOns(
+      selectedAddOns.filter((a: any) => a.id !== removedItem.id),
+    );
+  };
+
+  const handleSaveCustomAddOns = () => {
+    try {
+      // Wipe the old add-ons for this specific item from the database
+      db.runSync("DELETE FROM Add_Ons WHERE service_id = ?", [selectedItem.id]);
+
+      // Filter out any blank rows the user might have left empty
+      const validAddOns = customAddOns.filter(
+        (addon) => addon.name.trim() !== "",
+      );
+
+      // Insert the newly edited list into the permanent Add_Ons table
+      validAddOns.forEach((addon) => {
+        db.runSync(
+          "INSERT INTO Add_Ons (service_id, name, additional_price) VALUES (?, ?, ?)",
+          [selectedItem.id, addon.name, Number(addon.price) || 0],
+        );
+      });
+
+      // Update the side panel and the global menu so the UI doesn't require a reload
+      setSelectedItem({ ...selectedItem, addOns: validAddOns });
+      setMenuItems((prev) =>
+        prev.map((item) =>
+          item.id === selectedItem.id ? { ...item, addOns: validAddOns } : item,
+        ),
+      );
+
+      // Clean up the UI state and close edit mode
+      setCustomAddOns(validAddOns);
+      setIsEditingAddOns(false);
+    } catch (error) {
+      console.error("Failed to save add-ons permanently:", error);
+      alert("Gagal menyimpan add-on permanen ke database.");
     }
   };
 
@@ -517,6 +595,9 @@ export default function RegisterScreen() {
               setEditItemName(item.name);
               setEditItemPrice(item.price.toString());
               setItemNote("");
+              setCustomAddOns(
+                item.addOns ? item.addOns.map((a: any) => ({ ...a })) : [],
+              );
             }}
             style={styles.itemCard}
           >
@@ -600,12 +681,16 @@ export default function RegisterScreen() {
         onRequestClose={() => {
           setSelectedItem(null);
           setItemStylists([]);
+          setIsEditingAddOns(false);
         }}
       >
         <View style={styles.modalOverlay}>
           <TouchableOpacity
             style={styles.modalBgClose}
-            onPress={() => setSelectedItem(null)}
+            onPress={() => {
+              setSelectedItem(null);
+              setIsEditingAddOns(false);
+            }}
           />
 
           <KeyboardAvoidingView
@@ -655,7 +740,8 @@ export default function RegisterScreen() {
                   onPress={() => {
                     setSelectedItem(null);
                     setItemStylists([]);
-                    setIsEditingItem(false); // Reset on close
+                    setIsEditingItem(false);
+                    setIsEditingAddOns(false);
                   }}
                 >
                   <Text style={styles.closeBtn}>×</Text>
@@ -664,9 +750,17 @@ export default function RegisterScreen() {
                 {isEditingItem ? (
                   <TouchableOpacity
                     onPress={handleQuickEditSave}
-                    style={styles.quickSaveBtn}
+                    style={styles.quickEditBtn}
                   >
-                    <Text style={styles.textWhiteBold}>Simpan</Text>
+                    <Text
+                      style={{
+                        color: "#0A84FF",
+                        fontWeight: "bold",
+                        fontSize: 12,
+                      }}
+                    >
+                      💾 Simpan
+                    </Text>
                   </TouchableOpacity>
                 ) : (
                   <TouchableOpacity
@@ -691,47 +785,127 @@ export default function RegisterScreen() {
               <Text style={styles.descriptionBox}>
                 {selectedItem?.description}
               </Text>
+              <View style={styles.customAddonHeader}>
+                <Text style={styles.sectionTitle}>TAMBAHAN (ADD-ONS)</Text>
+                <TouchableOpacity
+                  onPress={() => {
+                    if (isEditingAddOns) {
+                      handleSaveCustomAddOns();
+                    } else {
+                      setIsEditingAddOns(true);
+                    }
+                  }}
+                  style={styles.quickEditBtn}
+                >
+                  <Text
+                    style={{
+                      color: "#0A84FF",
+                      fontWeight: "bold",
+                      fontSize: 12,
+                    }}
+                  >
+                    {isEditingAddOns ? "💾 Simpan" : "✏️ Edit"}
+                  </Text>
+                </TouchableOpacity>
+              </View>
 
-              {selectedItem?.addOns && (
-                <View>
-                  <Text style={styles.sectionTitle}>TAMBAHAN OPTIONAL</Text>
-                  {selectedItem.addOns.map((addon: any) => {
-                    const isSelected = selectedAddOns.find(
-                      (a) => a.id === addon.id,
+              {isEditingAddOns ? (
+                /* --- EDIT MODE --- */
+                <View style={styles.customAddonListContainer}>
+                  {customAddOns.map((addon, idx) => (
+                    <View key={addon.id} style={styles.customAddonEditRow}>
+                      <TextInput
+                        style={styles.customAddonInputName}
+                        placeholder="Nama Tambahan"
+                        placeholderTextColor="#8E8E93"
+                        value={addon.name}
+                        onChangeText={(text) =>
+                          updateCustomAddOn(idx, "name", text)
+                        }
+                      />
+                      <TextInput
+                        style={styles.customAddonInputPrice}
+                        placeholder="Harga"
+                        placeholderTextColor="#8E8E93"
+                        keyboardType="numeric"
+                        value={addon.price === 0 ? "" : addon.price.toString()}
+                        onChangeText={(text) =>
+                          updateCustomAddOn(idx, "price", text)
+                        }
+                      />
+                      <TouchableOpacity
+                        onPress={() => removeCustomAddOn(idx)}
+                        style={styles.customAddonDeleteBtn}
+                      >
+                        <Text style={styles.customAddonDeleteText}>X</Text>
+                      </TouchableOpacity>
+                    </View>
+                  ))}
+
+                  <TouchableOpacity
+                    onPress={handleAddCustomRow}
+                    style={styles.customAddonAddRowBtn}
+                  >
+                    <Text style={styles.customAddonAddRowText}>
+                      + Tambah Baris Baru
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+              ) : (
+                /* --- SELECTION MODE --- */
+                <View style={styles.customAddonListContainer}>
+                  {customAddOns.length === 0 && (
+                    <Text style={styles.customAddonEmptyText}>
+                      Tidak ada tambahan.
+                    </Text>
+                  )}
+                  {customAddOns.map((addon) => {
+                    const isSelected = selectedAddOns.some(
+                      (a: any) => a.id === addon.id,
                     );
                     return (
                       <TouchableOpacity
                         key={addon.id}
-                        onPress={() => toggleAddOn(addon)}
+                        onPress={() => {
+                          if (isSelected) {
+                            setSelectedAddOns(
+                              selectedAddOns.filter(
+                                (a: any) => a.id !== addon.id,
+                              ),
+                            );
+                          } else {
+                            setSelectedAddOns([...selectedAddOns, addon]);
+                          }
+                        }}
                         style={[
-                          styles.addonRow,
+                          styles.customAddonSelectRow,
                           isSelected
-                            ? styles.addonSelected
-                            : styles.addonUnselected,
+                            ? styles.customAddonSelectRowActive
+                            : styles.customAddonSelectRowInactive,
                         ]}
                       >
                         <Text
                           style={[
-                            styles.addonName,
-                            isSelected ? styles.textWhite : styles.textGray,
+                            styles.customAddonSelectText,
+                            isSelected && { color: "#0A84FF" },
                           ]}
                         >
-                          {isSelected ? "✓ " : ""}
                           {addon.name}
                         </Text>
                         <Text
                           style={[
-                            styles.addonPrice,
-                            isSelected ? styles.itemPrice : styles.textWhite,
+                            styles.customAddonSelectPrice,
+                            isSelected && { color: "#0A84FF" },
                           ]}
                         >
-                          +Rp {addon.price.toLocaleString("id-ID")}
+                          + Rp {addon.price.toLocaleString("id-ID")}
                         </Text>
                       </TouchableOpacity>
                     );
                   })}
                 </View>
               )}
+
               {/* MULTIPLE STYLIST SELECTOR */}
               <View style={{ marginTop: 25 }}>
                 <Text style={styles.sectionTitle}>
@@ -1723,4 +1897,93 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
     borderRadius: 6,
   },
+  // --- CUSTOM ADD-ON STYLES ---
+  customAddonHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 15,
+    marginTop: 10,
+  },
+  customAddonActionText: {
+    color: "#0A84FF",
+    fontSize: 12,
+    fontWeight: "bold",
+  },
+  customAddonListContainer: {
+    gap: 10,
+    marginBottom: 20,
+  },
+  customAddonEditRow: {
+    flexDirection: "row",
+    gap: 10,
+    alignItems: "center",
+  },
+  customAddonInputName: {
+    flex: 2,
+    backgroundColor: "#1C1C1E",
+    color: "#FFF",
+    padding: 12,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "#2C2C2E",
+  },
+  customAddonInputPrice: {
+    flex: 1,
+    backgroundColor: "#1C1C1E",
+    color: "#FFF",
+    padding: 12,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "#2C2C2E",
+  },
+  customAddonDeleteBtn: {
+    padding: 10,
+  },
+  customAddonDeleteText: {
+    color: "#FF453A",
+    fontWeight: "bold",
+    fontSize: 18,
+  },
+  customAddonAddRowBtn: {
+    marginTop: 5,
+    padding: 12,
+    backgroundColor: "rgba(10,132,255,0.2)",
+    borderRadius: 8,
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: "#0A84FF",
+  },
+  customAddonAddRowText: {
+    color: "#0A84FF",
+    fontWeight: "bold",
+  },
+  customAddonEmptyText: {
+    color: "#8E8E93",
+    fontStyle: "italic",
+    fontSize: 12,
+  },
+  customAddonSelectRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    padding: 15,
+    borderRadius: 8,
+    borderWidth: 1,
+  },
+  customAddonSelectRowActive: {
+    borderColor: "#0A84FF",
+    backgroundColor: "rgba(10,132,255,0.2)",
+  },
+  customAddonSelectRowInactive: {
+    borderColor: "#2C2C2E",
+    backgroundColor: "#1C1C1E",
+  },
+  customAddonSelectText: {
+    color: "#FFF",
+    fontWeight: "bold",
+  },
+  customAddonSelectPrice: {
+    color: "#8E8E93",
+  },
+  // ----------------------------
 });

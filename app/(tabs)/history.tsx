@@ -42,7 +42,14 @@ export default function BasketScreen() {
         "SELECT * FROM Transactions WHERE status = 'pending' AND timestamp >= ? AND timestamp <= ? ORDER BY timestamp DESC",
         [startOfDay.toISOString(), endOfDay.toISOString()],
       );
-      setPendingOrders(data);
+
+      // parsing json after parsing
+      const parsedData = data.map((order: any) => ({
+        ...order,
+        parsedCart: JSON.parse(order.cart_json || "[]"),
+      }));
+
+      setPendingOrders(parsedData);
     } catch (e) {
       console.error("Error fetching basket:", e);
     }
@@ -111,9 +118,7 @@ export default function BasketScreen() {
     fetchPendingOrders();
   };
 
-  const activeCartItems = selectedOrder
-    ? JSON.parse(selectedOrder.cart_json || "[]")
-    : [];
+  const activeCartItems = selectedOrder ? selectedOrder.parsedCart : [];
 
   return (
     <SafeAreaView style={styles.container} edges={["top", "left", "right"]}>
@@ -130,7 +135,7 @@ export default function BasketScreen() {
           </Text>
         ) : (
           pendingOrders.map((order) => {
-            const cartItems = JSON.parse(order.cart_json || "[]");
+            const cartItems = order.parsedCart;
             return (
               <TouchableOpacity
                 key={order.id}
