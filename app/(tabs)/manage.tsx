@@ -304,24 +304,31 @@ export default function ManageScreen() {
   // Fetch Data
   useFocusEffect(
     useCallback(() => {
-      try {
-        const services = db.getAllSync(
-          "SELECT * FROM Services_Products ORDER BY name ASC",
-        );
-        setMenuItems(services);
+      const handle = requestIdleCallback(
+        () => {
+          try {
+            const services = db.getAllSync(
+              "SELECT * FROM Services_Products ORDER BY name ASC",
+            );
+            setMenuItems(services);
 
-        const uniqueCategories = Array.from(
-          new Set(services.map((s: any) => s.category)),
-        ) as string[];
-        setCategories(["Semua", ...uniqueCategories]);
+            const uniqueCategories = Array.from(
+              new Set(services.map((s: any) => s.category)),
+            ) as string[];
+            setCategories(["Semua", ...uniqueCategories]);
 
-        const employees = db.getAllSync(
-          "SELECT * FROM Employees ORDER BY name",
-        );
-        setStaffList(employees);
-      } catch (error) {
-        console.error("Error loading management data:", error);
-      }
+            const employees = db.getAllSync(
+              "SELECT * FROM Employees ORDER BY name",
+            );
+            setStaffList(employees);
+          } catch (error) {
+            console.error("Error loading management data:", error);
+          }
+        },
+        { timeout: 1000 },
+      );
+
+      return () => cancelIdleCallback(handle);
     }, []),
   );
 

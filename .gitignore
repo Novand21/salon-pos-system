@@ -40,5 +40,6 @@ yarn-error.*
 /ios
 /android
 
-# private db
+# private db and passwords
 *.db
+.env

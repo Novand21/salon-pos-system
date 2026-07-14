@@ -1,6 +1,5 @@
 import React, { useCallback, useState } from "react";
 import {
-  Alert,
   Modal,
   Platform,
   ScrollView,
@@ -41,6 +40,10 @@ export default function RecapScreen() {
   const [expenseDesc, setExpenseDesc] = useState("");
   const [expenseAmount, setExpenseAmount] = useState("");
   const [expenseStaffs, setExpenseStaffs] = useState<string[]>([]);
+
+  // passwords
+  const [showPasswordModal, setShowPasswordModal] = useState(false);
+  const [deletePassword, setDeletePassword] = useState("");
 
   // ==========================================
   // DATE RANGE NAVIGATION FUNCTIONS
@@ -197,7 +200,14 @@ export default function RecapScreen() {
 
   useFocusEffect(
     useCallback(() => {
-      fetchDayData();
+      const handle = requestIdleCallback(
+        () => {
+          fetchDayData();
+        },
+        { timeout: 1000 },
+      );
+
+      return () => cancelIdleCallback(handle);
     }, [fetchDayData]),
   );
 
@@ -253,57 +263,51 @@ export default function RecapScreen() {
 
   const handleDeleteTransaction = () => {
     if (!selectedTx) return;
+    setDeletePassword("");
+    setShowPasswordModal(true);
+  };
 
-    Alert.alert(
-      "Hapus Data",
-      "Apakah Anda yakin ingin menghapus data ini? Aksi ini tidak dapat dibatalkan.",
-      [
-        { text: "Batal", style: "cancel" },
-        {
-          text: "Hapus",
-          style: "destructive", // Makes the button red on iOS
-          onPress: () => {
-            try {
-              if (selectedTx.type === "sale") {
-                // 1. Delete associated items first to satisfy Foreign Key constraints
-                db.runSync(
-                  "DELETE FROM Transaction_Items WHERE transaction_id = ?",
-                  [selectedTx.dbId],
-                );
-                // 2. Delete the main transaction
-                db.runSync("DELETE FROM Transactions WHERE id = ?", [
-                  selectedTx.dbId,
-                ]);
-              } else if (selectedTx.type === "expense") {
-                // Expenses have no child tables, so just delete them directly
-                db.runSync("DELETE FROM Expenditures WHERE id = ?", [
-                  selectedTx.dbId,
-                ]);
-              }
+  const confirmDelete = () => {
+    const ownerPassword = process.env.EXPO_PUBLIC_OWNER_PASSWORD || "admin123";
+    if (deletePassword !== ownerPassword) {
+      alert("Password salah! Hanya Owner yang dapat menghapus data.");
+      return;
+    }
 
-              alert("Data berhasil dihapus!");
-              setSelectedTx(null); // Close the modal
-              fetchDayData(); // Refresh the UI
-            } catch (error) {
-              console.error("Error deleting record:", error);
-              alert("Gagal menghapus data.");
-            }
-          },
-        },
-      ],
-    );
+    try {
+      if (selectedTx.type === "sale") {
+        // Delete associated items first to satisfy Foreign Key constraints
+        db.runSync("DELETE FROM Transaction_Items WHERE transaction_id = ?", [
+          selectedTx.dbId,
+        ]);
+        // Delete the main transaction
+        db.runSync("DELETE FROM Transactions WHERE id = ?", [selectedTx.dbId]);
+      } else if (selectedTx.type === "expense") {
+        // Expenses have no child tables, so just delete them directly
+        db.runSync("DELETE FROM Expenditures WHERE id = ?", [selectedTx.dbId]);
+      }
+
+      alert("Data berhasil dihapus!");
+      setShowPasswordModal(false);
+      setSelectedTx(null);
+      fetchDayData();
+    } catch (error) {
+      console.error("Error deleting record:", error);
+      alert("Gagal menghapus data.");
+    }
   };
 
   const handleReprint = async () => {
     if (!selectedTx || selectedTx.type !== "sale") return;
 
-    if (!selectedTx.cart_json) {
+    if (!selectedTx.parsedCart || selectedTx.parsedCart.length === 0) {
       alert("Transaksi lama dengan data yang telah dihapus.");
       return;
     }
 
     try {
-      const cartItems = JSON.parse(selectedTx.cart_json);
+      const cartItems = selectedTx.parsedCart;
+
       const rawPrinterText = generateThermalReceiptString(
         selectedTx.trx_code,
         selectedTx.queue_number,
@@ -313,6 +317,7 @@ export default function RecapScreen() {
         selectedTx.stylist,
         selectedTx.amountTendered,
         selectedTx.changeAmount,
+        selectedTx.timestamp,
       );
 
       const printed = await printReceiptRaw(rawPrinterText);
@@ -503,10 +508,18 @@ export default function RecapScreen() {
             Pengeluaran: Rp {totalExpenses.toLocaleString("id-ID")}
           </Text>
         </View>
-        <View style={styles.netBox}>
+        <View
+          style={[
+            styles.netBox,
+            netEarning < 0 && { borderColor: "rgba(221, 57, 48, 0.83)" },
+          ]}
+        >
           <Text style={styles.netBoxLabel}>Total Penghasilan</Text>
-          <Text style={styles.netBoxValue}>
-            Rp {netEarning.toLocaleString("id-ID")}
+          <Text
+            style={[styles.netBoxValue, netEarning < 0 && { color: "#FF453A" }]}
+          >
+            {netEarning < 0 ? "- Rp " : "Rp "}
+            {Math.abs(netEarning).toLocaleString("id-ID")}
           </Text>
         </View>
       </View>
@@ -1004,6 +1017,53 @@ export default function RecapScreen() {
           </View>
         </View>
       </Modal>
+
+      {/* PASSWORD MODAL FOR DELETION */}
+      <Modal
+        visible={showPasswordModal}
+        animationType="fade"
+        transparent={true}
+        onRequestClose={() => setShowPasswordModal(false)}
+      >
+        <View
+          style={[
+            styles.modalOverlay,
+            { paddingTop: insets.top, paddingBottom: insets.bottom },
+          ]}
+        >
+          <View style={styles.passwordModalContainer}>
+            <Text style={styles.passwordModalTitle}>Izin Owner</Text>
+            <Text style={styles.passwordModalSubtitle}>
+              Masukkan password untuk menghapus data ini.
+            </Text>
+
+            <TextInput
+              style={styles.passwordInput}
+              placeholder="Password..."
+              placeholderTextColor="#8E8E93"
+              secureTextEntry={true}
+              value={deletePassword}
+              onChangeText={setDeletePassword}
+              autoFocus={true}
+            />
+
+            <View style={styles.passwordBtnRow}>
+              <TouchableOpacity
+                style={styles.passwordCancelBtn}
+                onPress={() => setShowPasswordModal(false)}
+              >
+                <Text style={styles.textWhiteBold}>Batal</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.passwordDeleteBtn}
+                onPress={confirmDelete}
+              >
+                <Text style={styles.textWhiteBold}>Hapus Data</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -1118,7 +1178,7 @@ const styles = StyleSheet.create({
     borderColor: "rgba(52, 199, 89, 0.3)",
   },
   netBoxLabel: { color: "#FFF", fontSize: 18, fontWeight: "bold" },
-  netBoxValue: { color: "#34C759", fontSize: 24, fontWeight: "bold" },
+  netBoxValue: { color: "#34C759", fontSize: 20, fontWeight: "bold" },
   textWhite: { color: "#FFF", fontSize: 12 },
   textWhiteBold: { color: "#FFF", fontWeight: "bold", fontSize: 16 },
   textGray: { color: "#8E8E93" },
@@ -1213,5 +1273,51 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     paddingHorizontal: 20,
     borderRadius: 30,
+  },
+  passwordModalContainer: {
+    backgroundColor: "#1C1C1E",
+    padding: 20,
+    borderRadius: 15,
+    width: "90%",
+    maxWidth: 400,
+    alignSelf: "center",
+  },
+  passwordModalTitle: {
+    color: "#FFF",
+    fontSize: 20,
+    fontWeight: "bold",
+    marginBottom: 10,
+  },
+  passwordModalSubtitle: {
+    color: "#8E8E93",
+    fontSize: 14,
+    marginBottom: 20,
+  },
+  passwordInput: {
+    backgroundColor: "#121212",
+    color: "#FFF",
+    padding: 15,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "#FF453A",
+    marginBottom: 25,
+  },
+  passwordBtnRow: {
+    flexDirection: "row",
+    gap: 10,
+  },
+  passwordCancelBtn: {
+    flex: 1,
+    padding: 15,
+    borderRadius: 8,
+    backgroundColor: "#2C2C2E",
+    alignItems: "center",
+  },
+  passwordDeleteBtn: {
+    flex: 1,
+    padding: 15,
+    borderRadius: 8,
+    backgroundColor: "#FF453A",
+    alignItems: "center",
   },
 });

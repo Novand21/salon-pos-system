@@ -117,10 +117,14 @@ export const generateThermalReceiptString = (
   cashier: string,
   amountTendered: string | number,
   change: string | number,
+  transactionTimestamp?: string,
 ): string => {
   let receipt = "";
   const solidDivider = "================================\n";
   const dashedDivider = "- - - - - - - - - - - - - - - -\n";
+  const receiptDate = transactionTimestamp
+    ? new Date(transactionTimestamp)
+    : new Date();
 
   receipt += centerText("D'FFOND SALON");
   receipt += centerText("Jl. Dago Pojok No.16, Dago");
@@ -132,7 +136,7 @@ export const generateThermalReceiptString = (
   receipt += `No Urut : ${queueNumber}\n`;
   receipt += `Trx ID  : ${transactionId}\n`;
   receipt += `Kasir   : ${cashier}\n`;
-  receipt += `Waktu   : ${new Date().toLocaleString("en-GB", { dateStyle: "short", timeStyle: "short" })}\n`;
+  receipt += `Waktu   : ${receiptDate.toLocaleString("en-GB", { dateStyle: "short", timeStyle: "short" })}\n`;
   receipt += solidDivider;
 
   cart.forEach((item, index) => {
@@ -183,6 +187,11 @@ export const generateThermalReceiptString = (
       );
 
       receipt += leftRightText(discText, `-Rp${formatRp(discountNominal)}`);
+    }
+
+    if (item.customerNote) {
+      const noteLines = chunkText(`Catatan: ${item.customerNote}`, 32);
+      noteLines.forEach((line) => (receipt += `${line}\n`));
     }
 
     // 5. Subtotal

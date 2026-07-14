@@ -58,6 +58,7 @@ export default function RegisterScreen() {
   const [itemDiscount, setItemDiscount] = useState("");
   const [itemDiscountDesc, setItemDiscountDesc] = useState("");
   const [itemNote, setItemNote] = useState("");
+  const [customerNote, setCustomerNote] = useState("");
 
   // for editing purposes
   const [isEditingItem, setIsEditingItem] = useState(false);
@@ -72,61 +73,68 @@ export default function RegisterScreen() {
 
   useFocusEffect(
     useCallback(() => {
-      // 1. Check if we are receiving an edit request from the Basket
-      if (params.editTxId) {
-        const id = Number(params.editTxId);
-        setPendingTxId(id);
+      const handle = requestIdleCallback(
+        () => {
+          // Check if we are receiving an edit request from the Basket
+          if (params.editTxId) {
+            const id = Number(params.editTxId);
+            setPendingTxId(id);
 
-        try {
-          // FETCH DIRECTLY FROM DB: Bypasses URL length limits!
-          const tx: any = db.getFirstSync(
-            "SELECT cart_json FROM Transactions WHERE id = ?",
-            [id],
-          );
-          if (tx && tx.cart_json) {
-            overwriteCart(JSON.parse(tx.cart_json));
+            try {
+              // FETCH DIRECTLY FROM DB: Bypasses URL length limits!
+              const tx: any = db.getFirstSync(
+                "SELECT cart_json FROM Transactions WHERE id = ?",
+                [id],
+              );
+              if (tx && tx.cart_json) {
+                overwriteCart(JSON.parse(tx.cart_json));
+              }
+            } catch (e) {
+              console.error("Error loading pending cart:", e);
+            }
+
+            // Clear the URL param so it doesn't loop
+            router.setParams({ editTxId: "" });
           }
-        } catch (e) {
-          console.error("Error loading pending cart:", e);
-        }
 
-        // Clear the URL param so it doesn't loop
-        router.setParams({ editTxId: "" });
-      }
+          // Fetch the standard menu data
+          try {
+            const services = db.getAllSync(
+              "SELECT * FROM Services_Products ORDER BY name ASC",
+            );
+            const addOns = db.getAllSync("SELECT * FROM Add_Ons");
+            const employees = db.getAllSync("SELECT * FROM Employees");
 
-      // 2. Fetch the standard menu data
-      try {
-        const services = db.getAllSync(
-          "SELECT * FROM Services_Products ORDER BY name ASC",
-        );
-        const addOns = db.getAllSync("SELECT * FROM Add_Ons");
-        const employees = db.getAllSync("SELECT * FROM Employees");
+            const formattedMenu = services.map((service: any) => ({
+              ...service,
+              price: service.base_price,
+              addOns: addOns
+                .filter((a: any) => a.service_id === service.id)
+                .map((a: any) => ({ ...a, price: a.additional_price })),
+            }));
+            setMenuItems(formattedMenu);
 
-        const formattedMenu = services.map((service: any) => ({
-          ...service,
-          price: service.base_price,
-          addOns: addOns
-            .filter((a: any) => a.service_id === service.id)
-            .map((a: any) => ({ ...a, price: a.additional_price })),
-        }));
-        setMenuItems(formattedMenu);
+            const uniqueCategories = Array.from(
+              new Set(services.map((s: any) => s.category)),
+            ) as string[];
+            setCategories(["Semua", ...uniqueCategories]);
 
-        const uniqueCategories = Array.from(
-          new Set(services.map((s: any) => s.category)),
-        ) as string[];
-        setCategories(["Semua", ...uniqueCategories]);
+            if (!activeCategory) {
+              setActiveCategory("Semua");
+            }
 
-        if (!activeCategory) {
-          setActiveCategory("Semua");
-        }
+            setStaffList(employees);
+            if (employees.length > 0 && !cashier) {
+              setCashier((employees[0] as any).name);
+            }
+          } catch (e) {
+            console.error("Error loading data from database:", e);
+          }
+        },
+        { timeout: 1000 },
+      );
 
-        setStaffList(employees);
-        if (employees.length > 0 && !cashier) {
-          setCashier((employees[0] as any).name);
-        }
-      } catch (e) {
-        console.error("Error loading data from database:", e);
-      }
+      return () => cancelIdleCallback(handle);
     }, [params.editTxId]),
   );
 
@@ -188,6 +196,7 @@ export default function RegisterScreen() {
       discountPercent: Number(itemDiscount || 0),
       discountDesc: itemDiscountDesc,
       customNote: itemNote,
+      customerNote: customerNote,
     };
 
     addToCart(customizedItem, selectedAddOns, quantity);
@@ -199,6 +208,7 @@ export default function RegisterScreen() {
     setItemDiscount("");
     setItemDiscountDesc("");
     setItemNote("");
+    setCustomerNote("");
   };
 
   const handleQuickEditSave = () => {
@@ -599,6 +609,7 @@ export default function RegisterScreen() {
               setCustomAddOns(
                 item.addOns ? item.addOns.map((a: any) => ({ ...a })) : [],
               );
+              setCustomerNote("");
             }}
             style={styles.itemCard}
           >
@@ -995,9 +1006,7 @@ export default function RegisterScreen() {
 
               {/* CUSTOM NOTE INPUT */}
               <View style={{ marginBottom: 30 }}>
-                <Text style={styles.sectionTitle}>
-                  CATATAN PESANAN (OPTIONAL)
-                </Text>
+                <Text style={styles.sectionTitle}>CATATAN PESANAN OWNER</Text>
                 <TextInput
                   style={{
                     backgroundColor: "#121212",
@@ -1011,6 +1020,23 @@ export default function RegisterScreen() {
                   placeholderTextColor="#8E8E93"
                   value={itemNote}
                   onChangeText={setItemNote}
+                />
+                <Text style={[styles.sectionTitle, { marginTop: 15 }]}>
+                  CATATAN PESANAN CUSTOMER
+                </Text>
+                <TextInput
+                  style={{
+                    backgroundColor: "#121212",
+                    color: "#FFF",
+                    padding: 15,
+                    borderRadius: 8,
+                    borderWidth: 1,
+                    borderColor: "#2C2C2E",
+                  }}
+                  placeholder="..."
+                  placeholderTextColor="#8E8E93"
+                  value={customerNote}
+                  onChangeText={setCustomerNote}
                 />
               </View>
             </ScrollView>
@@ -1300,7 +1326,7 @@ export default function RegisterScreen() {
                                 { fontStyle: "italic", color: "#555" },
                               ]}
                             >
-                              Catatan: {cartItem.customNote}
+                              Catatan(Owner): {cartItem.customNote}
                             </Text>
                           </View>
                         ) : null}

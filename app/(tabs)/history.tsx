@@ -21,7 +21,14 @@ export default function BasketScreen() {
 
   useFocusEffect(
     useCallback(() => {
-      fetchPendingOrders();
+      const handle = requestIdleCallback(
+        () => {
+          fetchPendingOrders();
+        },
+        { timeout: 1000 },
+      );
+
+      return () => cancelIdleCallback(handle);
     }, []),
   );
 
