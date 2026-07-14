@@ -1,6 +1,7 @@
 import { useFocusEffect } from "expo-router";
 import React, { useCallback, useState } from "react";
 import {
+  Image,
   KeyboardAvoidingView,
   Modal,
   Platform,
@@ -12,6 +13,8 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+
+import * as ImagePicker from "expo-image-picker";
 
 import {
   SafeAreaView,
@@ -51,6 +54,7 @@ export default function ManageScreen() {
   const [newItemCategory, setNewItemCategory] = useState("");
   const [newItemPrice, setNewItemPrice] = useState("");
   const [newItemDesc, setNewItemDesc] = useState("");
+  const [newItemImage, setNewItemImage] = useState<string | null>(null);
   const [isStockEnabled, setIsStockEnabled] = useState(false);
   const [stockQuantity, setStockQuantity] = useState("");
   const [itemAddOns, setItemAddOns] = useState<any[]>([]);
@@ -84,6 +88,7 @@ export default function ManageScreen() {
     setIsStockEnabled(!!item.is_stock_enabled);
     setStockQuantity(item.stock_quantity ? item.stock_quantity.toString() : "");
     setShowAddMenuModal(true);
+    setNewItemImage(item.image_uri || null);
     // fetch from addons table
     const existingAddOns = db.getAllSync(
       "SELECT * FROM Add_Ons WHERE service_id = ?",
@@ -105,9 +110,8 @@ export default function ManageScreen() {
     try {
       // editing item
       if (editingItemId) {
-        // 1. UPDATE EXISTING ITEM
         db.runSync(
-          "UPDATE Services_Products SET name = ?, category = ?, base_price = ?, description = ?, is_stock_enabled = ?, stock_quantity = ? WHERE id = ?",
+          "UPDATE Services_Products SET name = ?, category = ?, base_price = ?, description = ?, is_stock_enabled = ?, stock_quantity = ?, image_uri = ? WHERE id = ?",
           [
             newItemName,
             newItemCategory,
@@ -115,14 +119,15 @@ export default function ManageScreen() {
             newItemDesc,
             isStockEnabled ? 1 : 0,
             Number(stockQuantity) || 0,
+            newItemImage,
             editingItemId,
           ],
         );
 
-        // 2. Wipe old add-ons for this item
+        // Wipe old add-ons for this item
         db.runSync("DELETE FROM Add_Ons WHERE service_id = ?", editingItemId);
 
-        // 3. Save new add-ons
+        // Save new add-ons
         itemAddOns.forEach((addon) => {
           if (addon.name && addon.additional_price) {
             db.runSync(
@@ -134,9 +139,9 @@ export default function ManageScreen() {
           }
         });
       } else {
-        // 1. INSERT BRAND NEW ITEM
+        // INSERT BRAND NEW ITEM
         const result = db.runSync(
-          "INSERT INTO Services_Products (name, category, base_price, description, is_stock_enabled, stock_quantity) VALUES (?, ?, ?, ?, ?, ?)",
+          "INSERT INTO Services_Products (name, category, base_price, description, is_stock_enabled, stock_quantity, image_uri) VALUES (?, ?, ?, ?, ?, ?, ?)",
           [
             newItemName,
             newItemCategory,
@@ -144,12 +149,13 @@ export default function ManageScreen() {
             newItemDesc,
             isStockEnabled ? 1 : 0,
             Number(stockQuantity) || 0,
+            newItemImage,
           ],
         );
 
         const newServiceId = result.lastInsertRowId;
 
-        // 2. Save the add-ons using that new ID
+        // Save the add-ons using that new ID
         itemAddOns.forEach((addon) => {
           if (addon.name && addon.additional_price) {
             db.runSync(
@@ -163,7 +169,7 @@ export default function ManageScreen() {
       }
 
       // refresh the ui
-      // 2. Refresh the UI list immediately
+      // Refresh the UI list immediately
       const refreshedItems = db.getAllSync(
         "SELECT * FROM Services_Products ORDER BY name ASC",
       );
@@ -176,7 +182,7 @@ export default function ManageScreen() {
       setCategories(["Semua", ...uniqueCats]);
       setActiveCategory(newItemCategory); // <-- Force UI to snap to this category instantly!
 
-      // 3. Clear inputs and close
+      // Clear inputs and close
 
       // clear inputs for the next item added
       setEditingItemId(null);
@@ -257,6 +263,44 @@ export default function ManageScreen() {
     }
   };
 
+  // image picker function
+
+  const handlePickImage = async (useCamera: boolean) => {
+    // ask for permission
+    if (useCamera) {
+      const { status } = await ImagePicker.requestCameraPermissionsAsync();
+      if (status !== "granted") {
+        return alert("Izin kamera dibutuhkan !");
+      } else {
+        const { status } =
+          await ImagePicker.requestMediaLibraryPermissionsAsync();
+        if (status !== "granted") {
+          return alert("Izin galery dibutuhkan!");
+        }
+      }
+    }
+
+    // launch the camera or galery with crop funtion
+    let result = useCamera
+      ? await ImagePicker.launchCameraAsync({
+          mediaTypes: ["images"],
+          allowsEditing: true,
+          aspect: [1, 1], // Forces a perfect square crop
+          quality: 0.5, // Compresses it so the app stays fast
+        })
+      : await ImagePicker.launchImageLibraryAsync({
+          mediaTypes: ["images"],
+          allowsEditing: true,
+          aspect: [1, 1],
+          quality: 0.5,
+        });
+
+    // Save the image path to our state
+    if (!result.canceled) {
+      setNewItemImage(result.assets[0].uri);
+    }
+  };
+
   // Fetch Data
   useFocusEffect(
     useCallback(() => {
@@ -334,6 +378,7 @@ export default function ManageScreen() {
                 setEditingItemId(null);
                 setIsStockEnabled(false);
                 setStockQuantity("");
+                setNewItemImage(null);
               }}
             >
               <Text style={styles.textWhiteBold}>+ Tambah Menu Baru</Text>
@@ -511,6 +556,41 @@ export default function ManageScreen() {
                 style={{ marginBottom: 20 }}
                 showsVerticalScrollIndicator={false}
               >
+                {/* IMAGE PICKER UI */}
+                <View style={styles.imagePickerContainer}>
+                  <TouchableOpacity onPress={() => handlePickImage(false)}>
+                    {newItemImage ? (
+                      <Image
+                        source={{ uri: newItemImage }}
+                        style={styles.imagePreview}
+                      />
+                    ) : (
+                      <View style={styles.imagePlaceholder}>
+                        <Text style={styles.imagePlaceholderText}>+ Foto</Text>
+                      </View>
+                    )}
+                  </TouchableOpacity>
+
+                  <View style={styles.imageActionRow}>
+                    <TouchableOpacity onPress={() => handlePickImage(true)}>
+                      <Text style={styles.imageActionTextPrimary}>
+                        📷 Kamera
+                      </Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity onPress={() => handlePickImage(false)}>
+                      <Text style={styles.imageActionTextPrimary}>
+                        🖼️ Galeri
+                      </Text>
+                    </TouchableOpacity>
+                    {newItemImage && (
+                      <TouchableOpacity onPress={() => setNewItemImage(null)}>
+                        <Text style={styles.imageActionTextDanger}>
+                          🗑️ Hapus
+                        </Text>
+                      </TouchableOpacity>
+                    )}
+                  </View>
+                </View>
                 {/* Category Selector & Input */}
                 <TextInput
                   style={{
@@ -527,6 +607,7 @@ export default function ManageScreen() {
                   value={newItemName}
                   onChangeText={setNewItemName}
                 />
+
                 <Text
                   style={{
                     color: "#8E8E93",
@@ -1072,5 +1153,42 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     borderWidth: 1,
     borderColor: "#0A84FF",
+  },
+  imagePickerContainer: {
+    alignItems: "center",
+    marginBottom: 20,
+  },
+  imagePreview: {
+    width: 120,
+    height: 120,
+    borderRadius: 12,
+  },
+  imagePlaceholder: {
+    width: 120,
+    height: 120,
+    backgroundColor: "#2C2C2E",
+    borderRadius: 12,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 2,
+    borderColor: "#3A3A3C",
+    borderStyle: "dashed",
+  },
+  imagePlaceholderText: {
+    color: "#8E8E93",
+    fontWeight: "bold",
+  },
+  imageActionRow: {
+    flexDirection: "row",
+    gap: 20,
+    marginTop: 15,
+  },
+  imageActionTextPrimary: {
+    color: "#0A84FF",
+    fontWeight: "bold",
+  },
+  imageActionTextDanger: {
+    color: "#FF453A",
+    fontWeight: "bold",
   },
 });

@@ -33,7 +33,8 @@ export const initDB = () => {
                 description TEXT,
                 is_stock_enabled BOOLEAN DEFAULT 0,
                 stock_quantity INTEGER DEFAULT 0,
-                add_ons TEXT
+                add_ons TEXT,
+                image_uri TEXT
             );
 
             -- TABLE 2: Optional add-ons
@@ -150,6 +151,20 @@ export const initDB = () => {
     }
 
     console.log("Database ready at version:", currentVersion);
+
+    // VERSION 4: ADDED MENU IMAGES COLUMN IN Services_Products TABLE
+    if (currentVersion === 3) {
+      console.log("Migrating database to version 4: Adding Image URI...");
+      try {
+        db.execSync(`ALTER TABLE Services_Products ADD COLUMN image_uri TEXT;`);
+      } catch (e) {
+        console.log("Image column already exists, skipping alter...");
+      }
+
+      db.execSync("PRAGMA user_version = 4;");
+      currentVersion = 4;
+      console.log("Database migrated to version 4 successfully");
+    }
   } catch (e) {
     console.error("Error initializing database:", e);
   }

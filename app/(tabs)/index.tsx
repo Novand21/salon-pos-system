@@ -1,6 +1,7 @@
 import { router, useFocusEffect, useLocalSearchParams } from "expo-router";
 import React, { useCallback, useState } from "react";
 import {
+  Image,
   KeyboardAvoidingView,
   Modal,
   Platform,
@@ -601,7 +602,14 @@ export default function RegisterScreen() {
             }}
             style={styles.itemCard}
           >
-            <View style={styles.itemImagePlaceholder} />
+            {item.image_uri ? (
+              <Image
+                source={{ uri: item.image_uri }}
+                style={styles.itemImagePlaceholder}
+              />
+            ) : (
+              <View style={styles.itemImagePlaceholder} />
+            )}
             <Text style={styles.itemName}>{item.name}</Text>
             <Text style={styles.itemPrice}>
               Rp {item.price.toLocaleString("id-ID")}
@@ -782,6 +790,12 @@ export default function RegisterScreen() {
             </View>
 
             <ScrollView style={styles.sidePanelBody}>
+              {selectedItem?.image_uri && (
+                <Image
+                  source={{ uri: selectedItem.image_uri }}
+                  style={styles.sidePanelHeroImage}
+                />
+              )}
               <Text style={styles.descriptionBox}>
                 {selectedItem?.description}
               </Text>
@@ -1985,5 +1999,11 @@ const styles = StyleSheet.create({
   customAddonSelectPrice: {
     color: "#8E8E93",
   },
-  // ----------------------------
+  sidePanelHeroImage: {
+    width: "100%",
+    height: 200,
+    borderRadius: 12,
+    marginBottom: 15,
+    resizeMode: "cover",
+  },
 });
