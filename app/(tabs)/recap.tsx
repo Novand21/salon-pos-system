@@ -20,6 +20,12 @@ import {
 import { printReceiptRaw } from "../../utils/bluetooth";
 import { generateThermalReceiptString } from "../../utils/printer";
 
+// pass
+import { OWNER_PASSWORD } from "@/utils/pass";
+
+// icons
+import { MaterialCommunityIcons } from "@expo/vector-icons";
+
 export default function RecapScreen() {
   const insets = useSafeAreaInsets();
   // DATE RANGE STATES
@@ -44,7 +50,7 @@ export default function RecapScreen() {
   // passwords
   const [showPasswordModal, setShowPasswordModal] = useState(false);
   const [deletePassword, setDeletePassword] = useState("");
-
+  const [isPasswordVisible, setIsPasswordVisible] = useState(false);
   // ==========================================
   // DATE RANGE NAVIGATION FUNCTIONS
   // ==========================================
@@ -264,11 +270,12 @@ export default function RecapScreen() {
   const handleDeleteTransaction = () => {
     if (!selectedTx) return;
     setDeletePassword("");
+    setIsPasswordVisible(false);
     setShowPasswordModal(true);
   };
 
   const confirmDelete = () => {
-    const ownerPassword = process.env.EXPO_PUBLIC_OWNER_PASSWORD || "admin123";
+    const ownerPassword = OWNER_PASSWORD || "admin123";
     if (deletePassword !== ownerPassword) {
       alert("Password salah! Hanya Owner yang dapat menghapus data.");
       return;
@@ -1074,15 +1081,27 @@ export default function RecapScreen() {
               Masukkan password untuk menghapus data ini.
             </Text>
 
-            <TextInput
-              style={styles.passwordInput}
-              placeholder="Password..."
-              placeholderTextColor="#8E8E93"
-              secureTextEntry={true}
-              value={deletePassword}
-              onChangeText={setDeletePassword}
-              autoFocus={true}
-            />
+            <View style={styles.passwordInputContainer}>
+              <TextInput
+                style={styles.passwordInputInner}
+                placeholder="Password..."
+                placeholderTextColor="#8E8E93"
+                secureTextEntry={!isPasswordVisible}
+                value={deletePassword}
+                onChangeText={setDeletePassword}
+                autoFocus={true}
+              />
+              <TouchableOpacity
+                onPress={() => setIsPasswordVisible(!isPasswordVisible)}
+                style={{ padding: 10 }}
+              >
+                <MaterialCommunityIcons
+                  name={isPasswordVisible ? "eye" : "eye-off"}
+                  size={20}
+                  color="#8E8E93"
+                />
+              </TouchableOpacity>
+            </View>
 
             <View style={styles.passwordBtnRow}>
               <TouchableOpacity
@@ -1356,5 +1375,22 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     backgroundColor: "#FF453A",
     alignItems: "center",
+  },
+  passwordInputContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#121212",
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "#FF453A",
+    marginBottom: 25,
+    paddingHorizontal: 15,
+    height: 55,
+  },
+  passwordInputInner: {
+    flex: 1,
+    color: "#FFF",
+    height: "100%",
+    fontSize: 16,
   },
 });

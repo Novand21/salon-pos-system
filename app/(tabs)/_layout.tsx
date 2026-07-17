@@ -1,8 +1,9 @@
 import { db } from "@/database/db";
+import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { Tabs } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import React, { useEffect } from "react";
-import { Platform, Text, View } from "react-native";
+import { Platform, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 // NAVIGATION BAR LAYOUT PURPOSE BUT NOT USED FOR NOW
@@ -55,11 +56,12 @@ export default function TabLayout() {
           options={{
             title: "Kasir",
             tabBarIcon: ({ color }) => (
-              <Text
-                style={{ fontSize: 22, opacity: color === "#0A84FF" ? 1 : 0.5 }}
-              >
-                🛒
-              </Text>
+              <MaterialCommunityIcons
+                name="cash-register"
+                style={{ opacity: color === "#0A84FF" ? 1 : 0.5 }}
+                size={24}
+                color="white"
+              />
             ),
           }}
         />
@@ -68,11 +70,12 @@ export default function TabLayout() {
           options={{
             title: "Riwayat",
             tabBarIcon: ({ color }) => (
-              <Text
-                style={{ fontSize: 22, opacity: color === "#0A84FF" ? 1 : 0.5 }}
-              >
-                🧾
-              </Text>
+              <MaterialCommunityIcons
+                name="receipt-clock"
+                style={{ opacity: color === "#0A84FF" ? 1 : 0.5 }}
+                size={24}
+                color="white"
+              />
             ),
           }}
         />
@@ -81,11 +84,12 @@ export default function TabLayout() {
           options={{
             title: "Recap",
             tabBarIcon: ({ color }) => (
-              <Text
-                style={{ fontSize: 22, opacity: color === "#0A84FF" ? 1 : 0.5 }}
-              >
-                📊
-              </Text>
+              <MaterialCommunityIcons
+                name="chart-bar"
+                style={{ opacity: color === "#0A84FF" ? 1 : 0.5 }}
+                size={24}
+                color="white"
+              />
             ),
           }}
         />
@@ -94,11 +98,12 @@ export default function TabLayout() {
           options={{
             title: "Manajemen",
             tabBarIcon: ({ color }) => (
-              <Text
-                style={{ fontSize: 22, opacity: color === "#0A84FF" ? 1 : 0.5 }}
-              >
-                📋
-              </Text>
+              <MaterialCommunityIcons
+                name="clipboard-list"
+                style={{ opacity: color === "#0A84FF" ? 1 : 0.5 }}
+                size={24}
+                color="white"
+              />
             ),
           }}
         />
@@ -107,12 +112,12 @@ export default function TabLayout() {
           options={{
             title: "Pengaturan",
             tabBarIcon: ({ color }) => (
-              // Using a slider icon for Settings since Manage already uses a gear
-              <Text
-                style={{ fontSize: 22, opacity: color === "#0A84FF" ? 1 : 0.5 }}
-              >
-                ⚙️
-              </Text>
+              <MaterialCommunityIcons
+                name="cog"
+                style={{ opacity: color === "#0A84FF" ? 1 : 0.5 }}
+                size={24}
+                color="white"
+              />
             ),
           }}
         />
