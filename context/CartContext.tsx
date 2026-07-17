@@ -20,17 +20,20 @@ export const CartProvider = ({ children }: { children: React.ReactNode }) => {
     // Generate a unique ID for this specific cart entry based on the current time
     const cartItemId = Date.now().toString();
 
-    // 1. Calculate the base cost (Base Price + Add-ons) * Quantity
+    // Calculate the base cost (Base Price + Add-ons) * Quantity
     const unitTotal =
       menuItem.price +
-      selectedAddOns.reduce((sum: number, addon: any) => sum + addon.price, 0);
+      selectedAddOns.reduce(
+        (sum: number, addon: any) => sum + addon.price * (addon.quantity || 1),
+        0,
+      );
     const baseItemTotal = unitTotal * quantity;
 
-    // 2. Calculate the percentage discount (defaults to 0 if none provided)
+    // Calculate the percentage discount (defaults to 0 if none provided)
     const discountPercent = menuItem.discountPercent || 0;
     const discountAmount = baseItemTotal * (discountPercent / 100);
 
-    // 3. Final total after subtracting the discount
+    // Final total after subtracting the discount
     const itemTotal = baseItemTotal - discountAmount;
 
     // Create the final object to save in the cart

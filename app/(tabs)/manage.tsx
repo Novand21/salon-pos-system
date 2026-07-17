@@ -65,7 +65,10 @@ export default function ManageScreen() {
   const [newStaffRole, setNewStaffRole] = useState("Stylist");
 
   const handleAddAddOnRow = () => {
-    setItemAddOns([...itemAddOns, { name: "", additional_price: "" }]);
+    setItemAddOns([
+      ...itemAddOns,
+      { name: "", additional_price: "", stock_quantity: "" },
+    ]);
   };
 
   const handleUpdateAddOn = (index: number, field: string, value: string) => {
@@ -99,6 +102,9 @@ export default function ManageScreen() {
       existingAddOns.map((addon: any) => ({
         name: addon.name,
         additional_price: addon.additional_price.toString(),
+        stock_quantity: addon.is_stock_enabled
+          ? addon.stock_quantity.toString()
+          : "",
       })),
     );
   };
@@ -130,11 +136,27 @@ export default function ManageScreen() {
         // Save new add-ons
         itemAddOns.forEach((addon) => {
           if (addon.name && addon.additional_price) {
+            const isStockEnabled =
+              addon.stock_quantity && addon.stock_quantity.trim() !== ""
+                ? 1
+                : 0;
+            const stockQty = isStockEnabled ? Number(addon.stock_quantity) : 0;
+
             db.runSync(
-              "INSERT INTO Add_Ons (service_id, name, additional_price) VALUES (?, ?, ?)",
-              editingItemId,
-              addon.name,
-              Number(addon.additional_price),
+              "INSERT INTO Add_Ons (service_id, name, additional_price, is_stock_enabled, stock_quantity) VALUES (?, ?, ?, ?, ?)",
+              [
+                editingItemId,
+                addon.name,
+                Number(addon.additional_price),
+                isStockEnabled,
+                stockQty,
+              ],
+            );
+
+            // Sync all add-ons
+            db.runSync(
+              "UPDATE Add_Ons SET is_stock_enabled = ?, stock_quantity = ? WHERE name = ?",
+              [isStockEnabled, stockQty, addon.name],
             );
           }
         });
@@ -158,11 +180,26 @@ export default function ManageScreen() {
         // Save the add-ons using that new ID
         itemAddOns.forEach((addon) => {
           if (addon.name && addon.additional_price) {
+            const isStockEnabled =
+              addon.stock_quantity && addon.stock_quantity.trim() !== ""
+                ? 1
+                : 0;
+            const stockQty = isStockEnabled ? Number(addon.stock_quantity) : 0;
+
             db.runSync(
-              "INSERT INTO Add_Ons (service_id, name, additional_price) VALUES (?, ?, ?)",
-              newServiceId,
-              addon.name,
-              Number(addon.additional_price),
+              "INSERT INTO Add_Ons (service_id, name, additional_price, is_stock_enabled, stock_quantity) VALUES (?, ?, ?, ?, ?)",
+              [
+                newServiceId,
+                addon.name,
+                Number(addon.additional_price),
+                isStockEnabled,
+                stockQty,
+              ],
+            );
+
+            db.runSync(
+              "UPDATE Add_Ons SET is_stock_enabled = ?, stock_quantity = ? WHERE name = ?",
+              [isStockEnabled, stockQty, addon.name],
             );
           }
         });
@@ -779,7 +816,7 @@ export default function ManageScreen() {
                 {itemAddOns.map((addon, index) => (
                   <View
                     key={index}
-                    style={{ flexDirection: "row", gap: 10, marginBottom: 15 }}
+                    style={{ flexDirection: "row", gap: 8, marginBottom: 15 }}
                   >
                     <TextInput
                       style={{
@@ -791,7 +828,7 @@ export default function ManageScreen() {
                         borderWidth: 1,
                         borderColor: "#2C2C2E",
                       }}
-                      placeholder="Name (e.g. Styling)"
+                      placeholder="Nama"
                       placeholderTextColor="#8E8E93"
                       value={addon.name}
                       onChangeText={(text) =>
@@ -808,7 +845,7 @@ export default function ManageScreen() {
                         borderWidth: 1,
                         borderColor: "#2C2C2E",
                       }}
-                      placeholder="Price"
+                      placeholder="Harga"
                       placeholderTextColor="#8E8E93"
                       keyboardType="numeric"
                       value={addon.additional_price}
@@ -816,11 +853,29 @@ export default function ManageScreen() {
                         handleUpdateAddOn(index, "additional_price", text)
                       }
                     />
+                    <TextInput
+                      style={{
+                        flex: 1,
+                        backgroundColor: "#121212",
+                        color: "#FFF",
+                        padding: 12,
+                        borderRadius: 8,
+                        borderWidth: 1,
+                        borderColor: "#2C2C2E",
+                      }}
+                      placeholder="Stok (∞)"
+                      placeholderTextColor="#8E8E93"
+                      keyboardType="numeric"
+                      value={addon.stock_quantity}
+                      onChangeText={(text) =>
+                        handleUpdateAddOn(index, "stock_quantity", text)
+                      }
+                    />
                     <TouchableOpacity
                       style={{
                         justifyContent: "center",
                         alignItems: "center",
-                        paddingHorizontal: 10,
+                        paddingHorizontal: 5,
                       }}
                       onPress={() => handleRemoveAddOn(index)}
                     >

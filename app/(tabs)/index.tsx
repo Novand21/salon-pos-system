@@ -151,20 +151,20 @@ export default function RegisterScreen() {
     return item.category === activeCategory;
   });
 
-  // 1. Calculate the base cost before discounts
+  // Calculate the base cost before discounts
   const baseItemCost = selectedItem
     ? (selectedItem.price +
         selectedAddOns.reduce(
-          (sum: number, addon: any) => sum + addon.price,
+          (sum: number, addon: any) => sum + addon.price * addon.quantity,
           0,
         )) *
       quantity
     : 0;
 
-  // 2. Calculate the discount percentage amount
+  // Calculate the discount percentage amount
   const discountAmount = baseItemCost * (Number(itemDiscount || 0) / 100);
 
-  // 3. Final total for the UI button
+  // Final total for the UI button
   const currentItemTotal = baseItemCost - discountAmount;
 
   const toggleStylist = (name: string) => {
@@ -172,6 +172,33 @@ export default function RegisterScreen() {
       setItemStylists(itemStylists.filter((s) => s !== name));
     } else {
       setItemStylists([...itemStylists, name]);
+    }
+  };
+
+  // to add add-ons quantity
+  const updateAddOnQty = (addon: any, delta: number) => {
+    const existing = selectedAddOns.find((a) => a.id === addon.id);
+    const currentQty = existing ? existing.quantity : 0;
+    const newQty = currentQty + delta;
+
+    if (delta > 0 && addon.is_stock_enabled) {
+      if (newQty > addon.stock_quantity) {
+        alert(
+          `Stok ${addon.name} tidak cukup! (Tersisa: ${addon.stock_quantity})`,
+        );
+        return;
+      }
+    }
+    if (newQty <= 0) {
+      setSelectedAddOns(selectedAddOns.filter((a) => a.id !== addon.id));
+    } else if (existing) {
+      setSelectedAddOns(
+        selectedAddOns.map((a) =>
+          a.id === addon.id ? { ...a, quantity: newQty } : a,
+        ),
+      );
+    } else {
+      setSelectedAddOns([...selectedAddOns, { ...addon, quantity: 1 }]);
     }
   };
 
@@ -425,6 +452,16 @@ export default function RegisterScreen() {
             [cartItem.quantity, cartItem.id],
           );
         }
+
+        // deduct add-on stock by name
+        cartItem.selectedAddOns.forEach((addon: any) => {
+          if (addon.is_stock_enabled) {
+            db.runSync(
+              "UPDATE Add_Ons SET stock_quantity = stock_quantity - ? WHERE name = ? AND is_stock_enabled = 1",
+              [(addon.quantity || 1) * cartItem.quantity, addon.name],
+            );
+          }
+        });
       });
 
       if (shouldPrint) {
@@ -474,7 +511,7 @@ export default function RegisterScreen() {
     // Generate a temporary ID for the cart receipt
     setCustomAddOns([
       ...customAddOns,
-      { id: `custom-${Date.now()}`, name: "", price: 0 },
+      { id: `custom-${Date.now()}`, name: "", price: 0, stock_quantity: "" },
     ]);
   };
 
@@ -484,6 +521,8 @@ export default function RegisterScreen() {
 
     if (field === "price") {
       updated[index].price = Number(value) || 0;
+    } else if (field === "stock_quantity") {
+      updated[index].stock_quantity = value;
     } else {
       updated[index].name = value;
     }
@@ -515,23 +554,53 @@ export default function RegisterScreen() {
       );
 
       // Insert the newly edited list into the permanent Add_Ons table
-      validAddOns.forEach((addon) => {
+      const formattedAddOns = validAddOns.map((addon) => {
+        const stockStr = addon.stock_quantity
+          ? String(addon.stock_quantity).trim()
+          : "";
+        const isStockEnabled = stockStr !== "" ? 1 : 0;
+        const stockQty = isStockEnabled ? Number(stockStr) : 0;
+
+        return {
+          ...addon,
+          price: Number(addon.price) || 0,
+          is_stock_enabled: isStockEnabled,
+          stock_quantity: stockQty,
+        };
+      });
+
+      // Insert the formatted list into the permanent Add_Ons table
+      formattedAddOns.forEach((addon) => {
         db.runSync(
-          "INSERT INTO Add_Ons (service_id, name, additional_price) VALUES (?, ?, ?)",
-          [selectedItem.id, addon.name, Number(addon.price) || 0],
+          "INSERT INTO Add_Ons (service_id, name, additional_price, is_stock_enabled, stock_quantity) VALUES (?, ?, ?, ?, ?)",
+          [
+            selectedItem.id,
+            addon.name,
+            addon.price,
+            addon.is_stock_enabled,
+            addon.stock_quantity,
+          ],
+        );
+
+        // Sync globally
+        db.runSync(
+          "UPDATE Add_Ons SET is_stock_enabled = ?, stock_quantity = ? WHERE name = ?",
+          [addon.is_stock_enabled, addon.stock_quantity, addon.name],
         );
       });
 
       // Update the side panel and the global menu so the UI doesn't require a reload
-      setSelectedItem({ ...selectedItem, addOns: validAddOns });
+      setSelectedItem({ ...selectedItem, addOns: formattedAddOns });
       setMenuItems((prev) =>
         prev.map((item) =>
-          item.id === selectedItem.id ? { ...item, addOns: validAddOns } : item,
+          item.id === selectedItem.id
+            ? { ...item, addOns: formattedAddOns }
+            : item,
         ),
       );
 
       // Clean up the UI state and close edit mode
-      setCustomAddOns(validAddOns);
+      setCustomAddOns(formattedAddOns);
       setIsEditingAddOns(false);
     } catch (error) {
       console.error("Failed to save add-ons permanently:", error);
@@ -838,9 +907,15 @@ export default function RegisterScreen() {
                 /* --- EDIT MODE --- */
                 <View style={styles.customAddonListContainer}>
                   {customAddOns.map((addon, idx) => (
-                    <View key={addon.id} style={styles.customAddonEditRow}>
+                    <View
+                      key={addon.id}
+                      style={styles.customAddonEditRowContainer}
+                    >
                       <TextInput
-                        style={styles.customAddonInputName}
+                        style={[
+                          styles.customAddonInputBase,
+                          styles.customAddonInputName,
+                        ]}
                         placeholder="Nama Tambahan"
                         placeholderTextColor="#8E8E93"
                         value={addon.name}
@@ -849,13 +924,34 @@ export default function RegisterScreen() {
                         }
                       />
                       <TextInput
-                        style={styles.customAddonInputPrice}
+                        style={[
+                          styles.customAddonInputBase,
+                          styles.customAddonInputPrice,
+                        ]}
                         placeholder="Harga"
                         placeholderTextColor="#8E8E93"
                         keyboardType="numeric"
                         value={addon.price === 0 ? "" : addon.price.toString()}
                         onChangeText={(text) =>
                           updateCustomAddOn(idx, "price", text)
+                        }
+                      />
+                      <TextInput
+                        style={[
+                          styles.customAddonInputBase,
+                          styles.customAddonInputStock,
+                        ]}
+                        placeholder="Stok (∞)"
+                        placeholderTextColor="#8E8E93"
+                        keyboardType="numeric"
+                        value={
+                          addon.stock_quantity !== undefined &&
+                          addon.stock_quantity !== null
+                            ? addon.stock_quantity.toString()
+                            : ""
+                        }
+                        onChangeText={(text) =>
+                          updateCustomAddOn(idx, "stock_quantity", text)
                         }
                       />
                       <TouchableOpacity
@@ -885,47 +981,91 @@ export default function RegisterScreen() {
                     </Text>
                   )}
                   {customAddOns.map((addon) => {
-                    const isSelected = selectedAddOns.some(
+                    const selected = selectedAddOns.find(
                       (a: any) => a.id === addon.id,
                     );
+                    const qty = selected ? selected.quantity : 0;
+                    const isSoldOut =
+                      !!addon.is_stock_enabled && addon.stock_quantity <= 0;
+
                     return (
-                      <TouchableOpacity
+                      <View
                         key={addon.id}
-                        onPress={() => {
-                          if (isSelected) {
-                            setSelectedAddOns(
-                              selectedAddOns.filter(
-                                (a: any) => a.id !== addon.id,
-                              ),
-                            );
-                          } else {
-                            setSelectedAddOns([...selectedAddOns, addon]);
-                          }
-                        }}
                         style={[
                           styles.customAddonSelectRow,
-                          isSelected
+                          qty > 0
                             ? styles.customAddonSelectRowActive
                             : styles.customAddonSelectRowInactive,
+                          isSoldOut ? styles.soldOutDim : null,
                         ]}
                       >
-                        <Text
-                          style={[
-                            styles.customAddonSelectText,
-                            isSelected && { color: "#0A84FF" },
-                          ]}
-                        >
-                          {addon.name}
-                        </Text>
-                        <Text
-                          style={[
-                            styles.customAddonSelectPrice,
-                            isSelected && { color: "#0A84FF" },
-                          ]}
-                        >
-                          + Rp {addon.price.toLocaleString("id-ID")}
-                        </Text>
-                      </TouchableOpacity>
+                        <View style={styles.customAddonInfo}>
+                          <Text
+                            style={[
+                              styles.customAddonSelectText,
+                              qty > 0 && styles.textBlue,
+                            ]}
+                          >
+                            {addon.name}{" "}
+                            {addon.is_stock_enabled
+                              ? isSoldOut
+                                ? "(HABIS)"
+                                : `(${addon.stock_quantity})`
+                              : ""}
+                          </Text>
+                          <Text
+                            style={[
+                              styles.customAddonSelectPrice,
+                              qty > 0 && styles.textBlue,
+                            ]}
+                          >
+                            + Rp {addon.price.toLocaleString("id-ID")}
+                          </Text>
+                        </View>
+
+                        <View style={styles.addonCounterContainer}>
+                          <TouchableOpacity
+                            onPress={() => updateAddOnQty(addon, -1)}
+                            style={[
+                              styles.counterBtn,
+                              qty > 0
+                                ? styles.counterBtnActive
+                                : styles.counterBtnInactive,
+                            ]}
+                          >
+                            <Text
+                              style={[
+                                styles.counterBtnText,
+                                qty > 0 ? styles.textBlue : styles.textWhite,
+                              ]}
+                            >
+                              -
+                            </Text>
+                          </TouchableOpacity>
+
+                          <Text style={styles.counterValueText}>{qty}</Text>
+
+                          <TouchableOpacity
+                            disabled={isSoldOut}
+                            onPress={() => updateAddOnQty(addon, 1)}
+                            style={[
+                              styles.counterBtn,
+                              isSoldOut
+                                ? styles.counterBtnInactive
+                                : styles.counterBtnActive,
+                            ]}
+                          >
+                            <Text
+                              style={[
+                                styles.counterBtnText,
+                                isSoldOut ? styles.textGray : styles.textBlue,
+                              ]}
+                            >
+                              +
+                            </Text>
+                          </TouchableOpacity>
+                        </View>
+                      </View>
                     );
                   })}
                 </View>
@@ -1937,7 +2077,7 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
     borderRadius: 6,
   },
-  // --- CUSTOM ADD-ON STYLES ---
+  // CUSTOM ADD-ON STYLES
   customAddonHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
@@ -1954,28 +2094,30 @@ const styles = StyleSheet.create({
     gap: 10,
     marginBottom: 20,
   },
-  customAddonEditRow: {
+
+  /* EDIT MODE STYLES */
+  customAddonEditRowContainer: {
     flexDirection: "row",
-    gap: 10,
+    gap: 8,
     alignItems: "center",
+    marginBottom: 10,
+  },
+  customAddonInputBase: {
+    backgroundColor: "#1C1C1E",
+    color: "#FFF",
+    padding: 12,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "#2C2C2E",
   },
   customAddonInputName: {
     flex: 2,
-    backgroundColor: "#1C1C1E",
-    color: "#FFF",
-    padding: 12,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: "#2C2C2E",
   },
   customAddonInputPrice: {
+    flex: 1.5,
+  },
+  customAddonInputStock: {
     flex: 1,
-    backgroundColor: "#1C1C1E",
-    color: "#FFF",
-    padding: 12,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: "#2C2C2E",
   },
   customAddonDeleteBtn: {
     padding: 10,
@@ -2003,6 +2145,8 @@ const styles = StyleSheet.create({
     fontStyle: "italic",
     fontSize: 12,
   },
+
+  /* SELECTION MODE STYLES */
   customAddonSelectRow: {
     flexDirection: "row",
     justifyContent: "space-between",
@@ -2018,6 +2162,9 @@ const styles = StyleSheet.create({
     borderColor: "#2C2C2E",
     backgroundColor: "#1C1C1E",
   },
+  customAddonInfo: {
+    flex: 1,
+  },
   customAddonSelectText: {
     color: "#FFF",
     fontWeight: "bold",
@@ -2025,6 +2172,40 @@ const styles = StyleSheet.create({
   customAddonSelectPrice: {
     color: "#8E8E93",
   },
+  soldOutDim: {
+    opacity: 0.4,
+  },
+  textBlue: {
+    color: "#0A84FF",
+  },
+  addonCounterContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 15,
+  },
+  counterBtn: {
+    width: 35,
+    height: 35,
+    borderRadius: 17.5,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  counterBtnActive: {
+    backgroundColor: "rgba(10,132,255,0.2)",
+  },
+  counterBtnInactive: {
+    backgroundColor: "#2C2C2E",
+  },
+  counterBtnText: {
+    fontSize: 20,
+    fontWeight: "bold",
+  },
+  counterValueText: {
+    color: "#FFF",
+    fontSize: 16,
+    fontWeight: "bold",
+  },
+
   sidePanelHeroImage: {
     width: "100%",
     height: 200,

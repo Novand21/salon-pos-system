@@ -43,6 +43,8 @@ export const initDB = () => {
                 service_id INTEGER NOT NULL,
                 name TEXT NOT NULL,
                 additional_price INTEGER NOT NULL,
+                is_stock_enabled BOOLEAN DEFAULT 0,
+                stock_quantity INTEGER DEFAULT 0,
                 FOREIGN KEY(service_id) REFERENCES Services_Products(id) ON DELETE CASCADE
             );
             -- TABLE 3: Staff and Employees
@@ -164,6 +166,24 @@ export const initDB = () => {
       db.execSync("PRAGMA user_version = 4;");
       currentVersion = 4;
       console.log("Database migrated to version 4 successfully");
+    }
+
+    // VERSION 5: ADDED ADD-ON INVENTORY SYSTEM
+    if (currentVersion === 4) {
+      console.log(
+        "Migrating database to version 5: Adding Add-On Inventory...",
+      );
+      try {
+        db.execSync(`
+          ALTER TABLE Add_Ons ADD COLUMN is_stock_enabled BOOLEAN DEFAULT 0;
+          ALTER TABLE Add_Ons ADD COLUMN stock_quantity INTEGER DEFAULT 0;
+        `);
+      } catch (e) {
+        console.log("Add-on stock columns already exist, skipping alter...");
+      }
+      db.execSync("PRAGMA user_version = 5;");
+      currentVersion = 5;
+      console.log("Database migrated to version 5 successfully");
     }
   } catch (e) {
     console.error("Error initializing database:", e);
