@@ -1,5 +1,7 @@
+import { db } from "@/database/db";
 import { Tabs } from "expo-router";
 import { StatusBar } from "expo-status-bar";
+import React, { useEffect } from "react";
 import { Platform, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -9,12 +11,28 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 export default function TabLayout() {
   const insets = useSafeAreaInsets();
-  // useEffect(() => {
-  //   if (Platform.OS === "android") {
-  //     NavigationBar.setBackgroundColorAsync("#000000");
-  //     NavigationBar.setButtonStyleAsync("light");
-  //   }
-  // }, []);
+
+  // recap data will be deleted if older than 2 years
+  useEffect(() => {
+    try {
+      // Delete main transactions and expenses older than 2 years
+      db.runSync(
+        "DELETE FROM Transactions WHERE timestamp <= datetime('now', '-2 years')",
+      );
+      db.runSync(
+        "DELETE FROM Expenditures WHERE timestamp <= datetime('now', '-2 years')",
+      );
+
+      // Clean up any orphaned child items
+      db.runSync(
+        "DELETE FROM Transaction_Items WHERE transaction_id NOT IN (SELECT id FROM Transactions)",
+      );
+
+      console.log("Database auto-cleanup completed.");
+    } catch (e) {
+      console.error("Auto-clean failed:", e);
+    }
+  }, []);
   return (
     <View style={{ flex: 1, paddingBottom: insets.bottom }}>
       <StatusBar style="light" backgroundColor="#000000" />

@@ -1487,6 +1487,26 @@ export default function RegisterScreen() {
                           </TouchableOpacity>
                         </View>
 
+                        {/* QUANTITY & BASE TOTAL ROW */}
+                        <View
+                          style={{
+                            flexDirection: "row",
+                            justifyContent: "space-between",
+                            marginTop: 4,
+                          }}
+                        >
+                          <Text style={styles.receiptLine}>
+                            {cartItem.quantity}x Rp{" "}
+                            {cartItem.price.toLocaleString("id-ID")}
+                          </Text>
+                          <Text style={styles.receiptLine}>
+                            Rp{" "}
+                            {(
+                              cartItem.quantity * cartItem.price
+                            ).toLocaleString("id-ID")}
+                          </Text>
+                        </View>
+
                         {/* Display Multiple Stylists */}
                         {cartItem.stylists && cartItem.stylists.length > 0 && (
                           <View style={styles.receiptRow}>

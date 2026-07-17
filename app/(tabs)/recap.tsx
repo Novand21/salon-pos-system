@@ -480,9 +480,26 @@ export default function RecapScreen() {
                     {tx.type === "expense" ? "↓ " : "↑ "}
                   </Text>
                   {tx.title}
+
+                  {tx.type === "sale" && (
+                    <Text
+                      style={{
+                        color: "#8E8E93",
+                        fontSize: 14,
+                        fontWeight: "normal",
+                      }}
+                    >
+                      {"  "}•{" "}
+                      {tx.parsedCart?.reduce(
+                        (sum: number, item: any) => sum + (item.quantity || 1),
+                        0,
+                      )}{" "}
+                      items
+                    </Text>
+                  )}
                 </Text>
                 <Text style={styles.ledgerSubtitle}>
-                  {tx.dateStr} {tx.stylist ? `• Cashier: ${tx.stylist}` : ""}
+                  {tx.dateStr} {tx.stylist ? `• Kasir: ${tx.stylist}` : ""}
                 </Text>
               </View>
 

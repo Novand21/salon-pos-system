@@ -290,6 +290,27 @@ export default function BasketScreen() {
                         </TouchableOpacity>
                       </View>
 
+                      {/* Item QTY & Subtotal */}
+                      <View
+                        style={{
+                          flexDirection: "row",
+                          justifyContent: "space-between",
+                          marginTop: 4,
+                          marginLeft: 10,
+                        }}
+                      >
+                        <Text style={styles.receiptLine}>
+                          {cartItem.quantity}x Rp{" "}
+                          {cartItem.price.toLocaleString("id-ID")}
+                        </Text>
+                        <Text style={styles.receiptLine}>
+                          Rp{" "}
+                          {(cartItem.quantity * cartItem.price).toLocaleString(
+                            "id-ID",
+                          )}
+                        </Text>
+                      </View>
+
                       {/* Stylists */}
                       {cartItem.stylists && cartItem.stylists.length > 0 && (
                         <View
@@ -353,23 +374,19 @@ export default function BasketScreen() {
                         </View>
                       )}
 
-                      {/* Item QTY & Subtotal */}
+                      {/* SUBTOTAL */}
                       <View
                         style={{
                           flexDirection: "row",
-                          justifyContent: "space-between",
+                          justifyContent: "flex-end",
                           marginTop: 4,
-                          marginLeft: 10,
                         }}
                       >
-                        <Text style={styles.receiptLine}>
-                          {cartItem.quantity}x Rp{" "}
-                          {cartItem.price.toLocaleString("id-ID")}
-                        </Text>
                         <Text
                           style={[styles.receiptLine, { fontWeight: "bold" }]}
                         >
-                          Rp {cartItem.itemTotal.toLocaleString("id-ID")}
+                          Subtotal: Rp{" "}
+                          {cartItem.itemTotal.toLocaleString("id-ID")}
                         </Text>
                       </View>
 
