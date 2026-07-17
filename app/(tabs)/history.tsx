@@ -75,6 +75,26 @@ export default function BasketScreen() {
 
     try {
       const deletedQueueNum = selectedOrder.queue_number;
+      const cartToRevert =
+        selectedOrder.parsedCart || JSON.parse(selectedOrder.cart_json || "[]");
+
+      cartToRevert.forEach((item: any) => {
+        // Revert Main Item
+        if (item.is_stock_enabled === 1) {
+          db.runSync(
+            "UPDATE Services_Products SET stock_quantity = stock_quantity + ? WHERE id = ?",
+            [item.quantity, item.id],
+          );
+        }
+        // Revert Linked Add-Ons
+        (item.selectedAddOns || []).forEach((addon: any) => {
+          db.runSync(
+            "UPDATE Services_Products SET stock_quantity = stock_quantity + ? WHERE lower(name) = lower(?) AND is_stock_enabled = 1",
+            [(addon.quantity || 1) * item.quantity, addon.name],
+          );
+        });
+      });
+
       db.runSync("DELETE FROM Transactions WHERE id = ?", selectedOrder.id);
 
       const startOfDay = new Date();
@@ -96,6 +116,7 @@ export default function BasketScreen() {
     if (!selectedOrder) return;
 
     const currentCart = JSON.parse(selectedOrder.cart_json || "[]");
+
     const updatedCart = currentCart.filter(
       (item: any) => item.cartId !== cartIdToRemove,
     );
@@ -103,6 +124,24 @@ export default function BasketScreen() {
     if (updatedCart.length === 0) {
       handleDeleteOrder();
       return;
+    }
+
+    const itemToRemove = currentCart.find(
+      (item: any) => item.cartId === cartIdToRemove,
+    );
+    if (itemToRemove) {
+      if (itemToRemove.is_stock_enabled === 1) {
+        db.runSync(
+          "UPDATE Services_Products SET stock_quantity = stock_quantity + ? WHERE id = ?",
+          [itemToRemove.quantity, itemToRemove.id],
+        );
+      }
+      (itemToRemove.selectedAddOns || []).forEach((addon: any) => {
+        db.runSync(
+          "UPDATE Services_Products SET stock_quantity = stock_quantity + ? WHERE lower(name) = lower(?) AND is_stock_enabled = 1",
+          [(addon.quantity || 1) * itemToRemove.quantity, addon.name],
+        );
+      });
     }
 
     const newTotal = updatedCart.reduce(
@@ -120,6 +159,7 @@ export default function BasketScreen() {
       ...selectedOrder,
       cart_json: newCartJson,
       total_amount: newTotal,
+      parsedCart: updatedCart,
     });
 
     fetchPendingOrders();
@@ -268,7 +308,7 @@ export default function BasketScreen() {
                         </View>
                       )}
 
-                      {/* Map Add-ons (Stylesheet Applied) */}
+                      {/* Map Add-ons  */}
                       {cartItem.selectedAddOns.map(
                         (addon: any, idx: number) => (
                           <View
@@ -276,7 +316,9 @@ export default function BasketScreen() {
                             style={[styles.receiptRowWrap, { marginLeft: 20 }]}
                           >
                             <Text style={styles.receiptTextLeftWrap}>
-                              + {addon.name}
+                              +{" "}
+                              {addon.quantity > 1 ? `${addon.quantity}x ` : ""}
+                              {addon.name}
                             </Text>
                             <Text style={styles.receiptTextRight}>
                               Rp {addon.price.toLocaleString("id-ID")}
@@ -285,7 +327,7 @@ export default function BasketScreen() {
                         ),
                       )}
 
-                      {/* Discount Data (Stylesheet Applied) */}
+                      {/* Discount Data */}
                       {cartItem.discountPercent > 0 && (
                         <View>
                           <View

@@ -159,7 +159,7 @@ export const generateThermalReceiptString = (
       item.selectedAddOns.forEach((addon: any) => {
         receipt += leftRightText(
           `    + ${addon.name}`,
-          `Rp${formatRp(addon.price)}`,
+          addon.price <= 0 ? "" : `Rp${formatRp(addon.price)}`,
         );
       });
     }

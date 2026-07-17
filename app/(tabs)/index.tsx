@@ -87,7 +87,23 @@ export default function RegisterScreen() {
                 [id],
               );
               if (tx && tx.cart_json) {
+                const loadedCart = JSON.parse(tx.cart_json);
                 overwriteCart(JSON.parse(tx.cart_json));
+                // We temporarily put the stock back on the shelf so the math works while editing
+                loadedCart.forEach((item: any) => {
+                  if (item.is_stock_enabled === 1) {
+                    db.runSync(
+                      "UPDATE Services_Products SET stock_quantity = stock_quantity + ? WHERE id = ?",
+                      [item.quantity, item.id],
+                    );
+                  }
+                  (item.selectedAddOns || []).forEach((addon: any) => {
+                    db.runSync(
+                      "UPDATE Services_Products SET stock_quantity = stock_quantity + ? WHERE lower(name) = lower(?) AND is_stock_enabled = 1",
+                      [(addon.quantity || 1) * item.quantity, addon.name],
+                    );
+                  });
+                });
               }
             } catch (e) {
               console.error("Error loading pending cart:", e);
@@ -181,10 +197,29 @@ export default function RegisterScreen() {
     const currentQty = existing ? existing.quantity : 0;
     const newQty = currentQty + delta;
 
-    if (delta > 0 && addon.is_stock_enabled) {
-      if (newQty > addon.stock_quantity) {
+    // search main-menu for a product with the exact same name (Ignoring uppercase and lowercase)
+    const linkedProduct = menuItems.find(
+      (m) => m.name.trim().toLowerCase() === addon.name.trim().toLowerCase(),
+    );
+
+    if (delta > 0 && linkedProduct && linkedProduct.is_stock_enabled === 1) {
+      const alreadyInCart = getCartQty(linkedProduct.name);
+
+      // Account for the main item being configured if it happens to be the EXACT same product
+      const currentConfigMainQty =
+        selectedItem?.name.trim().toLowerCase() ===
+        linkedProduct.name.trim().toLowerCase()
+          ? quantity
+          : 0;
+
+      if (
+        newQty + alreadyInCart + currentConfigMainQty >
+        linkedProduct.stock_quantity
+      ) {
         alert(
-          `Stok ${addon.name} tidak cukup! (Tersisa: ${addon.stock_quantity})`,
+          `Stok tidak cukup! Anda sudah memiliki ${alreadyInCart} di keranjang. (Tersisa: ${
+            linkedProduct.stock_quantity - alreadyInCart - currentConfigMainQty
+          })`,
         );
         return;
       }
@@ -216,7 +251,76 @@ export default function RegisterScreen() {
     }
   };
 
+  // scan the cart for reserved stock
+  const getCartQty = (productName: string) => {
+    if (!productName) return 0;
+    let total = 0;
+    cart.forEach((cartItem: any) => {
+      // Count if it's sitting in the cart as a main item
+      if (
+        cartItem.name.trim().toLowerCase() === productName.trim().toLowerCase()
+      ) {
+        total += cartItem.quantity;
+      }
+      // Count if it's sitting in the cart as an add-on attached to something else
+      if (cartItem.selectedAddOns) {
+        cartItem.selectedAddOns.forEach((addon: any) => {
+          if (
+            addon.name.trim().toLowerCase() === productName.trim().toLowerCase()
+          ) {
+            total += (addon.quantity || 1) * cartItem.quantity;
+          }
+        });
+      }
+    });
+    return total;
+  };
+
   const handleAddToCart = () => {
+    // for the main item ---
+    if (selectedItem?.is_stock_enabled === 1) {
+      const alreadyInCart = getCartQty(selectedItem.name);
+      if (quantity + alreadyInCart > selectedItem.stock_quantity) {
+        alert(
+          `Gagal menambah pesanan! Anda sudah memiliki ${alreadyInCart} ${selectedItem.name} di keranjang. (Sisa stok: ${
+            selectedItem.stock_quantity - alreadyInCart
+          })`,
+        );
+        return;
+      }
+    }
+
+    // for add-ons
+    for (const addon of selectedAddOns) {
+      const linkedProduct = menuItems.find(
+        (m) => m.name.trim().toLowerCase() === addon.name.trim().toLowerCase(),
+      );
+
+      if (linkedProduct && linkedProduct.is_stock_enabled === 1) {
+        const alreadyInCart = getCartQty(linkedProduct.name);
+
+        // Calculate total add-on quantity being added (addon qty * main item qty)
+        const addonQtyBeingAdded = (addon.quantity || 1) * quantity;
+
+        // If the add-on happens to be the exact same product as the main item, they share the pool
+        const isSameAsMain =
+          selectedItem?.name.trim().toLowerCase() ===
+          linkedProduct.name.trim().toLowerCase();
+        const totalBeingAdded = isSameAsMain
+          ? quantity + addonQtyBeingAdded
+          : addonQtyBeingAdded;
+
+        if (totalBeingAdded + alreadyInCart > linkedProduct.stock_quantity) {
+          alert(
+            `Gagal! Stok ${addon.name} tidak cukup untuk pesanan ini. (Sisa stok: ${
+              linkedProduct.stock_quantity - alreadyInCart
+            })`,
+          );
+          return;
+        }
+      }
+    }
+
     const customizedItem = {
       ...selectedItem,
       stylists: itemStylists, // array of names!
@@ -303,6 +407,21 @@ export default function RegisterScreen() {
       const timestamp = new Date().toISOString();
       const cartJson = JSON.stringify(cart);
 
+      cart.forEach((cartItem: any) => {
+        if (cartItem.is_stock_enabled === 1) {
+          db.runSync(
+            "UPDATE Services_Products SET stock_quantity = stock_quantity - ? WHERE id = ?",
+            [cartItem.quantity, cartItem.id],
+          );
+        }
+        cartItem.selectedAddOns.forEach((addon: any) => {
+          db.runSync(
+            "UPDATE Services_Products SET stock_quantity = stock_quantity - ? WHERE lower(name) = lower(?) AND is_stock_enabled = 1",
+            [(addon.quantity || 1) * cartItem.quantity, addon.name],
+          );
+        });
+      });
+
       if (pendingTxId) {
         // Update existing pending order (keeps original queue_number and trx_code)
         db.runSync(
@@ -329,6 +448,18 @@ export default function RegisterScreen() {
       }
 
       alert("Order disimpan di keranjang! 🛒");
+      const refreshedServices = db.getAllSync(
+        "SELECT * FROM Services_Products ORDER BY name ASC",
+      );
+      const addOns = db.getAllSync("SELECT * FROM Add_Ons");
+      const formattedMenu = refreshedServices.map((service: any) => ({
+        ...service,
+        price: service.base_price,
+        addOns: addOns
+          .filter((a: any) => a.service_id === service.id)
+          .map((a: any) => ({ ...a, price: a.additional_price })),
+      }));
+      setMenuItems(formattedMenu);
       clearCart();
       setPendingTxId(null);
     } catch (e) {
@@ -426,7 +557,9 @@ export default function RegisterScreen() {
 
       cart.forEach((cartItem: any) => {
         const addOnsString = cartItem.selectedAddOns
-          .map((a: any) => a.name)
+          .map((a: any) =>
+            a.quantity > 1 ? `${a.quantity}x ${a.name}` : a.name,
+          )
           .join(", ");
         const stylistsString =
           cartItem.stylists && cartItem.stylists.length > 0
@@ -446,7 +579,7 @@ export default function RegisterScreen() {
             cartItem.itemTotal,
           ],
         );
-        if (cartItem.is_stock_enabled) {
+        if (cartItem.is_stock_enabled === 1) {
           db.runSync(
             "UPDATE Services_Products SET stock_quantity = stock_quantity - ? WHERE id = ?",
             [cartItem.quantity, cartItem.id],
@@ -455,12 +588,10 @@ export default function RegisterScreen() {
 
         // deduct add-on stock by name
         cartItem.selectedAddOns.forEach((addon: any) => {
-          if (addon.is_stock_enabled) {
-            db.runSync(
-              "UPDATE Add_Ons SET stock_quantity = stock_quantity - ? WHERE name = ? AND is_stock_enabled = 1",
-              [(addon.quantity || 1) * cartItem.quantity, addon.name],
-            );
-          }
+          db.runSync(
+            "UPDATE Services_Products SET stock_quantity = stock_quantity - ? WHERE lower(name) = lower(?) AND is_stock_enabled = 1",
+            [(addon.quantity || 1) * cartItem.quantity, addon.name],
+          );
         });
       });
 
@@ -571,21 +702,28 @@ export default function RegisterScreen() {
 
       // Insert the formatted list into the permanent Add_Ons table
       formattedAddOns.forEach((addon) => {
+        // Inherit global stock if it exists
+        const existingGlobal: any = db.getFirstSync(
+          "SELECT is_stock_enabled, stock_quantity FROM Add_Ons WHERE name = ?",
+          [addon.name],
+        );
+
+        const finalIsStockEnabled = existingGlobal
+          ? existingGlobal.is_stock_enabled
+          : 0;
+        const finalStockQty = existingGlobal
+          ? existingGlobal.stock_quantity
+          : 0;
+
         db.runSync(
           "INSERT INTO Add_Ons (service_id, name, additional_price, is_stock_enabled, stock_quantity) VALUES (?, ?, ?, ?, ?)",
           [
             selectedItem.id,
             addon.name,
             addon.price,
-            addon.is_stock_enabled,
-            addon.stock_quantity,
+            finalIsStockEnabled,
+            finalStockQty,
           ],
-        );
-
-        // Sync globally
-        db.runSync(
-          "UPDATE Add_Ons SET is_stock_enabled = ?, stock_quantity = ? WHERE name = ?",
-          [addon.is_stock_enabled, addon.stock_quantity, addon.name],
         );
       });
 
@@ -912,10 +1050,7 @@ export default function RegisterScreen() {
                       style={styles.customAddonEditRowContainer}
                     >
                       <TextInput
-                        style={[
-                          styles.customAddonInputBase,
-                          styles.customAddonInputName,
-                        ]}
+                        style={[styles.customAddonInputBase, { flex: 2 }]} // Expanded flex
                         placeholder="Nama Tambahan"
                         placeholderTextColor="#8E8E93"
                         value={addon.name}
@@ -924,34 +1059,13 @@ export default function RegisterScreen() {
                         }
                       />
                       <TextInput
-                        style={[
-                          styles.customAddonInputBase,
-                          styles.customAddonInputPrice,
-                        ]}
+                        style={[styles.customAddonInputBase, { flex: 1 }]} // Expanded flex
                         placeholder="Harga"
                         placeholderTextColor="#8E8E93"
                         keyboardType="numeric"
                         value={addon.price === 0 ? "" : addon.price.toString()}
                         onChangeText={(text) =>
                           updateCustomAddOn(idx, "price", text)
-                        }
-                      />
-                      <TextInput
-                        style={[
-                          styles.customAddonInputBase,
-                          styles.customAddonInputStock,
-                        ]}
-                        placeholder="Stok (∞)"
-                        placeholderTextColor="#8E8E93"
-                        keyboardType="numeric"
-                        value={
-                          addon.stock_quantity !== undefined &&
-                          addon.stock_quantity !== null
-                            ? addon.stock_quantity.toString()
-                            : ""
-                        }
-                        onChangeText={(text) =>
-                          updateCustomAddOn(idx, "stock_quantity", text)
                         }
                       />
                       <TouchableOpacity
@@ -985,8 +1099,20 @@ export default function RegisterScreen() {
                       (a: any) => a.id === addon.id,
                     );
                     const qty = selected ? selected.quantity : 0;
+                    const linkedProduct = menuItems.find(
+                      (m) =>
+                        m.name.trim().toLowerCase() ===
+                        addon.name.trim().toLowerCase(),
+                    );
+                    const isLinkedStockEnabled = linkedProduct
+                      ? linkedProduct.is_stock_enabled === 1
+                      : false;
+                    const linkedStockQty = linkedProduct
+                      ? linkedProduct.stock_quantity
+                      : 0;
+
                     const isSoldOut =
-                      !!addon.is_stock_enabled && addon.stock_quantity <= 0;
+                      isLinkedStockEnabled && linkedStockQty <= 0;
 
                     return (
                       <View
@@ -1007,10 +1133,10 @@ export default function RegisterScreen() {
                             ]}
                           >
                             {addon.name}{" "}
-                            {addon.is_stock_enabled
+                            {isLinkedStockEnabled
                               ? isSoldOut
                                 ? "(HABIS)"
-                                : `(${addon.stock_quantity})`
+                                : `(${linkedStockQty})`
                               : ""}
                           </Text>
                           <Text
@@ -1213,7 +1339,22 @@ export default function RegisterScreen() {
                 </Text>
 
                 <TouchableOpacity
-                  onPress={() => setQuantity(quantity + 1)}
+                  onPress={() => {
+                    if (selectedItem?.is_stock_enabled === 1) {
+                      const alreadyInCart = getCartQty(selectedItem.name);
+
+                      if (
+                        quantity + 1 >
+                        selectedItem.stock_quantity - alreadyInCart
+                      ) {
+                        alert(
+                          `Stok habis! Anda sudah memasukkan ${alreadyInCart} ke dalam keranjang`,
+                        );
+                        return;
+                      }
+                    }
+                    setQuantity(quantity + 1);
+                  }}
                   style={{
                     backgroundColor: "#2C2C2E",
                     width: 40,
@@ -1383,7 +1524,11 @@ export default function RegisterScreen() {
                                   paddingRight: 15,
                                 }}
                               >
-                                + {addon.name}
+                                +{" "}
+                                {addon.quantity > 1
+                                  ? `${addon.quantity}x `
+                                  : ""}
+                                {addon.name}
                               </Text>
                               <Text
                                 style={{

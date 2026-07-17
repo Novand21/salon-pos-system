@@ -136,11 +136,17 @@ export default function ManageScreen() {
         // Save new add-ons
         itemAddOns.forEach((addon) => {
           if (addon.name && addon.additional_price) {
-            const isStockEnabled =
-              addon.stock_quantity && addon.stock_quantity.trim() !== ""
-                ? 1
-                : 0;
-            const stockQty = isStockEnabled ? Number(addon.stock_quantity) : 0;
+            // Check if this add-on already exists anywhere else in the DB
+            const existingGlobal: any = db.getFirstSync(
+              "SELECT is_stock_enabled, stock_quantity FROM Add_Ons WHERE name = ?",
+              [addon.name],
+            );
+
+            // Inherit its stock if it exists, otherwise default to 0 (unlimited)
+            const isStockEnabled = existingGlobal
+              ? existingGlobal.is_stock_enabled
+              : 0;
+            const stockQty = existingGlobal ? existingGlobal.stock_quantity : 0;
 
             db.runSync(
               "INSERT INTO Add_Ons (service_id, name, additional_price, is_stock_enabled, stock_quantity) VALUES (?, ?, ?, ?, ?)",
@@ -151,12 +157,6 @@ export default function ManageScreen() {
                 isStockEnabled,
                 stockQty,
               ],
-            );
-
-            // Sync all add-ons
-            db.runSync(
-              "UPDATE Add_Ons SET is_stock_enabled = ?, stock_quantity = ? WHERE name = ?",
-              [isStockEnabled, stockQty, addon.name],
             );
           }
         });
@@ -180,11 +180,17 @@ export default function ManageScreen() {
         // Save the add-ons using that new ID
         itemAddOns.forEach((addon) => {
           if (addon.name && addon.additional_price) {
-            const isStockEnabled =
-              addon.stock_quantity && addon.stock_quantity.trim() !== ""
-                ? 1
-                : 0;
-            const stockQty = isStockEnabled ? Number(addon.stock_quantity) : 0;
+            // Check if this add-on already exists anywhere else in the DB
+            const existingGlobal: any = db.getFirstSync(
+              "SELECT is_stock_enabled, stock_quantity FROM Add_Ons WHERE name = ?",
+              [addon.name],
+            );
+
+            // Inherit its stock if it exists, otherwise default to 0 (unlimited)
+            const isStockEnabled = existingGlobal
+              ? existingGlobal.is_stock_enabled
+              : 0;
+            const stockQty = existingGlobal ? existingGlobal.stock_quantity : 0;
 
             db.runSync(
               "INSERT INTO Add_Ons (service_id, name, additional_price, is_stock_enabled, stock_quantity) VALUES (?, ?, ?, ?, ?)",
@@ -195,11 +201,6 @@ export default function ManageScreen() {
                 isStockEnabled,
                 stockQty,
               ],
-            );
-
-            db.runSync(
-              "UPDATE Add_Ons SET is_stock_enabled = ?, stock_quantity = ? WHERE name = ?",
-              [isStockEnabled, stockQty, addon.name],
             );
           }
         });
@@ -828,7 +829,7 @@ export default function ManageScreen() {
                         borderWidth: 1,
                         borderColor: "#2C2C2E",
                       }}
-                      placeholder="Nama"
+                      placeholder="Nama Tambahan"
                       placeholderTextColor="#8E8E93"
                       value={addon.name}
                       onChangeText={(text) =>
@@ -837,7 +838,7 @@ export default function ManageScreen() {
                     />
                     <TextInput
                       style={{
-                        flex: 1.5,
+                        flex: 1,
                         backgroundColor: "#121212",
                         color: "#FFF",
                         padding: 12,
@@ -851,24 +852,6 @@ export default function ManageScreen() {
                       value={addon.additional_price}
                       onChangeText={(text) =>
                         handleUpdateAddOn(index, "additional_price", text)
-                      }
-                    />
-                    <TextInput
-                      style={{
-                        flex: 1,
-                        backgroundColor: "#121212",
-                        color: "#FFF",
-                        padding: 12,
-                        borderRadius: 8,
-                        borderWidth: 1,
-                        borderColor: "#2C2C2E",
-                      }}
-                      placeholder="Stok (∞)"
-                      placeholderTextColor="#8E8E93"
-                      keyboardType="numeric"
-                      value={addon.stock_quantity}
-                      onChangeText={(text) =>
-                        handleUpdateAddOn(index, "stock_quantity", text)
                       }
                     />
                     <TouchableOpacity

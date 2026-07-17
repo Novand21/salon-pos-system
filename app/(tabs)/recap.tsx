@@ -276,6 +276,22 @@ export default function RecapScreen() {
 
     try {
       if (selectedTx.type === "sale") {
+        // revert stock before deleting
+        (selectedTx.parsedCart || []).forEach((item: any) => {
+          if (item.is_stock_enabled) {
+            db.runSync(
+              "UPDATE Services_Products SET stock_quantity = stock_quantity + ? WHERE id = ?",
+              [item.quantity, item.id],
+            );
+          }
+          (item.selectedAddOns || []).forEach((addon: any) => {
+            db.runSync(
+              "UPDATE Services_Products SET stock_quantity = stock_quantity + ? WHERE lower(name) = lower(?) AND is_stock_enabled = 1",
+              [(addon.quantity || 1) * item.quantity, addon.name],
+            );
+          });
+        });
+
         // Delete associated items first to satisfy Foreign Key constraints
         db.runSync("DELETE FROM Transaction_Items WHERE transaction_id = ?", [
           selectedTx.dbId,
@@ -665,7 +681,11 @@ export default function RecapScreen() {
                                       { paddingLeft: 10 },
                                     ]}
                                   >
-                                    + {addon.name}
+                                    +{" "}
+                                    {addon.quantity > 1
+                                      ? `${addon.quantity}x `
+                                      : ""}
+                                    {addon.name}
                                   </Text>
                                   <Text style={styles.receiptTextRight}>
                                     Rp {addon.price.toLocaleString("id-ID")}
