@@ -331,21 +331,86 @@ export default function BasketScreen() {
 
                       {/* Map Add-ons  */}
                       {cartItem.selectedAddOns.map(
-                        (addon: any, idx: number) => (
-                          <View
-                            key={idx}
-                            style={[styles.receiptRowWrap, { marginLeft: 20 }]}
-                          >
-                            <Text style={styles.receiptTextLeftWrap}>
-                              +{" "}
-                              {addon.quantity > 1 ? `${addon.quantity}x ` : ""}
-                              {addon.name}
-                            </Text>
-                            <Text style={styles.receiptTextRight}>
-                              Rp {addon.price.toLocaleString("id-ID")}
-                            </Text>
-                          </View>
-                        ),
+                        (addon: any, idx: number) => {
+                          const totalAddonQty =
+                            (addon.quantity || 1) * cartItem.quantity;
+                          const totalAddonPrice = addon.price * totalAddonQty;
+
+                          if (totalAddonQty === 1) {
+                            return (
+                              <View
+                                key={idx}
+                                style={{
+                                  flexDirection: "row",
+                                  justifyContent: "space-between",
+                                  alignItems: "flex-start",
+                                  marginVertical: 2,
+                                }}
+                              >
+                                <Text
+                                  style={{
+                                    color: "#555",
+                                    fontSize: 12,
+                                    flex: 1,
+                                    flexShrink: 1,
+                                    paddingRight: 15,
+                                  }}
+                                >
+                                  + {addon.name}
+                                </Text>
+                                <Text
+                                  style={{
+                                    color: "#555",
+                                    fontSize: 12,
+                                    textAlign: "right",
+                                  }}
+                                >
+                                  Rp {totalAddonPrice.toLocaleString("id-ID")}
+                                </Text>
+                              </View>
+                            );
+                          } else {
+                            return (
+                              <View key={idx} style={{ marginVertical: 2 }}>
+                                <Text style={{ color: "#555", fontSize: 12 }}>
+                                  + {addon.name}
+                                </Text>
+
+                                <View
+                                  style={{
+                                    flexDirection: "row",
+                                    justifyContent: "space-between",
+                                    alignItems: "flex-start",
+                                    paddingLeft: 14,
+                                    marginTop: 2,
+                                  }}
+                                >
+                                  <Text
+                                    style={{
+                                      color: "#555",
+                                      fontSize: 12,
+                                      flex: 1,
+                                      flexShrink: 1,
+                                      paddingRight: 15,
+                                    }}
+                                  >
+                                    ({totalAddonQty}x Rp{" "}
+                                    {addon.price.toLocaleString("id-ID")})
+                                  </Text>
+                                  <Text
+                                    style={{
+                                      color: "#555",
+                                      fontSize: 12,
+                                      textAlign: "right",
+                                    }}
+                                  >
+                                    Rp {totalAddonPrice.toLocaleString("id-ID")}
+                                  </Text>
+                                </View>
+                              </View>
+                            );
+                          }
+                        },
                       )}
 
                       {/* Discount Data */}

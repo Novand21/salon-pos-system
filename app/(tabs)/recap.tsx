@@ -31,9 +31,10 @@ export default function RecapScreen() {
   // DATE RANGE STATES
   const [startDate, setStartDate] = useState<Date>(new Date());
   const [endDate, setEndDate] = useState<Date>(new Date());
-  const [activePicker, setActivePicker] = useState<"start" | "end" | null>(
-    null,
-  );
+  const [activePicker, setActivePicker] = useState<
+    "start" | "end" | "expense" | null
+  >(null);
+  const [expenseDate, setExpenseDate] = useState<Date>(new Date());
 
   // SORTING STATE
   const [sortMode, setSortMode] = useState<"desc" | "asc">("desc");
@@ -72,6 +73,11 @@ export default function RecapScreen() {
         if (date < startDate) {
           setStartDate(date);
         }
+      } else if (activePicker === "expense") {
+        const newDate = new Date(date);
+        const now = new Date();
+        newDate.setHours(now.getHours(), now.getMinutes(), now.getSeconds());
+        setExpenseDate(newDate);
       }
     }
   };
@@ -92,7 +98,7 @@ export default function RecapScreen() {
       return alert("Tolong isi seluruh deskripsi dan jumlah pengeluaran!");
 
     try {
-      const timestamp = new Date();
+      const timestamp = expenseDate.toISOString();
 
       const staffString =
         expenseStaffs.length > 0 ? ` (by ${expenseStaffs.join(", ")})` : "";
@@ -100,7 +106,7 @@ export default function RecapScreen() {
 
       db.runSync(
         "INSERT INTO Expenditures (timestamp, description, amount) VALUES (?, ?, ?)",
-        [timestamp.toISOString(), finalDescription, Number(expenseAmount)],
+        [timestamp, finalDescription, Number(expenseAmount)],
       );
 
       fetchDayData();
@@ -392,16 +398,25 @@ export default function RecapScreen() {
 
         <TouchableOpacity
           style={styles.addExpenseBtn}
-          onPress={() => setShowExpenseModal(true)}
+          onPress={() => {
+            setShowExpenseModal(true);
+            setExpenseDate(new Date());
+          }}
         >
           <Text style={styles.textWhite}>+ Pengeluaran</Text>
         </TouchableOpacity>
       </View>
 
-      {/* NATIVE CALENDAR MODAL (Forces correct minimum/maximum parameters dynamically) */}
+      {/* NATIVE CALENDAR MODAL */}
       {activePicker && (
         <DateTimePicker
-          value={activePicker === "start" ? startDate : endDate}
+          value={
+            activePicker === "start"
+              ? startDate
+              : activePicker === "end"
+                ? endDate
+                : expenseDate
+          }
           mode="date"
           display="default"
           minimumDate={activePicker === "end" ? startDate : undefined}
@@ -695,28 +710,95 @@ export default function RecapScreen() {
                             )}
 
                           {/* Add-ons List */}
-                          {cartItem.selectedAddOns &&
-                            cartItem.selectedAddOns.map(
-                              (addon: any, idx: number) => (
-                                <View key={idx} style={styles.receiptRowWrap}>
-                                  <Text
-                                    style={[
-                                      styles.receiptTextLeftWrap,
-                                      { paddingLeft: 10 },
-                                    ]}
+                          {cartItem.selectedAddOns.map(
+                            (addon: any, idx: number) => {
+                              const totalAddonQty =
+                                (addon.quantity || 1) * cartItem.quantity;
+                              const totalAddonPrice =
+                                addon.price * totalAddonQty;
+
+                              if (totalAddonQty === 1) {
+                                return (
+                                  <View
+                                    key={idx}
+                                    style={{
+                                      flexDirection: "row",
+                                      justifyContent: "space-between",
+                                      alignItems: "flex-start",
+                                      marginVertical: 2,
+                                    }}
                                   >
-                                    +{" "}
-                                    {addon.quantity > 1
-                                      ? `${addon.quantity}x `
-                                      : ""}
-                                    {addon.name}
-                                  </Text>
-                                  <Text style={styles.receiptTextRight}>
-                                    Rp {addon.price.toLocaleString("id-ID")}
-                                  </Text>
-                                </View>
-                              ),
-                            )}
+                                    <Text
+                                      style={{
+                                        color: "#555",
+                                        fontSize: 12,
+                                        flex: 1,
+                                        flexShrink: 1,
+                                        paddingRight: 15,
+                                      }}
+                                    >
+                                      + {addon.name}
+                                    </Text>
+                                    <Text
+                                      style={{
+                                        color: "#555",
+                                        fontSize: 12,
+                                        textAlign: "right",
+                                      }}
+                                    >
+                                      Rp{" "}
+                                      {totalAddonPrice.toLocaleString("id-ID")}
+                                    </Text>
+                                  </View>
+                                );
+                              } else {
+                                return (
+                                  <View key={idx} style={{ marginVertical: 2 }}>
+                                    <Text
+                                      style={{ color: "#555", fontSize: 12 }}
+                                    >
+                                      + {addon.name}
+                                    </Text>
+
+                                    <View
+                                      style={{
+                                        flexDirection: "row",
+                                        justifyContent: "space-between",
+                                        alignItems: "flex-start",
+                                        paddingLeft: 14,
+                                        marginTop: 2,
+                                      }}
+                                    >
+                                      <Text
+                                        style={{
+                                          color: "#555",
+                                          fontSize: 12,
+                                          flex: 1,
+                                          flexShrink: 1,
+                                          paddingRight: 15,
+                                        }}
+                                      >
+                                        ({totalAddonQty}x Rp{" "}
+                                        {addon.price.toLocaleString("id-ID")})
+                                      </Text>
+                                      <Text
+                                        style={{
+                                          color: "#555",
+                                          fontSize: 12,
+                                          textAlign: "right",
+                                        }}
+                                      >
+                                        Rp{" "}
+                                        {totalAddonPrice.toLocaleString(
+                                          "id-ID",
+                                        )}
+                                      </Text>
+                                    </View>
+                                  </View>
+                                );
+                              }
+                            },
+                          )}
 
                           {/* Discount Info */}
                           {cartItem.discountPercent > 0 && (
@@ -922,7 +1004,40 @@ export default function RecapScreen() {
             >
               Tambah Pengeluaran
             </Text>
-
+            <Text
+              style={{
+                color: "#8E8E93",
+                fontSize: 12,
+                fontWeight: "bold",
+                marginBottom: 10,
+              }}
+            >
+              TANGGAL
+            </Text>
+            <TouchableOpacity
+              style={{
+                backgroundColor: "#121212",
+                padding: 15,
+                borderRadius: 8,
+                marginBottom: 15,
+                borderWidth: 1,
+                borderColor: "#2C2C2E",
+                flexDirection: "row",
+                justifyContent: "space-between",
+                alignItems: "center",
+              }}
+              onPress={() => setActivePicker("expense")}
+            >
+              <Text style={{ color: "#FFF", fontSize: 16 }}>
+                {formatDateLabel(expenseDate)}
+              </Text>
+              <MaterialCommunityIcons
+                name="calendar"
+                size={20}
+                color="white"
+                style={{ textAlign: "right" }}
+              />
+            </TouchableOpacity>
             <Text
               style={{
                 color: "#8E8E93",

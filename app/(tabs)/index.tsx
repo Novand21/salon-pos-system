@@ -1523,44 +1523,89 @@ export default function RegisterScreen() {
                           </View>
                         )}
 
-                        {/* Map Add-ons (Flex wrapping added to prevent overlap) */}
+                        {/* Map Add-ons */}
                         {cartItem.selectedAddOns.map(
-                          (addon: any, idx: number) => (
-                            <View
-                              key={idx}
-                              style={{
-                                flexDirection: "row",
-                                justifyContent: "space-between",
-                                alignItems: "flex-start",
-                                marginVertical: 2,
-                              }}
-                            >
-                              <Text
-                                style={{
-                                  color: "#555",
-                                  fontSize: 12,
-                                  flex: 1,
-                                  flexShrink: 1,
-                                  paddingRight: 15,
-                                }}
-                              >
-                                +{" "}
-                                {addon.quantity > 1
-                                  ? `${addon.quantity}x `
-                                  : ""}
-                                {addon.name}
-                              </Text>
-                              <Text
-                                style={{
-                                  color: "#555",
-                                  fontSize: 12,
-                                  textAlign: "right",
-                                }}
-                              >
-                                Rp {addon.price.toLocaleString("id-ID")}
-                              </Text>
-                            </View>
-                          ),
+                          (addon: any, idx: number) => {
+                            const totalAddonQty =
+                              (addon.quantity || 1) * cartItem.quantity;
+                            const totalAddonPrice = addon.price * totalAddonQty;
+
+                            if (totalAddonQty === 1) {
+                              return (
+                                <View
+                                  key={idx}
+                                  style={{
+                                    flexDirection: "row",
+                                    justifyContent: "space-between",
+                                    alignItems: "flex-start",
+                                    marginVertical: 2,
+                                  }}
+                                >
+                                  <Text
+                                    style={{
+                                      color: "#555",
+                                      fontSize: 12,
+                                      flex: 1,
+                                      flexShrink: 1,
+                                      paddingRight: 15,
+                                    }}
+                                  >
+                                    + {addon.name}
+                                  </Text>
+                                  <Text
+                                    style={{
+                                      color: "#555",
+                                      fontSize: 12,
+                                      textAlign: "right",
+                                    }}
+                                  >
+                                    Rp {totalAddonPrice.toLocaleString("id-ID")}
+                                  </Text>
+                                </View>
+                              );
+                            } else {
+                              return (
+                                <View key={idx} style={{ marginVertical: 2 }}>
+                                  <Text style={{ color: "#555", fontSize: 12 }}>
+                                    + {addon.name}
+                                  </Text>
+
+                                  <View
+                                    style={{
+                                      flexDirection: "row",
+                                      justifyContent: "space-between",
+                                      alignItems: "flex-start",
+                                      paddingLeft: 14,
+                                      marginTop: 2,
+                                    }}
+                                  >
+                                    <Text
+                                      style={{
+                                        color: "#555",
+                                        fontSize: 12,
+                                        flex: 1,
+                                        flexShrink: 1,
+                                        paddingRight: 15,
+                                      }}
+                                    >
+                                      ({totalAddonQty}x Rp{" "}
+                                      {addon.price.toLocaleString("id-ID")})
+                                    </Text>
+                                    <Text
+                                      style={{
+                                        color: "#555",
+                                        fontSize: 12,
+                                        textAlign: "right",
+                                      }}
+                                    >
+                                      Rp{" "}
+                                      {totalAddonPrice.toLocaleString("id-ID")}
+                                    </Text>
+                                  </View>
+                                </View>
+                              );
+                            }
+                          },
                         )}
 
                         {/* Display Discount Data & Subtracted Amount (Fixed Overlap Solution) */}
@@ -1950,7 +1995,7 @@ const styles = StyleSheet.create({
     position: "absolute",
     bottom: 10,
     right: 10,
-    backgroundColor: "#0A84FF",
+    backgroundColor: "#3de912d3",
     width: 30,
     height: 30,
     borderRadius: 15,

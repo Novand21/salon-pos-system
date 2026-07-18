@@ -140,36 +140,46 @@ export const generateThermalReceiptString = (
   receipt += solidDivider;
 
   cart.forEach((item, index) => {
-    // 1. Item Name and Base Price quantity
+    // Item Name and Base Price quantity
     const nameLines = chunkText(item.name, 32);
-    const addOnsTotal = 0;
     nameLines.forEach((line) => (receipt += `${line}\n`));
-    const qtyText = rightAlign(`${item.quantity} x Rp${formatRp(item.price)}`);
-    receipt += qtyText;
+    const baseItemTotal = item.quantity * item.price;
+    receipt += leftRightText(
+      `${item.quantity}x Rp${formatRp(item.price)}`,
+      `Rp${formatRp(baseItemTotal)}`,
+    );
 
-    // 2. Stylists
+    // Stylists
     if (item.stylists && item.stylists.length > 0) {
       const stylistText = `  @${item.stylists.join(", ")}`;
       const stylistLines = chunkText(stylistText, 32);
       stylistLines.forEach((line) => (receipt += `${line}\n`));
     }
 
-    // 3. Add-ons (Indented deeper with 4 spaces)
+    // Add-ons (Indented deeper with 4 spaces)
     if (item.selectedAddOns && item.selectedAddOns.length > 0) {
       item.selectedAddOns.forEach((addon: any) => {
+        if (addon.price <= 0) return;
+
+        const totalAddonQty = (addon.quantity || 1) * item.quantity;
+        const totalAddonPrice = addon.price * totalAddonQty;
+        receipt += "+";
+        const nameLines = chunkText(` ${addon.name}`, 20);
+        nameLines.forEach((line) => (receipt += `${line}\n`));
+
         receipt += leftRightText(
-          `    + ${addon.name}`,
-          addon.price <= 0 ? "" : `Rp${formatRp(addon.price)}`,
+          `(${totalAddonQty}x Rp${formatRp(addon.price)})`,
+          `Rp${formatRp(totalAddonPrice)}`,
         );
       });
     }
 
-    // 4. Discounts (Shows percentage and exact amount deducted)
+    // Discounts (Shows percentage and exact amount deducted)
     if (item.discountPercent > 0) {
       const desc = item.discountDesc ? ` (${item.discountDesc})` : "";
       const discText = `  Disc ${item.discountPercent}%${desc}`;
 
-      // 1. Sum up all add-ons for this item
+      // Sum up all add-ons for this item
       const addOnsTotal =
         item.selectedAddOns && item.selectedAddOns.length > 0
           ? item.selectedAddOns.reduce(
@@ -178,10 +188,10 @@ export const generateThermalReceiptString = (
             )
           : 0;
 
-      // 2. Combine base price + add-ons
+      // Combine base price + add-ons
       const basePriceWithAddons = item.price + addOnsTotal;
 
-      // 3. Calculate exact nominal discount subtracted
+      // Calculate exact nominal discount subtracted
       const discountNominal = Math.round(
         basePriceWithAddons * item.quantity * (item.discountPercent / 100),
       );
@@ -194,13 +204,13 @@ export const generateThermalReceiptString = (
       noteLines.forEach((line) => (receipt += `${line}\n`));
     }
 
-    // 5. Subtotal
+    // Subtotal
 
     const subtotalText = `Subtotal: Rp${formatRp(item.itemTotal)}`;
     receipt += "\n";
     receipt += rightAlign(subtotalText);
 
-    // 6. Straight Line Separator between items (but not at the very end)
+    // Straight Line Separator between items (but not at the very end)
     if (index < cart.length - 1) {
       receipt += dashedDivider;
     }
@@ -218,8 +228,7 @@ export const generateThermalReceiptString = (
   }
   receipt += solidDivider;
 
-  receipt += "\x1B\x61\x01"; // Center align
-  // Trigger the built-in QR Code!
+  receipt += "\x1B\x61\x01";
   receipt += getQRCodeCommand("https://www.instagram.com/dffondsalon");
   receipt += "\n" + centerText("Kritik dan Saran");
   receipt += centerText("@dffondsalon");
