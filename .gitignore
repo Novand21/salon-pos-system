@@ -43,4 +43,3 @@ yarn-error.*
 # private db and passwords
 *.db
 .env
-pass.ts

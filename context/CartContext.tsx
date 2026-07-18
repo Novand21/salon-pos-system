@@ -1,17 +1,13 @@
 import React, { createContext, useContext, useState } from "react";
 
-// 1. CREATE THE CONTEXT (The empty brain)
 // This creates the invisible cloud that will hold our data.
 const CartContext = createContext<any>(null);
 
-// 2. CREATE THE PROVIDER (The manager of the brain)
 // We will wrap our whole app inside this Provider later.
 export const CartProvider = ({ children }: { children: React.ReactNode }) => {
   // This state holds the actual list of items in the shopping cart
   const [cart, setCart] = useState<any[]>([]);
 
-  // FUNCTION: Add an item (and its add-ons) to the cart
-  // FUNCTION: Add an item (and its add-ons) to the cart
   const addToCart = (
     menuItem: any,
     selectedAddOns: any[],
@@ -70,7 +66,6 @@ export const CartProvider = ({ children }: { children: React.ReactNode }) => {
 
   const totalItems = cart.reduce((sum, item) => sum + (item.quantity || 1), 0);
 
-  // 3. SHARE THE DATA
   // We pass the cart array, the total math, and our functions down to the rest of the app
   return (
     <CartContext.Provider
@@ -89,6 +84,5 @@ export const CartProvider = ({ children }: { children: React.ReactNode }) => {
   );
 };
 
-// 4. CREATE A CUSTOM HOOK (A shortcut to access the brain)
 // Instead of writing long imports later, we just type `useCart()` in our screens!
 export const useCart = () => useContext(CartContext);
