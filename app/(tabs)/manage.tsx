@@ -3,6 +3,7 @@ import React, { useCallback, useRef, useState } from "react";
 import {
   Alert,
   Animated,
+  FlatList,
   Image,
   KeyboardAvoidingView,
   Modal,
@@ -17,6 +18,7 @@ import {
 } from "react-native";
 
 import { MaterialCommunityIcons } from "@expo/vector-icons";
+import DateTimePicker from "@react-native-community/datetimepicker";
 import * as ImagePicker from "expo-image-picker";
 
 import {
@@ -37,6 +39,132 @@ export default function ManageScreen() {
   const [showStaffDashboard, setShowStaffDashboard] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const slideAnim = useRef(new Animated.Value(0)).current;
+
+  // for staff attendance
+  const [attStartDate, setAttStartDate] = useState<Date>(new Date());
+  const [attEndDate, setAttEndDate] = useState<Date>(new Date());
+  const [activeAttPicker, setActiveAttPicker] = useState<
+    "start" | "end" | null
+  >(null);
+  const [activeTimePicker, setActiveTimePicker] = useState<{
+    staffId: number;
+    dateStr: string;
+    currentDate: Date;
+  } | null>(null);
+  const [attendanceData, setAttendanceData] = useState<any[]>([]);
+
+  const handleAttDateChange = (event: any, date?: Date) => {
+    if (Platform.OS === "android") setActiveAttPicker(null);
+    if (date) {
+      if (activeAttPicker === "start") {
+        setAttStartDate(date);
+        if (date > attEndDate) setAttEndDate(date);
+      } else if (activeAttPicker === "end") {
+        setAttEndDate(date);
+        if (date < attStartDate) setAttStartDate(date);
+      }
+    }
+  };
+
+  const handleTimeChange = (event: any, selectedTime?: Date) => {
+    if (Platform.OS === "android") {
+      setActiveTimePicker(null);
+    }
+    if (selectedTime && activeTimePicker) {
+      const timeStr = selectedTime.toLocaleTimeString([], {
+        hour: "2-digit",
+        minute: "2-digit",
+      });
+
+      markAttendance(
+        activeTimePicker.staffId,
+        activeTimePicker.dateStr,
+        "Hadir",
+        timeStr,
+      );
+    }
+  };
+
+  const loadAttendance = useCallback(() => {
+    const startStr = attStartDate.toISOString().split("T")[0];
+    const endStr = attEndDate.toISOString().split("T")[0];
+
+    try {
+      const rawAtt = db.getAllSync(
+        "SELECT * FROM Attendance WHERE date >= ? AND date <= ?",
+        [startStr, endStr],
+      );
+
+      let table: any[] = [];
+      let currDate = new Date(attStartDate);
+      currDate.setHours(0, 0, 0, 0);
+      let lastDate = new Date(attEndDate);
+      lastDate.setHours(0, 0, 0, 0);
+
+      while (currDate <= lastDate) {
+        const dateStr = currDate.toISOString().split("T")[0];
+        const displayDate = currDate.toLocaleDateString("id-ID", {
+          day: "2-digit",
+          month: "2-digit",
+          year: "numeric",
+        });
+
+        staffList.forEach((staff) => {
+          const record: any = rawAtt.find(
+            (r: any) => r.employee_id === staff.id && r.date === dateStr,
+          );
+          table.push({
+            staffId: staff.id,
+            staffName: staff.name,
+            date: dateStr,
+            displayDate: displayDate,
+            startTime: record ? record.start_time : "-",
+            status: record ? record.status : null,
+          });
+        });
+        currDate.setDate(currDate.getDate() + 1);
+      }
+      setAttendanceData(table);
+    } catch (e) {
+      console.error("Error loading attendance:", e);
+    }
+  }, [attStartDate, attEndDate, staffList]);
+
+  // Reload table whenever dates or staff list change
+  React.useEffect(() => {
+    loadAttendance();
+  }, [loadAttendance]);
+
+  const markAttendance = (
+    employeeId: number,
+    dateStr: string,
+    status: string,
+    time: string,
+  ) => {
+    try {
+      const existing: any = db.getFirstSync(
+        "SELECT id FROM Attendance WHERE employee_id = ? AND date = ?",
+        [employeeId, dateStr],
+      );
+
+      const startTime = status === "Hadir" ? time : "-";
+
+      if (existing) {
+        db.runSync(
+          "UPDATE Attendance SET status = ?, start_time = ? WHERE id = ?",
+          [status, startTime, existing.id],
+        );
+      } else {
+        db.runSync(
+          "INSERT INTO Attendance (employee_id, date, start_time, status) VALUES (?, ?, ?, ?)",
+          [employeeId, dateStr, startTime, status],
+        );
+      }
+      loadAttendance();
+    } catch (error) {
+      console.error("Error marking attendance:", error);
+    }
+  };
 
   const toggleSidebar = (open: boolean) => {
     if (open) {
@@ -268,35 +396,39 @@ export default function ManageScreen() {
   };
 
   // handler to delete menu
-  const handleDeleteMenuItem = (id: number) => {
-    Alert.alert("Konfirmasi Hapus", `Apakah yakin ingin menghapus menu ini`, [
-      { text: "Batal", style: "cancel" },
-      {
-        text: "Hapus",
-        style: "destructive",
-        onPress: () => {
-          try {
-            db.runSync("DELETE FROM Services_Products WHERE id = ?", id);
-            const refreshedItems = db.getAllSync(
-              "SELECT * FROM Services_Products ORDER BY category, name",
-            );
-            setMenuItems(refreshedItems);
+  const handleDeleteMenuItem = (id: number, itemName: string) => {
+    Alert.alert(
+      "Konfirmasi Hapus",
+      `Apakah yakin ingin menghapus menu ${itemName}`,
+      [
+        { text: "Batal", style: "cancel" },
+        {
+          text: "Hapus",
+          style: "destructive",
+          onPress: () => {
+            try {
+              db.runSync("DELETE FROM Services_Products WHERE id = ?", id);
+              const refreshedItems = db.getAllSync(
+                "SELECT * FROM Services_Products ORDER BY category, name",
+              );
+              setMenuItems(refreshedItems);
 
-            const uniqueCats = Array.from(
-              new Set(refreshedItems.map((s: any) => s.category)),
-            ) as string[];
-            setCategories(["Semua", ...uniqueCats]);
+              const uniqueCats = Array.from(
+                new Set(refreshedItems.map((s: any) => s.category)),
+              ) as string[];
+              setCategories(["Semua", ...uniqueCats]);
 
-            // If the current category was wiped out completely, fallback to the first available category
-            if (!uniqueCats.includes(activeCategory)) {
-              setActiveCategory("Semua");
+              // If the current category was wiped out completely, fallback to the first available category
+              if (!uniqueCats.includes(activeCategory)) {
+                setActiveCategory("Semua");
+              }
+            } catch (e) {
+              console.error("Error deleting menu item:", e);
             }
-          } catch (e) {
-            console.error("Error deleting menu item:", e);
-          }
+          },
         },
-      },
-    ]);
+      ],
+    );
   };
 
   // Staff Handlers ---
@@ -539,7 +671,7 @@ export default function ManageScreen() {
 
                 <TouchableOpacity
                   style={styles.deleteButton}
-                  onPress={() => handleDeleteMenuItem(item.id)}
+                  onPress={() => handleDeleteMenuItem(item.id, item.name)}
                 >
                   <Text style={styles.deleteText}>Hapus</Text>
                 </TouchableOpacity>
@@ -638,23 +770,245 @@ export default function ManageScreen() {
               )}
               {/* ATTENDANCE FOR STAFF */}
               {staffDashboardTab === "Attendance" && (
-                <View
-                  style={{
-                    flex: 1,
-                    justifyContent: "center",
-                    alignItems: "center",
-                  }}
-                >
-                  <MaterialCommunityIcons
-                    name="tools"
-                    size={60}
-                    color="#8E8E93"
-                  />
-                  <Text
-                    style={{ color: "#8E8E93", marginTop: 15, fontSize: 16 }}
-                  >
-                    Fitur Absensi sedang dibangun...
-                  </Text>
+                <View style={styles.attendanceContainer}>
+                  {/* Date Range Selectors */}
+                  <View style={styles.dateRangeRow}>
+                    <TouchableOpacity
+                      onPress={() => setActiveAttPicker("start")}
+                      style={styles.datePickerBox}
+                    >
+                      <Text style={styles.dateLabel}>DARI TANGGAL</Text>
+                      <Text style={styles.dateValue}>
+                        {attStartDate.toLocaleDateString("id-ID")}
+                      </Text>
+                    </TouchableOpacity>
+
+                    <Text style={styles.dateDivider}>-</Text>
+
+                    <TouchableOpacity
+                      onPress={() => setActiveAttPicker("end")}
+                      style={styles.datePickerBox}
+                    >
+                      <Text style={styles.dateLabel}>SAMPAI TANGGAL</Text>
+                      <Text style={styles.dateValue}>
+                        {attEndDate.toLocaleDateString("id-ID")}
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
+
+                  {/* Native Date Pickers */}
+                  {activeAttPicker && (
+                    <DateTimePicker
+                      value={
+                        activeAttPicker === "start" ? attStartDate : attEndDate
+                      }
+                      mode="date"
+                      display="default"
+                      onChange={handleAttDateChange}
+                    />
+                  )}
+
+                  {/* Native Time Picker */}
+                  {activeTimePicker && (
+                    <DateTimePicker
+                      value={activeTimePicker.currentDate}
+                      mode="time"
+                      is24Hour={true}
+                      display={Platform.OS === "ios" ? "spinner" : "clock"}
+                      onChange={handleTimeChange}
+                    />
+                  )}
+
+                  {/* The Data Table */}
+                  <View style={styles.tableContainer}>
+                    <ScrollView
+                      horizontal
+                      showsHorizontalScrollIndicator={true}
+                    >
+                      <View>
+                        {/* Table Header */}
+                        <View style={styles.tableHeaderRow}>
+                          <Text
+                            style={[styles.tableHeaderText, styles.colName]}
+                          >
+                            NAMA STAFF
+                          </Text>
+                          <Text
+                            style={[styles.tableHeaderText, styles.colDate]}
+                          >
+                            TANGGAL
+                          </Text>
+                          <Text
+                            style={[styles.tableHeaderText, styles.colTime]}
+                          >
+                            MULAI
+                          </Text>
+                          <Text
+                            style={[
+                              styles.tableHeaderText,
+                              styles.colStatus,
+                              { textAlign: "center" },
+                            ]}
+                          >
+                            STATUS
+                          </Text>
+                        </View>
+
+                        {/* Table Rows */}
+                        <FlatList
+                          data={attendanceData}
+                          keyExtractor={(row, index) =>
+                            `${row.staffId}-${row.date}-${index}`
+                          }
+                          showsVerticalScrollIndicator={true}
+                          initialNumToRender={15} // Only renders the first 15 rows immediately
+                          maxToRenderPerBatch={20} // Renders chunks of 20 while scrolling fast
+                          windowSize={5} // Keeps memory usage low
+                          renderItem={({ item: row }) => (
+                            <View style={styles.tableRow}>
+                              <View
+                                style={[
+                                  styles.colName,
+                                  {
+                                    flexDirection: "row",
+                                    alignItems: "center",
+                                  },
+                                ]}
+                              >
+                                <MaterialCommunityIcons
+                                  name="account-circle-outline"
+                                  size={24}
+                                  color="#8E8E93"
+                                  style={{ marginRight: 8 }}
+                                />
+                                <Text style={styles.tableCellText}>
+                                  {row.staffName}
+                                </Text>
+                              </View>
+
+                              <Text
+                                style={[
+                                  styles.tableCellText,
+                                  styles.colDate,
+                                  { color: "#8E8E93", fontWeight: "normal" },
+                                ]}
+                              >
+                                {row.displayDate}
+                              </Text>
+
+                              <TouchableOpacity
+                                style={{
+                                  width: 60,
+                                  backgroundColor: "#121212",
+                                  padding: 5,
+                                  borderRadius: 4,
+                                  alignItems: "center",
+                                  justifyContent: "center",
+                                }}
+                                onPress={() => {
+                                  let initDate = new Date();
+                                  if (row.startTime && row.startTime !== "-") {
+                                    const [hours, minutes] =
+                                      row.startTime.split(":");
+                                    initDate.setHours(
+                                      parseInt(hours, 10),
+                                      parseInt(minutes, 10),
+                                      0,
+                                      0,
+                                    );
+                                  }
+                                  setActiveTimePicker({
+                                    staffId: row.staffId,
+                                    dateStr: row.date,
+                                    currentDate: initDate,
+                                  });
+                                }}
+                              >
+                                <Text
+                                  style={{
+                                    color:
+                                      row.startTime === "-" ? "#555" : "#FFF",
+                                    fontWeight: "bold",
+                                  }}
+                                >
+                                  {row.startTime === "-"
+                                    ? "09:00"
+                                    : row.startTime}
+                                </Text>
+                              </TouchableOpacity>
+
+                              {/* Status Radio Buttons */}
+                              <View
+                                style={[
+                                  styles.statusContainer,
+                                  styles.colStatus,
+                                ]}
+                              >
+                                {["Hadir", "Izin", "Sakit"].map((st) => (
+                                  <TouchableOpacity
+                                    key={st}
+                                    onPress={() => {
+                                      let timeToSave = row.startTime;
+                                      if (
+                                        st === "Hadir" &&
+                                        (timeToSave === "-" ||
+                                          timeToSave === "" ||
+                                          !timeToSave)
+                                      ) {
+                                        timeToSave =
+                                          new Date().toLocaleTimeString([], {
+                                            hour: "2-digit",
+                                            minute: "2-digit",
+                                          });
+                                      }
+                                      markAttendance(
+                                        row.staffId,
+                                        row.date,
+                                        st,
+                                        timeToSave,
+                                      );
+                                    }}
+                                    style={styles.statusBtn}
+                                  >
+                                    <MaterialCommunityIcons
+                                      name={
+                                        row.status === st
+                                          ? "circle-slice-8"
+                                          : "circle-outline"
+                                      }
+                                      color={
+                                        row.status === st
+                                          ? st === "Hadir"
+                                            ? "#34C759"
+                                            : st === "Izin"
+                                              ? "#FF9F0A"
+                                              : "#FF453A"
+                                          : "#8E8E93"
+                                      }
+                                      size={20}
+                                    />
+                                    <Text
+                                      style={[
+                                        styles.statusText,
+                                        {
+                                          color:
+                                            row.status === st
+                                              ? "#FFF"
+                                              : "#8E8E93",
+                                        },
+                                      ]}
+                                    >
+                                      {st}
+                                    </Text>
+                                  </TouchableOpacity>
+                                ))}
+                              </View>
+                            </View>
+                          )}
+                        />
+                      </View>
+                    </ScrollView>
+                  </View>
                 </View>
               )}
               {/* BONUS CALCULATION FOR STAFF */}
@@ -1578,5 +1932,90 @@ const styles = StyleSheet.create({
     color: "#FFF",
     fontSize: 14,
     marginLeft: 15,
+  },
+
+  // ATTENDANCE TABLE STYLES
+  attendanceContainer: {
+    flex: 1,
+    padding: 20,
+  },
+  dateRangeRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 20,
+    gap: 10,
+  },
+  datePickerBox: {
+    flex: 1,
+    backgroundColor: "#1C1C1E",
+    padding: 12,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "#2C2C2E",
+  },
+  dateLabel: {
+    color: "#8E8E93",
+    fontSize: 10,
+    fontWeight: "bold",
+  },
+  dateValue: {
+    color: "#FFF",
+    fontSize: 14,
+    marginTop: 4,
+  },
+  dateDivider: {
+    color: "#8E8E93",
+    fontWeight: "bold",
+  },
+  tableContainer: {
+    flex: 1,
+    backgroundColor: "#1C1C1E",
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#2C2C2E",
+    overflow: "hidden",
+  },
+  tableHeaderRow: {
+    flexDirection: "row",
+    padding: 15,
+    borderBottomWidth: 1,
+    borderColor: "#2C2C2E",
+    backgroundColor: "#121212",
+  },
+  tableRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    padding: 15,
+    borderBottomWidth: 1,
+    borderColor: "#2C2C2E",
+  },
+  tableHeaderText: {
+    color: "#8E8E93",
+    fontWeight: "bold",
+    fontSize: 12,
+  },
+  tableCellText: {
+    color: "#FFF",
+    fontWeight: "bold",
+  },
+
+  // Table Column Widths
+  colName: { width: 140 },
+  colDate: { width: 100 },
+  colTime: { width: 80 },
+  colStatus: { width: 220 },
+
+  statusContainer: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    paddingHorizontal: 10,
+  },
+  statusBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+  },
+  statusText: {
+    fontSize: 12,
   },
 });

@@ -52,7 +52,7 @@ export const initDB = () => {
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 name TEXT NOT NULL,
                 role TEXT NOT NULL,
-                commision_rate REAL DEFAULT 0.10,
+                commision_rate REAL DEFAULT 0,
                 is_active BOOLEAN DEFAULT 1 -- Added here so new installs create it instantly
             );
 
@@ -92,6 +92,16 @@ export const initDB = () => {
                 timestamp TEXT NOT NULL,
                 description TEXT NOT NULL,
                 amount INTEGER NOT NULL
+            );
+            
+            -- TABLE 7: Attendance
+            CREATE TABLE IF NOT EXISTS Attendance (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                employee_id INTEGER,
+                date TEXT,
+                start_time TEXT,
+                status TEXT,
+                FOREIGN KEY (employee_id) REFERENCES Employees (id)
             );
             `);
     // Check the current version of the installed database
