@@ -1,6 +1,7 @@
 import { useFocusEffect } from "expo-router";
 import React, { useCallback, useRef, useState } from "react";
 import {
+  Alert,
   Animated,
   Image,
   KeyboardAvoidingView,
@@ -268,25 +269,34 @@ export default function ManageScreen() {
 
   // handler to delete menu
   const handleDeleteMenuItem = (id: number) => {
-    try {
-      db.runSync("DELETE FROM Services_Products WHERE id = ?", id);
-      const refreshedItems = db.getAllSync(
-        "SELECT * FROM Services_Products ORDER BY category, name",
-      );
-      setMenuItems(refreshedItems);
+    Alert.alert("Konfirmasi Hapus", `Apakah yakin ingin menghapus menu ini`, [
+      { text: "Batal", style: "cancel" },
+      {
+        text: "Hapus",
+        style: "destructive",
+        onPress: () => {
+          try {
+            db.runSync("DELETE FROM Services_Products WHERE id = ?", id);
+            const refreshedItems = db.getAllSync(
+              "SELECT * FROM Services_Products ORDER BY category, name",
+            );
+            setMenuItems(refreshedItems);
 
-      const uniqueCats = Array.from(
-        new Set(refreshedItems.map((s: any) => s.category)),
-      ) as string[];
-      setCategories(["Semua", ...uniqueCats]);
+            const uniqueCats = Array.from(
+              new Set(refreshedItems.map((s: any) => s.category)),
+            ) as string[];
+            setCategories(["Semua", ...uniqueCats]);
 
-      // If the current category was wiped out completely, fallback to the first available category
-      if (!uniqueCats.includes(activeCategory)) {
-        setActiveCategory("Semua");
-      }
-    } catch (e) {
-      console.error("Error deleting menu item:", e);
-    }
+            // If the current category was wiped out completely, fallback to the first available category
+            if (!uniqueCats.includes(activeCategory)) {
+              setActiveCategory("Semua");
+            }
+          } catch (e) {
+            console.error("Error deleting menu item:", e);
+          }
+        },
+      },
+    ]);
   };
 
   // Staff Handlers ---
@@ -552,7 +562,6 @@ export default function ManageScreen() {
         }}
       >
         <SafeAreaView style={{ flex: 1, backgroundColor: "#000000" }}>
-          {/* 1. Added KeyboardAvoidingView for future-proofing inputs */}
           <KeyboardAvoidingView
             behavior={Platform.OS === "ios" ? "padding" : "height"}
             style={{ flex: 1 }}
