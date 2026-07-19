@@ -1,6 +1,7 @@
 import { useFocusEffect } from "expo-router";
-import React, { useCallback, useState } from "react";
+import React, { useCallback, useRef, useState } from "react";
 import {
+  Animated,
   Image,
   KeyboardAvoidingView,
   Modal,
@@ -14,6 +15,7 @@ import {
   View,
 } from "react-native";
 
+import { MaterialCommunityIcons } from "@expo/vector-icons";
 import * as ImagePicker from "expo-image-picker";
 
 import {
@@ -29,6 +31,35 @@ export default function ManageScreen() {
   // Database States
   const [menuItems, setMenuItems] = useState<any[]>([]);
   const [staffList, setStaffList] = useState<any[]>([]);
+
+  // staff management dashboard
+  const [showStaffDashboard, setShowStaffDashboard] = useState(false);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const slideAnim = useRef(new Animated.Value(0)).current;
+
+  const toggleSidebar = (open: boolean) => {
+    if (open) {
+      setIsSidebarOpen(true);
+      setTimeout(() => {
+        Animated.timing(slideAnim, {
+          toValue: 1,
+          duration: 250,
+          useNativeDriver: true,
+        }).start();
+      }, 50);
+    } else {
+      Animated.timing(slideAnim, {
+        toValue: 0,
+        duration: 250,
+        useNativeDriver: true,
+      }).start(() => {
+        setIsSidebarOpen(false);
+      });
+    }
+  };
+  const [staffDashboardTab, setStaffDashboardTab] = useState<
+    "List" | "Attendance" | "Bonus"
+  >("List");
 
   // filter states
   const [categories, setCategories] = useState<any[]>([]);
@@ -377,181 +408,468 @@ export default function ManageScreen() {
         <Text style={styles.headerTitle}>Manajemen</Text>
         <View style={styles.tabContainer}>
           <TouchableOpacity
-            style={[styles.tabButton, activeTab === "Menu" && styles.tabActive]}
-            onPress={() => setActiveTab("Menu")}
+            style={[styles.tabButton, styles.tabActive]}
+            onPress={() => {}}
           >
-            <Text
-              style={
-                activeTab === "Menu" ? styles.textWhiteBold : styles.textGray
-              }
-            >
-              Layanan & Produk
-            </Text>
+            <Text style={styles.textWhiteBold}>Layanan & Produk</Text>
           </TouchableOpacity>
           <TouchableOpacity
-            style={[
-              styles.tabButton,
-              activeTab === "Staff" && styles.tabActive,
-            ]}
-            onPress={() => setActiveTab("Staff")}
+            style={styles.tabButton}
+            onPress={() => setShowStaffDashboard(true)}
           >
-            <Text
-              style={
-                activeTab === "Staff" ? styles.textWhiteBold : styles.textGray
-              }
-            >
-              Staff List
-            </Text>
+            <Text style={styles.textGray}>Staff Dashboard</Text>
           </TouchableOpacity>
         </View>
       </View>
 
       {/* Main Content Area */}
       <ScrollView contentContainerStyle={styles.listContainer}>
-        {activeTab === "Menu" ? (
-          <>
-            {/* Open the modal */}
-            <TouchableOpacity
-              style={styles.addButton}
-              onPress={() => {
-                setShowAddMenuModal(true);
-                setNewItemName("");
-                setNewItemCategory("");
-                setNewItemPrice("");
-                setNewItemDesc("");
-                setItemAddOns([]);
-                setEditingItemId(null);
-                setIsStockEnabled(false);
-                setStockQuantity("");
-                setNewItemImage(null);
-              }}
-            >
-              <Text style={styles.textWhiteBold}>+ Tambah Menu Baru</Text>
-            </TouchableOpacity>
+        <>
+          <TouchableOpacity
+            style={styles.addButton}
+            onPress={() => {
+              setShowAddMenuModal(true);
+              setNewItemName("");
+              setNewItemCategory("");
+              setNewItemPrice("");
+              setNewItemDesc("");
+              setItemAddOns([]);
+              setEditingItemId(null);
+              setIsStockEnabled(false);
+              setStockQuantity("");
+              setNewItemImage(null);
+            }}
+          >
+            <Text style={styles.textWhiteBold}>+ Tambah Menu Baru</Text>
+          </TouchableOpacity>
 
-            {/* SEARCH BAR UI */}
-            <View style={styles.searchContainer}>
-              <TextInput
-                style={styles.searchInput}
-                placeholder="Cari menu atau produk..."
-                placeholderTextColor="#8E8E93"
-                value={searchQuery}
-                onChangeText={setSearchQuery}
-                clearButtonMode="while-editing"
-              />
-              {searchQuery.length > 0 && (
-                <TouchableOpacity
-                  onPress={() => setSearchQuery("")}
-                  style={styles.clearSearchBtn}
-                >
-                  <Text style={{ color: "#0A84FF", fontWeight: "bold" }}>
-                    Hapus
-                  </Text>
-                </TouchableOpacity>
-              )}
-            </View>
+          {/* SEARCH BAR UI */}
+          <View style={styles.searchContainer}>
+            <TextInput
+              style={styles.searchInput}
+              placeholder="Cari menu atau produk..."
+              placeholderTextColor="#8E8E93"
+              value={searchQuery}
+              onChangeText={setSearchQuery}
+              clearButtonMode="while-editing"
+            />
+            {searchQuery.length > 0 && (
+              <TouchableOpacity
+                onPress={() => setSearchQuery("")}
+                style={styles.clearSearchBtn}
+              >
+                <Text style={{ color: "#0A84FF", fontWeight: "bold" }}>
+                  Hapus
+                </Text>
+              </TouchableOpacity>
+            )}
+          </View>
 
-            {/* CATEGORY SCROLL VIEW */}
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              style={{ marginBottom: 20, flexDirection: "row" }}
-            >
-              {categories.map((cat) => (
-                <TouchableOpacity
-                  key={cat}
-                  onPress={() => setActiveCategory(cat)}
+          {/* CATEGORY SCROLL VIEW */}
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            style={{ marginBottom: 20, flexDirection: "row" }}
+          >
+            {categories.map((cat) => (
+              <TouchableOpacity
+                key={cat}
+                onPress={() => setActiveCategory(cat)}
+                style={{
+                  paddingHorizontal: 16,
+                  paddingVertical: 8,
+                  borderRadius: 20,
+                  marginRight: 10,
+                  backgroundColor:
+                    activeCategory === cat ? "#0A84FF" : "#2C2C2E",
+                }}
+              >
+                <Text
                   style={{
-                    paddingHorizontal: 16,
-                    paddingVertical: 8,
-                    borderRadius: 20,
-                    marginRight: 10,
-                    backgroundColor:
-                      activeCategory === cat ? "#0A84FF" : "#2C2C2E",
+                    fontWeight: "bold",
+                    color: activeCategory === cat ? "#FFF" : "#8E8E93",
                   }}
+                >
+                  {cat}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+
+          {displayedMenuItems.map((item) => (
+            <View key={item.id} style={styles.listItem}>
+              <View style={{ flex: 1, marginRight: 15 }}>
+                <Text style={styles.itemTitle}>{item.name}</Text>
+                <Text style={styles.itemSubtitle}>
+                  {item.category} • Rp {item.base_price.toLocaleString("id-ID")}
+                </Text>
+              </View>
+              {/* Edit and Delete Functions */}
+              <View style={{ flexDirection: "row", gap: 10 }}>
+                <TouchableOpacity
+                  style={{
+                    backgroundColor: "rgba(10, 132, 255, 0.1)",
+                    padding: 10,
+                    borderRadius: 8,
+                    borderWidth: 1,
+                    borderColor: "#0A84FF",
+                  }}
+                  onPress={() => openEditMenuModal(item)}
                 >
                   <Text
                     style={{
+                      color: "#0A84FF",
                       fontWeight: "bold",
-                      color: activeCategory === cat ? "#FFF" : "#8E8E93",
+                      fontSize: 12,
                     }}
                   >
-                    {cat}
+                    Edit
                   </Text>
                 </TouchableOpacity>
-              ))}
-            </ScrollView>
 
-            {displayedMenuItems.map((item) => (
-              <View key={item.id} style={styles.listItem}>
-                <View style={{ flex: 1, marginRight: 15 }}>
-                  <Text style={styles.itemTitle}>{item.name}</Text>
-                  <Text style={styles.itemSubtitle}>
-                    {item.category} • Rp{" "}
-                    {item.base_price.toLocaleString("id-ID")}
-                  </Text>
-                </View>
-                {/* Edit and Delete Functions */}
-                <View style={{ flexDirection: "row", gap: 10 }}>
-                  <TouchableOpacity
-                    style={{
-                      backgroundColor: "rgba(10, 132, 255, 0.1)",
-                      padding: 10,
-                      borderRadius: 8,
-                      borderWidth: 1,
-                      borderColor: "#0A84FF",
-                    }}
-                    onPress={() => openEditMenuModal(item)}
-                  >
-                    <Text
-                      style={{
-                        color: "#0A84FF",
-                        fontWeight: "bold",
-                        fontSize: 12,
-                      }}
-                    >
-                      Edit
-                    </Text>
-                  </TouchableOpacity>
-
-                  <TouchableOpacity
-                    style={styles.deleteButton}
-                    onPress={() => handleDeleteMenuItem(item.id)}
-                  >
-                    <Text style={styles.deleteText}>Hapus</Text>
-                  </TouchableOpacity>
-                </View>
-              </View>
-            ))}
-          </>
-        ) : (
-          <>
-            {/* Open Add Staff Modal */}
-            <TouchableOpacity
-              style={styles.addButton}
-              onPress={() => setShowAddStaffModal(true)}
-            >
-              <Text style={styles.textWhiteBold}>+ Tambah Staff Baru</Text>
-            </TouchableOpacity>
-
-            {staffList.map((staff) => (
-              <View key={staff.id} style={styles.listItem}>
-                <View>
-                  <Text style={styles.itemTitle}>{staff.name}</Text>
-                  <Text style={styles.itemSubtitle}>Posisi: {staff.role}</Text>
-                </View>
-                {/* Trigger Delete Function */}
                 <TouchableOpacity
                   style={styles.deleteButton}
-                  onPress={() => handleDeleteStaff(staff.id)}
+                  onPress={() => handleDeleteMenuItem(item.id)}
                 >
                   <Text style={styles.deleteText}>Hapus</Text>
                 </TouchableOpacity>
               </View>
-            ))}
-          </>
-        )}
+            </View>
+          ))}
+        </>
       </ScrollView>
+      {/* FULL SCREEN STAFF DASHBOARD MODAL */}
+      <Modal
+        visible={showStaffDashboard}
+        animationType="slide"
+        transparent={false}
+        onRequestClose={() => {
+          if (isSidebarOpen) {
+            toggleSidebar(false);
+          } else {
+            setShowStaffDashboard(false);
+          }
+        }}
+      >
+        <SafeAreaView style={{ flex: 1, backgroundColor: "#000000" }}>
+          {/* 1. Added KeyboardAvoidingView for future-proofing inputs */}
+          <KeyboardAvoidingView
+            behavior={Platform.OS === "ios" ? "padding" : "height"}
+            style={{ flex: 1 }}
+          >
+            {/* Dashboard Header */}
+            <View
+              style={{
+                flexDirection: "row",
+                alignItems: "center",
+                justifyContent: "space-between",
+                padding: 20,
+                backgroundColor: "#121212",
+                borderBottomWidth: 1,
+                borderBottomColor: "#2C2C2E",
+              }}
+            >
+              <View style={{ flexDirection: "row", alignItems: "center" }}>
+                <TouchableOpacity
+                  onPress={() => toggleSidebar(true)}
+                  style={{ marginRight: 15 }}
+                >
+                  <MaterialCommunityIcons name="menu" size={28} color="#FFF" />
+                </TouchableOpacity>
+                <Text
+                  style={{ color: "#FFF", fontSize: 20, fontWeight: "bold" }}
+                >
+                  {staffDashboardTab === "List" && "Daftar Staff"}
+                  {staffDashboardTab === "Attendance" && "Absensi Staff"}
+                  {staffDashboardTab === "Bonus" && "Perhitungan Komisi"}
+                </Text>
+              </View>
+
+              <TouchableOpacity
+                onPress={() => setShowStaffDashboard(false)}
+                style={{ padding: 5 }}
+              >
+                <MaterialCommunityIcons
+                  name="close"
+                  size={28}
+                  color="#8E8E93"
+                />
+              </TouchableOpacity>
+            </View>
+
+            {/* Main Content Area */}
+            <View style={{ flex: 1 }}>
+              {staffDashboardTab === "List" && (
+                <ScrollView contentContainerStyle={styles.listContainer}>
+                  <TouchableOpacity
+                    style={styles.addButton}
+                    onPress={() => setShowAddStaffModal(true)}
+                  >
+                    <Text style={styles.textWhiteBold}>
+                      + Tambah Staff Baru
+                    </Text>
+                  </TouchableOpacity>
+                  {staffList.map((staff) => (
+                    <View key={staff.id} style={styles.listItem}>
+                      <View>
+                        <Text style={styles.itemTitle}>{staff.name}</Text>
+                        <Text style={styles.itemSubtitle}>
+                          Posisi: {staff.role}
+                        </Text>
+                      </View>
+                      <TouchableOpacity
+                        style={styles.deleteButton}
+                        onPress={() => handleDeleteStaff(staff.id)}
+                      >
+                        <Text style={styles.deleteText}>Hapus</Text>
+                      </TouchableOpacity>
+                    </View>
+                  ))}
+                </ScrollView>
+              )}
+              {/* ATTENDANCE FOR STAFF */}
+              {staffDashboardTab === "Attendance" && (
+                <View
+                  style={{
+                    flex: 1,
+                    justifyContent: "center",
+                    alignItems: "center",
+                  }}
+                >
+                  <MaterialCommunityIcons
+                    name="tools"
+                    size={60}
+                    color="#8E8E93"
+                  />
+                  <Text
+                    style={{ color: "#8E8E93", marginTop: 15, fontSize: 16 }}
+                  >
+                    Fitur Absensi sedang dibangun...
+                  </Text>
+                </View>
+              )}
+              {/* BONUS CALCULATION FOR STAFF */}
+              {staffDashboardTab === "Bonus" && (
+                <View
+                  style={{
+                    flex: 1,
+                    justifyContent: "center",
+                    alignItems: "center",
+                  }}
+                >
+                  <MaterialCommunityIcons
+                    name="tools"
+                    size={60}
+                    color="#8E8E93"
+                  />
+                  <Text
+                    style={{ color: "#8E8E93", marginTop: 15, fontSize: 16 }}
+                  >
+                    Fitur Perhitungan Komisi sedang dibangun...
+                  </Text>
+                </View>
+              )}
+            </View>
+
+            {/* SIDEBAR OVERLAY */}
+            {isSidebarOpen && (
+              <View
+                style={{
+                  position: "absolute",
+                  top: 0,
+                  bottom: 0,
+                  left: 0,
+                  right: 0,
+                  zIndex: 10,
+                }}
+              >
+                <Animated.View
+                  style={{
+                    flex: 1,
+                    backgroundColor: "rgba(0,0,0,0.6)",
+                    opacity: slideAnim,
+                  }}
+                >
+                  <TouchableOpacity
+                    style={{ flex: 1, flexDirection: "row" }}
+                    activeOpacity={1}
+                    onPress={() => toggleSidebar(false)}
+                  >
+                    <Animated.View
+                      style={{
+                        width: 240,
+                        backgroundColor: "#1C1C1E",
+                        height: "100%",
+                        paddingHorizontal: 15,
+                        paddingTop: insets.top ? insets.top + 20 : 40,
+                        paddingBottom: insets.bottom ? insets.bottom + 20 : 20,
+                        borderRightWidth: 1,
+                        borderColor: "#2C2C2E",
+                        transform: [
+                          {
+                            translateX: slideAnim.interpolate({
+                              inputRange: [0, 1],
+                              outputRange: [-240, 0],
+                            }),
+                          },
+                        ],
+                      }}
+                    >
+                      <TouchableOpacity
+                        activeOpacity={1}
+                        onPress={() => {}}
+                        style={{ flex: 1 }}
+                      >
+                        <Text
+                          style={{
+                            color: "#8E8E93",
+                            fontSize: 16,
+                            fontWeight: "bold",
+                            marginBottom: 20,
+                          }}
+                        >
+                          MENU MANAJEMEN
+                        </Text>
+
+                        <TouchableOpacity
+                          style={[
+                            styles.sidebarMenuItem,
+                            staffDashboardTab === "List" &&
+                              styles.sidebarMenuItemActive,
+                          ]}
+                          onPress={() => {
+                            setStaffDashboardTab("List");
+                            toggleSidebar(false);
+                          }}
+                        >
+                          <MaterialCommunityIcons
+                            name="account-tie"
+                            size={20}
+                            color={
+                              staffDashboardTab === "List"
+                                ? "#0A84FF"
+                                : "#8E8E93"
+                            }
+                          />
+                          <Text
+                            style={[
+                              styles.sidebarMenuText,
+                              staffDashboardTab === "List" && {
+                                color: "#0A84FF",
+                                fontWeight: "bold",
+                              },
+                            ]}
+                          >
+                            Daftar Staff
+                          </Text>
+                        </TouchableOpacity>
+
+                        <TouchableOpacity
+                          style={[
+                            styles.sidebarMenuItem,
+                            staffDashboardTab === "Attendance" &&
+                              styles.sidebarMenuItemActive,
+                          ]}
+                          onPress={() => {
+                            setStaffDashboardTab("Attendance");
+                            toggleSidebar(false);
+                          }}
+                        >
+                          <MaterialCommunityIcons
+                            name="calendar-check"
+                            size={20}
+                            color={
+                              staffDashboardTab === "Attendance"
+                                ? "#0A84FF"
+                                : "#8E8E93"
+                            }
+                          />
+                          <Text
+                            style={[
+                              styles.sidebarMenuText,
+                              staffDashboardTab === "Attendance" && {
+                                color: "#0A84FF",
+                                fontWeight: "bold",
+                              },
+                            ]}
+                          >
+                            Absensi Staff
+                          </Text>
+                        </TouchableOpacity>
+
+                        <TouchableOpacity
+                          style={[
+                            styles.sidebarMenuItem,
+                            staffDashboardTab === "Bonus" &&
+                              styles.sidebarMenuItemActive,
+                          ]}
+                          onPress={() => {
+                            setStaffDashboardTab("Bonus");
+                            toggleSidebar(false);
+                          }}
+                        >
+                          <MaterialCommunityIcons
+                            name="cash-multiple"
+                            size={20}
+                            color={
+                              staffDashboardTab === "Bonus"
+                                ? "#0A84FF"
+                                : "#8E8E93"
+                            }
+                          />
+                          <Text
+                            style={[
+                              styles.sidebarMenuText,
+                              staffDashboardTab === "Bonus" && {
+                                color: "#0A84FF",
+                                fontWeight: "bold",
+                              },
+                            ]}
+                          >
+                            Perhitungan Komisi
+                          </Text>
+                        </TouchableOpacity>
+
+                        <View style={{ flex: 1 }} />
+
+                        <TouchableOpacity
+                          style={{
+                            flexDirection: "row",
+                            alignItems: "center",
+                            paddingVertical: 15,
+                            borderTopWidth: 1,
+                            borderColor: "#2C2C2E",
+                          }}
+                          onPress={() => {
+                            toggleSidebar(false);
+                          }}
+                        >
+                          <MaterialCommunityIcons
+                            name="arrow-left"
+                            size={20}
+                            color="#FF453A"
+                          />
+                          <Text
+                            style={{
+                              color: "#FF453A",
+                              fontSize: 14,
+                              fontWeight: "bold",
+                              marginLeft: 15,
+                            }}
+                          >
+                            Kembali
+                          </Text>
+                        </TouchableOpacity>
+                      </TouchableOpacity>
+                    </Animated.View>
+                  </TouchableOpacity>
+                </Animated.View>
+              </View>
+            )}
+          </KeyboardAvoidingView>
+        </SafeAreaView>
+      </Modal>
+
       {/* ADD MENU ITEM MODAL */}
       <Modal
         visible={showAddMenuModal}
@@ -1235,5 +1553,21 @@ const styles = StyleSheet.create({
   imageActionTextDanger: {
     color: "#FF453A",
     fontWeight: "bold",
+  },
+  sidebarMenuItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: 15,
+    paddingHorizontal: 10,
+    borderRadius: 8,
+    marginBottom: 10,
+  },
+  sidebarMenuItemActive: {
+    backgroundColor: "rgba(10, 132, 255, 0.1)",
+  },
+  sidebarMenuText: {
+    color: "#FFF",
+    fontSize: 14,
+    marginLeft: 15,
   },
 });

@@ -979,211 +979,224 @@ export default function RecapScreen() {
         transparent={true}
         onRequestClose={() => setShowExpenseModal(false)}
       >
-        <KeyboardAvoidingView
-          behavior={Platform.OS === "ios" ? "padding" : "height"}
-          style={[
-            styles.sidePanel,
-            { paddingTop: insets.top, paddingBottom: insets.bottom },
-          ]}
-        >
-          <View
-            style={[
-              styles.modalOverlay,
-              { paddingTop: insets.top, paddingBottom: insets.bottom },
-            ]}
+        <SafeAreaView style={{ flex: 1, backgroundColor: "rgba(0,0,0,0.8)" }}>
+          <KeyboardAvoidingView
+            behavior={Platform.OS === "ios" ? "padding" : "height"}
+            style={{
+              flex: 1,
+            }}
           >
-            <View
-              style={{
-                backgroundColor: "#1C1C1E",
-                padding: 20,
-                borderRadius: 15,
-                width: "90%",
-                maxWidth: 400,
-                alignSelf: "center",
-              }}
+            <ScrollView
+              contentContainerStyle={{ flexGrow: 1, justifyContent: "center" }}
+              keyboardShouldPersistTaps="handled"
+              showsVerticalScrollIndicator={false}
+              style={{ width: "100%" }}
             >
-              <Text
-                style={{
-                  color: "#FFF",
-                  fontSize: 20,
-                  fontWeight: "bold",
-                  marginBottom: 20,
-                }}
+              <View
+                style={[
+                  styles.modalOverlay,
+                  { paddingTop: insets.top, paddingBottom: insets.bottom },
+                ]}
               >
-                Tambah Pengeluaran
-              </Text>
-              <Text
-                style={{
-                  color: "#8E8E93",
-                  fontSize: 12,
-                  fontWeight: "bold",
-                  marginBottom: 10,
-                }}
-              >
-                TANGGAL
-              </Text>
-              <TouchableOpacity
-                style={{
-                  backgroundColor: "#121212",
-                  padding: 15,
-                  borderRadius: 8,
-                  marginBottom: 15,
-                  borderWidth: 1,
-                  borderColor: "#2C2C2E",
-                  flexDirection: "row",
-                  justifyContent: "space-between",
-                  alignItems: "center",
-                }}
-                onPress={() => setActivePicker("expense")}
-              >
-                <Text style={{ color: "#FFF", fontSize: 16 }}>
-                  {formatDateLabel(expenseDate)}
-                </Text>
-                <MaterialCommunityIcons
-                  name="calendar"
-                  size={20}
-                  color="white"
-                  style={{ textAlign: "right" }}
-                />
-              </TouchableOpacity>
-              <Text
-                style={{
-                  color: "#8E8E93",
-                  fontSize: 12,
-                  fontWeight: "bold",
-                  marginBottom: 10,
-                }}
-              >
-                NAMA
-              </Text>
-              <ScrollView
-                horizontal
-                showsHorizontalScrollIndicator={false}
-                style={{ flexDirection: "row", marginBottom: 20 }}
-              >
-                {staffList.map((employee) => {
-                  const isSelected = expenseStaffs.includes(employee.name);
+                <View
+                  style={{
+                    backgroundColor: "#1C1C1E",
+                    padding: 20,
+                    borderRadius: 15,
+                    width: "90%",
+                    maxWidth: 400,
+                    alignSelf: "center",
+                  }}
+                >
+                  <Text
+                    style={{
+                      color: "#FFF",
+                      fontSize: 20,
+                      fontWeight: "bold",
+                      marginBottom: 20,
+                    }}
+                  >
+                    Tambah Pengeluaran
+                  </Text>
+                  <Text
+                    style={{
+                      color: "#8E8E93",
+                      fontSize: 12,
+                      fontWeight: "bold",
+                      marginBottom: 10,
+                    }}
+                  >
+                    TANGGAL
+                  </Text>
+                  <TouchableOpacity
+                    style={{
+                      backgroundColor: "#121212",
+                      padding: 15,
+                      borderRadius: 8,
+                      marginBottom: 15,
+                      borderWidth: 1,
+                      borderColor: "#2C2C2E",
+                      flexDirection: "row",
+                      justifyContent: "space-between",
+                      alignItems: "center",
+                    }}
+                    onPress={() => setActivePicker("expense")}
+                  >
+                    <Text style={{ color: "#FFF", fontSize: 16 }}>
+                      {formatDateLabel(expenseDate)}
+                    </Text>
+                    <MaterialCommunityIcons
+                      name="calendar"
+                      size={20}
+                      color="white"
+                      style={{ textAlign: "right" }}
+                    />
+                  </TouchableOpacity>
+                  <Text
+                    style={{
+                      color: "#8E8E93",
+                      fontSize: 12,
+                      fontWeight: "bold",
+                      marginBottom: 10,
+                    }}
+                  >
+                    NAMA
+                  </Text>
+                  <ScrollView
+                    horizontal
+                    showsHorizontalScrollIndicator={false}
+                    style={{ flexDirection: "row", marginBottom: 20 }}
+                  >
+                    {staffList.map((employee) => {
+                      const isSelected = expenseStaffs.includes(employee.name);
 
-                  return (
+                      return (
+                        <TouchableOpacity
+                          key={employee.id}
+                          onPress={() => {
+                            if (isSelected) {
+                              setExpenseStaffs(
+                                expenseStaffs.filter(
+                                  (name) => name !== employee.name,
+                                ),
+                              );
+                            } else {
+                              setExpenseStaffs([
+                                ...expenseStaffs,
+                                employee.name,
+                              ]);
+                            }
+                          }}
+                          style={{
+                            padding: 10,
+                            paddingHorizontal: 20,
+                            borderRadius: 10,
+                            borderWidth: 2,
+                            borderColor: isSelected ? "#0A84FF" : "#2C2C2E",
+                            backgroundColor: isSelected
+                              ? "rgba(10,132,255,0.2)"
+                              : "#1C1C1E",
+                            marginRight: 10,
+                          }}
+                        >
+                          <Text
+                            style={
+                              isSelected
+                                ? styles.textWhiteBold
+                                : styles.textGray
+                            }
+                          >
+                            {employee.name}
+                          </Text>
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </ScrollView>
+
+                  <Text
+                    style={{
+                      color: "#8E8E93",
+                      fontSize: 12,
+                      fontWeight: "bold",
+                      marginBottom: 10,
+                    }}
+                  >
+                    DESKRIPSI
+                  </Text>
+                  <TextInput
+                    style={{
+                      backgroundColor: "#121212",
+                      color: "#FFF",
+                      padding: 15,
+                      borderRadius: 8,
+                      marginBottom: 15,
+                      borderWidth: 1,
+                      borderColor: "#2C2C2E",
+                    }}
+                    placeholder="e.g., Beli Kopi..."
+                    placeholderTextColor="#8E8E93"
+                    value={expenseDesc}
+                    onChangeText={setExpenseDesc}
+                  />
+
+                  <Text
+                    style={{
+                      color: "#8E8E93",
+                      fontSize: 12,
+                      fontWeight: "bold",
+                      marginBottom: 10,
+                    }}
+                  >
+                    JUMLAH (Rp)
+                  </Text>
+                  <TextInput
+                    style={{
+                      backgroundColor: "#121212",
+                      color: "#FFF",
+                      padding: 15,
+                      borderRadius: 8,
+                      marginBottom: 25,
+                      borderWidth: 1,
+                      borderColor: "#2C2C2E",
+                    }}
+                    placeholder="0"
+                    placeholderTextColor="#8E8E93"
+                    keyboardType="numeric"
+                    value={expenseAmount}
+                    onChangeText={setExpenseAmount}
+                  />
+
+                  <View style={{ flexDirection: "row", gap: 10 }}>
                     <TouchableOpacity
-                      key={employee.id}
-                      onPress={() => {
-                        if (isSelected) {
-                          setExpenseStaffs(
-                            expenseStaffs.filter(
-                              (name) => name !== employee.name,
-                            ),
-                          );
-                        } else {
-                          setExpenseStaffs([...expenseStaffs, employee.name]);
-                        }
-                      }}
                       style={{
-                        padding: 10,
-                        paddingHorizontal: 20,
-                        borderRadius: 10,
-                        borderWidth: 2,
-                        borderColor: isSelected ? "#0A84FF" : "#2C2C2E",
-                        backgroundColor: isSelected
-                          ? "rgba(10,132,255,0.2)"
-                          : "#1C1C1E",
-                        marginRight: 10,
+                        flex: 1,
+                        padding: 15,
+                        borderRadius: 8,
+                        backgroundColor: "#2C2C2E",
+                        alignItems: "center",
                       }}
+                      onPress={() => setShowExpenseModal(false)}
                     >
-                      <Text
-                        style={
-                          isSelected ? styles.textWhiteBold : styles.textGray
-                        }
-                      >
-                        {employee.name}
-                      </Text>
+                      <Text style={styles.textWhiteBold}>Batal</Text>
                     </TouchableOpacity>
-                  );
-                })}
-              </ScrollView>
-
-              <Text
-                style={{
-                  color: "#8E8E93",
-                  fontSize: 12,
-                  fontWeight: "bold",
-                  marginBottom: 10,
-                }}
-              >
-                DESKRIPSI
-              </Text>
-              <TextInput
-                style={{
-                  backgroundColor: "#121212",
-                  color: "#FFF",
-                  padding: 15,
-                  borderRadius: 8,
-                  marginBottom: 15,
-                  borderWidth: 1,
-                  borderColor: "#2C2C2E",
-                }}
-                placeholder="e.g., Beli Kopi..."
-                placeholderTextColor="#8E8E93"
-                value={expenseDesc}
-                onChangeText={setExpenseDesc}
-              />
-
-              <Text
-                style={{
-                  color: "#8E8E93",
-                  fontSize: 12,
-                  fontWeight: "bold",
-                  marginBottom: 10,
-                }}
-              >
-                JUMLAH (Rp)
-              </Text>
-              <TextInput
-                style={{
-                  backgroundColor: "#121212",
-                  color: "#FFF",
-                  padding: 15,
-                  borderRadius: 8,
-                  marginBottom: 25,
-                  borderWidth: 1,
-                  borderColor: "#2C2C2E",
-                }}
-                placeholder="0"
-                placeholderTextColor="#8E8E93"
-                keyboardType="numeric"
-                value={expenseAmount}
-                onChangeText={setExpenseAmount}
-              />
-
-              <View style={{ flexDirection: "row", gap: 10 }}>
-                <TouchableOpacity
-                  style={{
-                    flex: 1,
-                    padding: 15,
-                    borderRadius: 8,
-                    backgroundColor: "#2C2C2E",
-                    alignItems: "center",
-                  }}
-                  onPress={() => setShowExpenseModal(false)}
-                >
-                  <Text style={styles.textWhiteBold}>Batal</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={{
-                    flex: 1,
-                    padding: 15,
-                    borderRadius: 8,
-                    backgroundColor: "#37bb0e",
-                    alignItems: "center",
-                  }}
-                  onPress={handleSaveExpense}
-                >
-                  <Text style={styles.textWhiteBold}>Simpan</Text>
-                </TouchableOpacity>
+                    <TouchableOpacity
+                      style={{
+                        flex: 1,
+                        padding: 15,
+                        borderRadius: 8,
+                        backgroundColor: "#37bb0e",
+                        alignItems: "center",
+                      }}
+                      onPress={handleSaveExpense}
+                    >
+                      <Text style={styles.textWhiteBold}>Simpan</Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
               </View>
-            </View>
-          </View>
-        </KeyboardAvoidingView>
+            </ScrollView>
+          </KeyboardAvoidingView>
+        </SafeAreaView>
       </Modal>
 
       {/* PASSWORD MODAL FOR DELETION */}
