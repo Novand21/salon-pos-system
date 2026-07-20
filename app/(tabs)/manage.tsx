@@ -569,122 +569,129 @@ export default function ManageScreen() {
         </View>
       </View>
 
-      {/* Main Content Area */}
-      <ScrollView contentContainerStyle={styles.listContainer}>
-        <>
-          <TouchableOpacity
-            style={styles.addButton}
-            onPress={() => {
-              setShowAddMenuModal(true);
-              setNewItemName("");
-              setNewItemCategory("");
-              setNewItemPrice("");
-              setNewItemDesc("");
-              setItemAddOns([]);
-              setEditingItemId(null);
-              setIsStockEnabled(false);
-              setStockQuantity("");
-              setNewItemImage(null);
-            }}
-          >
-            <Text style={styles.textWhiteBold}>+ Tambah Menu Baru</Text>
-          </TouchableOpacity>
+      {/* Main Content Area for Menus*/}
+      <FlatList
+        contentContainerStyle={styles.listContainer}
+        data={displayedMenuItems}
+        keyExtractor={(item) => item.id.toString()}
+        initialNumToRender={15}
+        maxToRenderPerBatch={20}
+        windowSize={10}
+        ListHeaderComponent={
+          <>
+            <TouchableOpacity
+              style={styles.addButton}
+              onPress={() => {
+                setShowAddMenuModal(true);
+                setNewItemName("");
+                setNewItemCategory("");
+                setNewItemPrice("");
+                setNewItemDesc("");
+                setItemAddOns([]);
+                setEditingItemId(null);
+                setIsStockEnabled(false);
+                setStockQuantity("");
+                setNewItemImage(null);
+              }}
+            >
+              <Text style={styles.textWhiteBold}>+ Tambah Menu Baru</Text>
+            </TouchableOpacity>
 
-          {/* SEARCH BAR UI */}
-          <View style={styles.searchContainer}>
-            <TextInput
-              style={styles.searchInput}
-              placeholder="Cari menu atau produk..."
-              placeholderTextColor="#8E8E93"
-              value={searchQuery}
-              onChangeText={setSearchQuery}
-              clearButtonMode="while-editing"
-            />
-            {searchQuery.length > 0 && (
-              <TouchableOpacity
-                onPress={() => setSearchQuery("")}
-                style={styles.clearSearchBtn}
-              >
-                <Text style={{ color: "#0A84FF", fontWeight: "bold" }}>
-                  Hapus
-                </Text>
-              </TouchableOpacity>
-            )}
-          </View>
-
-          {/* CATEGORY SCROLL VIEW */}
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            style={{ marginBottom: 20, flexDirection: "row" }}
-          >
-            {categories.map((cat) => (
-              <TouchableOpacity
-                key={cat}
-                onPress={() => setActiveCategory(cat)}
-                style={{
-                  paddingHorizontal: 16,
-                  paddingVertical: 8,
-                  borderRadius: 20,
-                  marginRight: 10,
-                  backgroundColor:
-                    activeCategory === cat ? "#0A84FF" : "#2C2C2E",
-                }}
-              >
-                <Text
-                  style={{
-                    fontWeight: "bold",
-                    color: activeCategory === cat ? "#FFF" : "#8E8E93",
-                  }}
-                >
-                  {cat}
-                </Text>
-              </TouchableOpacity>
-            ))}
-          </ScrollView>
-
-          {displayedMenuItems.map((item) => (
-            <View key={item.id} style={styles.listItem}>
-              <View style={{ flex: 1, marginRight: 15 }}>
-                <Text style={styles.itemTitle}>{item.name}</Text>
-                <Text style={styles.itemSubtitle}>
-                  {item.category} • Rp {item.base_price.toLocaleString("id-ID")}
-                </Text>
-              </View>
-              {/* Edit and Delete Functions */}
-              <View style={{ flexDirection: "row", gap: 10 }}>
+            {/* SEARCH BAR UI */}
+            <View style={styles.searchContainer}>
+              <TextInput
+                style={styles.searchInput}
+                placeholder="Cari menu atau produk..."
+                placeholderTextColor="#8E8E93"
+                value={searchQuery}
+                onChangeText={setSearchQuery}
+                clearButtonMode="while-editing"
+              />
+              {searchQuery.length > 0 && (
                 <TouchableOpacity
+                  onPress={() => setSearchQuery("")}
+                  style={styles.clearSearchBtn}
+                >
+                  <Text style={{ color: "#0A84FF", fontWeight: "bold" }}>
+                    Hapus
+                  </Text>
+                </TouchableOpacity>
+              )}
+            </View>
+
+            {/* CATEGORY SCROLL VIEW */}
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              style={{ marginBottom: 20, flexDirection: "row" }}
+            >
+              {categories.map((cat) => (
+                <TouchableOpacity
+                  key={cat}
+                  onPress={() => setActiveCategory(cat)}
                   style={{
-                    backgroundColor: "rgba(10, 132, 255, 0.1)",
-                    padding: 10,
-                    borderRadius: 8,
-                    borderWidth: 1,
-                    borderColor: "#0A84FF",
+                    paddingHorizontal: 16,
+                    paddingVertical: 8,
+                    borderRadius: 20,
+                    marginRight: 10,
+                    backgroundColor:
+                      activeCategory === cat ? "#0A84FF" : "#2C2C2E",
                   }}
-                  onPress={() => openEditMenuModal(item)}
                 >
                   <Text
                     style={{
-                      color: "#0A84FF",
                       fontWeight: "bold",
-                      fontSize: 12,
+                      color: activeCategory === cat ? "#FFF" : "#8E8E93",
                     }}
                   >
-                    Edit
+                    {cat}
                   </Text>
                 </TouchableOpacity>
-
-                <TouchableOpacity
-                  style={styles.deleteButton}
-                  onPress={() => handleDeleteMenuItem(item.id, item.name)}
-                >
-                  <Text style={styles.deleteText}>Hapus</Text>
-                </TouchableOpacity>
-              </View>
+              ))}
+            </ScrollView>
+          </>
+        }
+        renderItem={({ item }) => (
+          <View style={styles.listItem}>
+            <View style={{ flex: 1, marginRight: 15 }}>
+              <Text style={styles.itemTitle}>{item.name}</Text>
+              <Text style={styles.itemSubtitle}>
+                {item.category} • Rp {item.base_price.toLocaleString("id-ID")}
+              </Text>
             </View>
-          ))}
-        </>
-      </ScrollView>
+            {/* Edit and Delete Functions */}
+            <View style={{ flexDirection: "row", gap: 10 }}>
+              <TouchableOpacity
+                style={{
+                  backgroundColor: "rgba(10, 132, 255, 0.1)",
+                  padding: 10,
+                  borderRadius: 8,
+                  borderWidth: 1,
+                  borderColor: "#0A84FF",
+                }}
+                onPress={() => openEditMenuModal(item)}
+              >
+                <Text
+                  style={{
+                    color: "#0A84FF",
+                    fontWeight: "bold",
+                    fontSize: 12,
+                  }}
+                >
+                  Edit
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={styles.deleteButton}
+                onPress={() => handleDeleteMenuItem(item.id, item.name)}
+              >
+                <Text style={styles.deleteText}>Hapus</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        )}
+      />
       {/* FULL SCREEN STAFF DASHBOARD MODAL */}
       <Modal
         visible={showStaffDashboard}
