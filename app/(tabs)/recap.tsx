@@ -1,5 +1,6 @@
 import React, { useCallback, useState } from "react";
 import {
+  FlatList,
   KeyboardAvoidingView,
   Modal,
   Platform,
@@ -443,102 +444,109 @@ export default function RecapScreen() {
         </View>
       )}
 
-      <ScrollView contentContainerStyle={styles.listContainer}>
-        <Text style={styles.sectionLabel}>BUKU KAS</Text>
+      <FlatList
+        contentContainerStyle={styles.listContainer}
+        data={sortedLedgerData}
+        keyExtractor={(tx) => tx.id.toString()}
+        initialNumToRender={15}
+        maxToRenderPerBatch={20}
+        windowSize={10}
+        ListHeaderComponent={
+          <>
+            <Text style={styles.sectionLabel}>BUKU KAS</Text>
 
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          style={{ marginBottom: 15, flexDirection: "row" }}
-        >
-          {[
-            { id: "desc", label: "↓ Terbaru" },
-            { id: "asc", label: "↑ Terlama" },
-          ].map((sort) => (
-            <TouchableOpacity
-              key={sort.id}
-              onPress={() => setSortMode(sort.id as any)}
-              style={{
-                paddingHorizontal: 12,
-                paddingVertical: 6,
-                borderRadius: 15,
-                marginRight: 8,
-                borderWidth: 1,
-                borderColor: sortMode === sort.id ? "#0A84FF" : "#2C2C2E",
-                backgroundColor:
-                  sortMode === sort.id ? "rgba(10,132,255,0.2)" : "#1C1C1E",
-              }}
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              style={{ marginBottom: 15, flexDirection: "row" }}
             >
-              <Text
-                style={{
-                  color: sortMode === sort.id ? "#0A84FF" : "#8E8E93",
-                  fontSize: 12,
-                  fontWeight: "bold",
-                }}
-              >
-                {sort.label}
-              </Text>
-            </TouchableOpacity>
-          ))}
-        </ScrollView>
-
-        {sortedLedgerData.length === 0 ? (
+              {[
+                { id: "desc", label: "↓ Terbaru" },
+                { id: "asc", label: "↑ Terlama" },
+              ].map((sort) => (
+                <TouchableOpacity
+                  key={sort.id}
+                  onPress={() => setSortMode(sort.id as any)}
+                  style={{
+                    paddingHorizontal: 12,
+                    paddingVertical: 6,
+                    borderRadius: 15,
+                    marginRight: 8,
+                    borderWidth: 1,
+                    borderColor: sortMode === sort.id ? "#0A84FF" : "#2C2C2E",
+                    backgroundColor:
+                      sortMode === sort.id ? "rgba(10,132,255,0.2)" : "#1C1C1E",
+                  }}
+                >
+                  <Text
+                    style={{
+                      color: sortMode === sort.id ? "#0A84FF" : "#8E8E93",
+                      fontSize: 12,
+                      fontWeight: "bold",
+                    }}
+                  >
+                    {sort.label}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          </>
+        }
+        ListEmptyComponent={
           <Text style={styles.textGrayCenter}>
             Tidak ada data transaksi pada rentang tanggal ini.
           </Text>
-        ) : (
-          sortedLedgerData.map((tx) => (
-            <TouchableOpacity
-              key={tx.id}
-              onPress={() => openTransactionDetails(tx)}
-              style={styles.ledgerCard}
-            >
-              <View style={{ flex: 1, marginRight: 10 }}>
-                <Text style={styles.ledgerTitle}>
+        }
+        renderItem={({ item: tx }) => (
+          <TouchableOpacity
+            onPress={() => openTransactionDetails(tx)}
+            style={styles.ledgerCard}
+          >
+            <View style={{ flex: 1, marginRight: 10 }}>
+              <Text style={styles.ledgerTitle}>
+                <Text
+                  style={
+                    tx.type === "expense" ? styles.textRed : styles.textGreen
+                  }
+                >
+                  {tx.type === "expense" ? "↓ " : "↑ "}
+                </Text>
+                {tx.title}
+
+                {tx.type === "sale" && (
                   <Text
-                    style={
-                      tx.type === "expense" ? styles.textRed : styles.textGreen
-                    }
+                    style={{
+                      color: "#8E8E93",
+                      fontSize: 14,
+                      fontWeight: "normal",
+                    }}
                   >
-                    {tx.type === "expense" ? "↓ " : "↑ "}
+                    {"  "}•{" "}
+                    {tx.parsedCart?.reduce(
+                      (sum: number, item: any) => sum + (item.quantity || 1),
+                      0,
+                    )}{" "}
+                    items
                   </Text>
-                  {tx.title}
-
-                  {tx.type === "sale" && (
-                    <Text
-                      style={{
-                        color: "#8E8E93",
-                        fontSize: 14,
-                        fontWeight: "normal",
-                      }}
-                    >
-                      {"  "}•{" "}
-                      {tx.parsedCart?.reduce(
-                        (sum: number, item: any) => sum + (item.quantity || 1),
-                        0,
-                      )}{" "}
-                      items
-                    </Text>
-                  )}
-                </Text>
-                <Text style={styles.ledgerSubtitle}>
-                  {tx.dateStr} {tx.stylist ? `• Kasir: ${tx.stylist}` : ""}
-                </Text>
-              </View>
-
-              <Text
-                style={[
-                  styles.ledgerAmount,
-                  tx.type === "expense" ? styles.textRed : styles.textGreen,
-                ]}
-              >
-                {tx.type === "expense" ? "- Rp " : "+ Rp "}
-                {Math.abs(tx.amount).toLocaleString("id-ID")}
+                )}
               </Text>
-            </TouchableOpacity>
-          ))
+              <Text style={styles.ledgerSubtitle}>
+                {tx.dateStr} {tx.stylist ? `• Kasir: ${tx.stylist}` : ""}
+              </Text>
+            </View>
+
+            <Text
+              style={[
+                styles.ledgerAmount,
+                tx.type === "expense" ? styles.textRed : styles.textGreen,
+              ]}
+            >
+              {tx.type === "expense" ? "- Rp " : "+ Rp "}
+              {Math.abs(tx.amount).toLocaleString("id-ID")}
+            </Text>
+          </TouchableOpacity>
         )}
-      </ScrollView>
+      />
 
       <View style={styles.bottomBar}>
         <View
