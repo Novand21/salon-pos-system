@@ -816,6 +816,30 @@ export default function ManageScreen() {
                         {attEndDate.toLocaleDateString("id-ID")}
                       </Text>
                     </TouchableOpacity>
+
+                    {/* FOR RESETTING THE DATES TO TODAY */}
+                    <TouchableOpacity
+                      onPress={() => {
+                        setAttStartDate(new Date());
+                        setAttEndDate(new Date());
+                      }}
+                      style={{
+                        backgroundColor: "#1C1C1E",
+                        padding: 12,
+                        borderRadius: 8,
+                        borderWidth: 1,
+                        borderColor: "#2C2C2E",
+                        alignItems: "center",
+                        paddingHorizontal: 15,
+                        alignSelf: "flex-end",
+                      }}
+                    >
+                      <MaterialCommunityIcons
+                        name="restore"
+                        size={22}
+                        color="white"
+                      />
+                    </TouchableOpacity>
                   </View>
 
                   {/* Native Date Pickers */}
