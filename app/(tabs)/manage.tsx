@@ -50,6 +50,7 @@ export default function ManageScreen() {
     staffId: number;
     dateStr: string;
     currentDate: Date;
+    desc: string;
   } | null>(null);
   const [attendanceData, setAttendanceData] = useState<any[]>([]);
 
@@ -71,9 +72,10 @@ export default function ManageScreen() {
       setActiveTimePicker(null);
     }
     if (selectedTime && activeTimePicker) {
-      const timeStr = selectedTime.toLocaleTimeString([], {
+      const timeStr = selectedTime.toLocaleTimeString("en-GB", {
         hour: "2-digit",
         minute: "2-digit",
+        hour12: false,
       });
 
       markAttendance(
@@ -81,6 +83,7 @@ export default function ManageScreen() {
         activeTimePicker.dateStr,
         "Hadir",
         timeStr,
+        activeTimePicker.desc,
       );
     }
   };
@@ -127,6 +130,7 @@ export default function ManageScreen() {
             displayDate: displayDate,
             startTime: record ? record.start_time : "-",
             status: record ? record.status : null,
+            description: record ? record.description || "" : "",
           });
         });
         currDate.setDate(currDate.getDate() + 1);
@@ -143,7 +147,13 @@ export default function ManageScreen() {
   }, [loadAttendance]);
 
   const markAttendance = useCallback(
-    (employeeId: number, dateStr: string, status: string, time: string) => {
+    (
+      employeeId: number,
+      dateStr: string,
+      status: string,
+      time: string,
+      desc: string,
+    ) => {
       try {
         const existing: any = db.getFirstSync(
           "SELECT id FROM Attendance WHERE employee_id = ? AND date = ?",
@@ -154,13 +164,13 @@ export default function ManageScreen() {
 
         if (existing) {
           db.runSync(
-            "UPDATE Attendance SET status = ?, start_time = ? WHERE id = ?",
-            [status, startTime, existing.id],
+            "UPDATE Attendance SET status = ?, start_time = ?, description = ? WHERE id = ?",
+            [status, startTime, desc, existing.id],
           );
         } else {
           db.runSync(
-            "INSERT INTO Attendance (employee_id, date, start_time, status) VALUES (?, ?, ?, ?)",
-            [employeeId, dateStr, startTime, status],
+            "INSERT INTO Attendance (employee_id, date, start_time, status, description) VALUES (?, ?, ?, ?, ?)",
+            [employeeId, dateStr, startTime, status, desc],
           );
         }
         loadAttendance();
@@ -868,151 +878,232 @@ export default function ManageScreen() {
                         {/* Table Rows */}
                         <FlatList
                           data={attendanceData}
-                          keyExtractor={(row, index) =>
-                            `${row.staffId}-${row.date}-${row.status}-${row.startTime}-${index}`
-                          }
+                          extraData={attendanceData}
+                          keyExtractor={(row) => `${row.staffId}-${row.date}`}
                           showsVerticalScrollIndicator={true}
                           initialNumToRender={15}
                           maxToRenderPerBatch={20}
                           windowSize={5}
                           renderItem={({ item: row }) => (
-                            <View style={styles.tableRow}>
+                            <View
+                              style={{
+                                borderBottomWidth: 1,
+                                borderColor: "#2C2C2E",
+                              }}
+                            >
+                              {/* Standard Columns */}
                               <View
-                                style={[
-                                  styles.colName,
-                                  {
-                                    flexDirection: "row",
-                                    alignItems: "center",
-                                  },
-                                ]}
-                              >
-                                <MaterialCommunityIcons
-                                  name="account-circle-outline"
-                                  size={24}
-                                  color="#8E8E93"
-                                  style={{ marginRight: 8 }}
-                                />
-                                <Text style={styles.tableCellText}>
-                                  {row.staffName}
-                                </Text>
-                              </View>
-
-                              <Text
-                                style={[
-                                  styles.tableCellText,
-                                  styles.colDate,
-                                  { color: "#8E8E93", fontWeight: "normal" },
-                                ]}
-                              >
-                                {row.displayDate}
-                              </Text>
-
-                              <TouchableOpacity
                                 style={{
-                                  width: 60,
-                                  backgroundColor: "#121212",
-                                  padding: 5,
-                                  borderRadius: 4,
+                                  flexDirection: "row",
                                   alignItems: "center",
-                                  justifyContent: "center",
-                                }}
-                                onPress={() => {
-                                  let initDate = new Date();
-                                  if (row.startTime && row.startTime !== "-") {
-                                    const [hours, minutes] =
-                                      row.startTime.split(":");
-                                    initDate.setHours(
-                                      parseInt(hours, 10),
-                                      parseInt(minutes, 10),
-                                      0,
-                                      0,
-                                    );
-                                  }
-                                  setActiveTimePicker({
-                                    staffId: row.staffId,
-                                    dateStr: row.date,
-                                    currentDate: initDate,
-                                  });
+                                  padding: 15,
                                 }}
                               >
+                                {/* Name */}
+                                <View
+                                  style={[
+                                    styles.colName,
+                                    {
+                                      flexDirection: "row",
+                                      alignItems: "center",
+                                    },
+                                  ]}
+                                >
+                                  <MaterialCommunityIcons
+                                    name="account-circle-outline"
+                                    size={24}
+                                    color="#8E8E93"
+                                    style={{ marginRight: 8 }}
+                                  />
+                                  <Text style={styles.tableCellText}>
+                                    {row.staffName}
+                                  </Text>
+                                </View>
+
+                                {/* Date */}
                                 <Text
+                                  style={[
+                                    styles.tableCellText,
+                                    styles.colDate,
+                                    { color: "#8E8E93", fontWeight: "normal" },
+                                  ]}
+                                >
+                                  {row.displayDate}
+                                </Text>
+
+                                {/* Time Picker */}
+                                <TouchableOpacity
                                   style={{
-                                    color:
-                                      row.startTime === "-" ? "#555" : "#FFF",
-                                    fontWeight: "bold",
+                                    width: 60,
+                                    backgroundColor: "#121212",
+                                    padding: 5,
+                                    borderRadius: 4,
+                                    alignItems: "center",
+                                    justifyContent: "center",
+                                  }}
+                                  onPress={() => {
+                                    let initDate = new Date();
+                                    if (
+                                      row.startTime &&
+                                      row.startTime !== "-"
+                                    ) {
+                                      const [hours, minutes] =
+                                        row.startTime.split(":");
+                                      initDate.setHours(
+                                        parseInt(hours, 10),
+                                        parseInt(minutes, 10),
+                                        0,
+                                        0,
+                                      );
+                                    }
+                                    setActiveTimePicker({
+                                      staffId: row.staffId,
+                                      dateStr: row.date,
+                                      currentDate: initDate,
+                                      desc: row.description || "",
+                                    });
                                   }}
                                 >
-                                  {row.startTime === "-"
-                                    ? "09:00"
-                                    : row.startTime}
-                                </Text>
-                              </TouchableOpacity>
-
-                              {/* Status Radio Buttons */}
-                              <View
-                                style={[
-                                  styles.statusContainer,
-                                  styles.colStatus,
-                                ]}
-                              >
-                                {["Hadir", "Izin", "Sakit"].map((st) => (
-                                  <TouchableOpacity
-                                    key={st}
-                                    onPress={() => {
-                                      let timeToSave = row.startTime;
-                                      if (
-                                        st === "Hadir" &&
-                                        (timeToSave === "-" ||
-                                          timeToSave === "" ||
-                                          !timeToSave)
-                                      ) {
-                                        timeToSave =
-                                          new Date().toLocaleTimeString([], {
-                                            hour: "2-digit",
-                                            minute: "2-digit",
-                                          });
-                                      }
-                                      markAttendance(
-                                        row.staffId,
-                                        row.date,
-                                        st,
-                                        timeToSave,
-                                      );
+                                  <Text
+                                    style={{
+                                      color:
+                                        row.startTime === "-" ? "#555" : "#FFF",
+                                      fontWeight: "bold",
                                     }}
-                                    style={styles.statusBtn}
                                   >
-                                    <MaterialCommunityIcons
-                                      name={
-                                        row.status === st
-                                          ? "circle-slice-8"
-                                          : "circle-outline"
-                                      }
-                                      color={
-                                        row.status === st
-                                          ? st === "Hadir"
-                                            ? "#34C759"
-                                            : st === "Izin"
-                                              ? "#FF9F0A"
-                                              : "#FF453A"
-                                          : "#8E8E93"
-                                      }
-                                      size={20}
-                                    />
-                                    <Text
-                                      style={[
-                                        styles.statusText,
-                                        {
-                                          color:
-                                            row.status === st
-                                              ? "#FFF"
-                                              : "#8E8E93",
-                                        },
-                                      ]}
+                                    {row.startTime === "-"
+                                      ? "09:00"
+                                      : row.startTime}
+                                  </Text>
+                                </TouchableOpacity>
+
+                                {/* Status Radio Buttons */}
+                                <View
+                                  style={[
+                                    styles.statusContainer,
+                                    styles.colStatus,
+                                  ]}
+                                >
+                                  {["Hadir", "Izin", "Sakit"].map((st) => (
+                                    <TouchableOpacity
+                                      key={st}
+                                      onPress={() => {
+                                        let timeToSave = row.startTime;
+                                        if (
+                                          st === "Hadir" &&
+                                          (timeToSave === "-" ||
+                                            timeToSave === "" ||
+                                            !timeToSave)
+                                        ) {
+                                          timeToSave =
+                                            new Date().toLocaleTimeString(
+                                              "en-GB",
+                                              {
+                                                hour: "2-digit",
+                                                minute: "2-digit",
+                                                hour12: false,
+                                              },
+                                            );
+                                        }
+
+                                        setAttendanceData((prevData) =>
+                                          prevData.map((item) =>
+                                            item.staffId === row.staffId &&
+                                            item.date === row.date
+                                              ? {
+                                                  ...item,
+                                                  status: st,
+                                                  startTime: timeToSave,
+                                                }
+                                              : item,
+                                          ),
+                                        );
+
+                                        markAttendance(
+                                          row.staffId,
+                                          row.date,
+                                          st,
+                                          timeToSave,
+                                          row.description || "",
+                                        );
+                                      }}
+                                      style={styles.statusBtn}
                                     >
-                                      {st}
-                                    </Text>
-                                  </TouchableOpacity>
-                                ))}
+                                      <MaterialCommunityIcons
+                                        name={
+                                          row.status === st
+                                            ? "circle-slice-8"
+                                            : "circle-outline"
+                                        }
+                                        color={
+                                          row.status === st
+                                            ? st === "Hadir"
+                                              ? "#34C759"
+                                              : st === "Izin"
+                                                ? "#FF9F0A"
+                                                : "#FF453A"
+                                            : "#8E8E93"
+                                        }
+                                        size={20}
+                                      />
+                                      <Text
+                                        style={[
+                                          styles.statusText,
+                                          {
+                                            color:
+                                              row.status === st
+                                                ? "#FFF"
+                                                : "#8E8E93",
+                                          },
+                                        ]}
+                                      >
+                                        {st}
+                                      </Text>
+                                    </TouchableOpacity>
+                                  ))}
+                                </View>
+                              </View>
+
+                              {/* Description Input */}
+                              <View
+                                style={{
+                                  paddingHorizontal: 15,
+                                  paddingBottom: 15,
+                                }}
+                              >
+                                <TextInput
+                                  style={{
+                                    backgroundColor: "#121212",
+                                    color: "#FFF",
+                                    padding: 10,
+                                    borderRadius: 8,
+                                    borderWidth: 1,
+                                    borderColor: "#2C2C2E",
+                                    fontSize: 12,
+                                  }}
+                                  placeholder="Keterangan (opsional)..."
+                                  placeholderTextColor="#8E8E93"
+                                  value={row.description}
+                                  onChangeText={(text) => {
+                                    setAttendanceData((prevData) =>
+                                      prevData.map((item) =>
+                                        item.staffId === row.staffId &&
+                                        item.date === row.date
+                                          ? { ...item, description: text }
+                                          : item,
+                                      ),
+                                    );
+                                  }}
+                                  onEndEditing={(e) => {
+                                    markAttendance(
+                                      row.staffId,
+                                      row.date,
+                                      row.status || "Hadir",
+                                      row.startTime || "-",
+                                      e.nativeEvent.text,
+                                    );
+                                  }}
+                                />
                               </View>
                             </View>
                           )}

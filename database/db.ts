@@ -1,7 +1,5 @@
 import * as SQLite from "expo-sqlite";
 
-// This creates a file called 'salonpos.db' hidden on the device.
-// If it already exists, it just opens it.
 export const db = SQLite.openDatabaseSync("salonpos.db");
 
 try {
@@ -10,19 +8,8 @@ try {
   console.error("Failed to enable foreign keys:", e);
 }
 
-// we run this function when the app starts to ensure our table exists
-
 export const initDB = () => {
-  // anonymous function to initialize table
   try {
-    // db.execSync(`
-    //             DROP TABLE IF EXISTS Employees;
-    //             DROP TABLE IF EXISTS Services_Products;
-    //             DROP TABLE IF EXISTS Add_Ons;
-    //             DROP TABLE IF EXISTS Transactions;
-    //             DROP TABLE IF EXISTS Transaction_Items;
-    //             DROP TABLE IF EXISTS Expenditures;
-    //     `);
     db.execSync(`
             -- TABLE 1: the main menu (Haircuts, Coffee, Products)
             CREATE TABLE IF NOT EXISTS Services_Products (
@@ -93,7 +80,6 @@ export const initDB = () => {
                 description TEXT NOT NULL,
                 amount INTEGER NOT NULL
             );
-            
             -- TABLE 7: Attendance
             CREATE TABLE IF NOT EXISTS Attendance (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -101,6 +87,7 @@ export const initDB = () => {
                 date TEXT,
                 start_time TEXT,
                 status TEXT,
+                description TEXT,
                 FOREIGN KEY (employee_id) REFERENCES Employees (id)
             );
             `);
