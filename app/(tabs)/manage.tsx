@@ -82,6 +82,7 @@ export default function ManageScreen() {
     "desc",
   );
   const [payrollTransactions, setPayrollTransactions] = useState<any[]>([]);
+  const [selectedTx, setSelectedTx] = useState<any>(null);
 
   const handleAttDateChange = (event: any, date?: Date) => {
     if (Platform.OS === "android") setActiveAttPicker(null);
@@ -486,21 +487,29 @@ export default function ManageScreen() {
   };
 
   const handleDeleteStaff = (id: number) => {
-    try {
-      db.runSync("DELETE FROM Employees WHERE id = ?", id);
-      const refreshedStaff = db.getAllSync(
-        "SELECT * FROM Employees ORDER BY name",
-      );
-      setStaffList(refreshedStaff);
-    } catch (e) {
-      // If they have associated transactions, SQLite's foreign key protection will block the delete
-      alert(
-        "Tidak bisa menghapus staff yang sudah memiliki riwayat transaksi!",
-      );
-      console.error("Error deleting staff:", e);
-    }
+    Alert.alert("Konfirmasi Hapus", `Apakah yakin ingin menghapus`, [
+      { text: "Batal", style: "cancel" },
+      {
+        text: "Hapus",
+        style: "destructive",
+        onPress: () => {
+          try {
+            db.runSync("DELETE FROM Employees WHERE id = ?", id);
+            const refreshedStaff = db.getAllSync(
+              "SELECT * FROM Employees ORDER BY name",
+            );
+            setStaffList(refreshedStaff);
+          } catch (e) {
+            // If they have associated transactions, SQLite's foreign key protection will block the delete
+            alert(
+              "Tidak bisa menghapus staff yang sudah memiliki riwayat transaksi!",
+            );
+            console.error("Error deleting staff:", e);
+          }
+        },
+      },
+    ]);
   };
-
   // image picker function
 
   const handlePickImage = async (useCamera: boolean) => {
@@ -595,6 +604,11 @@ export default function ManageScreen() {
               hour12: false,
             }),
             staffItems: staffItems,
+            parsedCart: cart,
+            amount: tx.total_amount,
+            paymentMethod: tx.payment_method,
+            amountTendered: tx.amount_tendered || tx.total_amount,
+            changeAmount: tx.change_amount || 0,
           });
         }
       });
@@ -798,6 +812,8 @@ export default function ManageScreen() {
         onRequestClose={() => {
           if (isSidebarOpen) {
             toggleSidebar(false);
+          } else if (selectedPayrollStaff) {
+            setSelectedPayrollStaff(null);
           } else {
             setShowStaffDashboard(false);
           }
@@ -1285,7 +1301,7 @@ export default function ManageScreen() {
                       {/* Detailed View Header */}
                       <View
                         style={{
-                          padding: 20,
+                          padding: 15,
                           borderBottomWidth: 1,
                           borderColor: "#2C2C2E",
                         }}
@@ -1294,29 +1310,31 @@ export default function ManageScreen() {
                           style={{
                             flexDirection: "row",
                             justifyContent: "space-between",
-                            alignItems: "flex-start",
-                            marginBottom: 15,
+                            alignItems: "center",
+                            marginBottom: 12,
                           }}
                         >
-                          <View>
+                          {/* Inline Back Button & Staff Name */}
+                          <View
+                            style={{
+                              flexDirection: "row",
+                              alignItems: "center",
+                              gap: 10,
+                            }}
+                          >
                             <TouchableOpacity
                               onPress={() => setSelectedPayrollStaff(null)}
-                              style={{ marginBottom: 5 }}
                             >
-                              <Text
-                                style={{
-                                  color: "#0A84FF",
-                                  fontWeight: "bold",
-                                  fontSize: 14,
-                                }}
-                              >
-                                ← Kembali
-                              </Text>
+                              <MaterialCommunityIcons
+                                name="arrow-left"
+                                size={22}
+                                color="#0A84FF"
+                              />
                             </TouchableOpacity>
                             <Text
                               style={{
                                 color: "#FFF",
-                                fontSize: 20,
+                                fontSize: 16,
                                 fontWeight: "bold",
                               }}
                             >
@@ -1327,26 +1345,41 @@ export default function ManageScreen() {
                           <TouchableOpacity
                             style={{
                               backgroundColor: "#2C2C2E",
-                              paddingVertical: 10,
-                              paddingHorizontal: 15,
-                              borderRadius: 8,
+                              paddingVertical: 8,
+                              paddingHorizontal: 12,
+                              borderRadius: 6,
                             }}
-                            onPress={() => alert("FTest")}
+                            onPress={() =>
+                              alert("Form Gaji Dasar segera hadir!")
+                            }
                           >
-                            <Text style={styles.textWhiteBold}>
+                            <Text
+                              style={{
+                                color: "#FFF",
+                                fontWeight: "bold",
+                                fontSize: 12,
+                              }}
+                            >
                               + Gaji Dasar
                             </Text>
                           </TouchableOpacity>
                         </View>
 
-                        {/* Date Range Selectors */}
-                        <View style={styles.dateRangeRow}>
+                        {/* Compact Date Range Selectors */}
+                        <View
+                          style={[styles.dateRangeRow, { marginBottom: 0 }]}
+                        >
                           <TouchableOpacity
                             onPress={() => setActivePayrollPicker("start")}
-                            style={styles.datePickerBox}
+                            style={[styles.datePickerBox, { padding: 8 }]}
                           >
-                            <Text style={styles.dateLabel}>DARI TANGGAL</Text>
-                            <Text style={styles.dateValue}>
+                            <Text style={styles.dateLabel}>DARI</Text>
+                            <Text
+                              style={[
+                                styles.dateValue,
+                                { fontSize: 12, marginTop: 2 },
+                              ]}
+                            >
                               {payrollStartDate.toLocaleDateString("id-ID")}
                             </Text>
                           </TouchableOpacity>
@@ -1355,10 +1388,15 @@ export default function ManageScreen() {
 
                           <TouchableOpacity
                             onPress={() => setActivePayrollPicker("end")}
-                            style={styles.datePickerBox}
+                            style={[styles.datePickerBox, { padding: 8 }]}
                           >
-                            <Text style={styles.dateLabel}>SAMPAI TANGGAL</Text>
-                            <Text style={styles.dateValue}>
+                            <Text style={styles.dateLabel}>SAMPAI</Text>
+                            <Text
+                              style={[
+                                styles.dateValue,
+                                { fontSize: 12, marginTop: 2 },
+                              ]}
+                            >
                               {payrollEndDate.toLocaleDateString("id-ID")}
                             </Text>
                           </TouchableOpacity>
@@ -1375,14 +1413,14 @@ export default function ManageScreen() {
                               borderColor: "#2C2C2E",
                               alignItems: "center",
                               justifyContent: "center",
-                              paddingHorizontal: 15,
+                              paddingHorizontal: 12,
                               alignSelf: "stretch",
                             }}
                           >
                             <MaterialCommunityIcons
-                              name="calendar-today"
-                              size={22}
-                              color="#0A84FF"
+                              name="restore"
+                              size={20}
+                              color="white"
                             />
                           </TouchableOpacity>
                         </View>
@@ -1478,7 +1516,10 @@ export default function ManageScreen() {
                           </Text>
                         }
                         renderItem={({ item: tx }) => (
-                          <View style={styles.listItem}>
+                          <TouchableOpacity
+                            style={styles.listItem}
+                            onPress={() => setSelectedTx(tx)}
+                          >
                             <View style={{ flex: 1 }}>
                               <Text style={styles.itemTitle}>
                                 {tx.trx_code}
@@ -1498,7 +1539,6 @@ export default function ManageScreen() {
                               >
                                 {tx.staffItems.map(
                                   (cartItem: any, idx: number) => {
-                                    // Re-calculate the specific value of the item they worked on
                                     const addOnsTotal =
                                       cartItem.selectedAddOns?.reduce(
                                         (sum: number, addon: any) =>
@@ -1540,7 +1580,7 @@ export default function ManageScreen() {
                                 )}
                               </View>
                             </View>
-                          </View>
+                          </TouchableOpacity>
                         )}
                       />
                     </View>
@@ -2232,6 +2272,261 @@ export default function ManageScreen() {
           </View>
         </KeyboardAvoidingView>
       </Modal>
+
+      {/* RECEIPT PREVIEW MODAL */}
+      <Modal
+        visible={!!selectedTx}
+        animationType="fade"
+        transparent={true}
+        onRequestClose={() => setSelectedTx(null)}
+      >
+        <View
+          style={[
+            styles.payrollModalOverlay,
+            { paddingTop: insets.top, paddingBottom: insets.bottom },
+          ]}
+        >
+          <ScrollView
+            style={{ width: "100%", maxHeight: "80%" }}
+            contentContainerStyle={{
+              alignItems: "center",
+              paddingVertical: 10,
+            }}
+            showsVerticalScrollIndicator={true}
+          >
+            <View style={styles.receiptPaper}>
+              <Text style={styles.receiptTitle}>D'FFOND SALON</Text>
+              <Text style={styles.receiptCenter}>Detail Transaksi</Text>
+
+              <Text style={styles.receiptDivider}>
+                --------------------------------
+              </Text>
+              <Text style={styles.receiptLine}>
+                Tanggal:{" "}
+                {selectedTx
+                  ? new Date(selectedTx.timestamp).toLocaleDateString("en-GB")
+                  : ""}
+              </Text>
+              <Text style={styles.receiptLine}>Waktu: {selectedTx?.time}</Text>
+              <Text style={styles.receiptLine}>
+                Cashier: {selectedTx?.stylist}
+              </Text>
+              <Text style={styles.receiptDivider}>
+                --------------------------------
+              </Text>
+
+              {/* Map through parsedCart to show EVERYTHING in the order */}
+              {selectedTx?.parsedCart.map((cartItem: any, index: number) => {
+                const addOnsTotal =
+                  cartItem.selectedAddOns?.reduce(
+                    (sum: number, addon: any) => sum + addon.price,
+                    0,
+                  ) || 0;
+                const basePriceWithAddons = cartItem.price + addOnsTotal;
+                const discountNominal = Math.round(
+                  basePriceWithAddons *
+                    cartItem.quantity *
+                    ((cartItem.discountPercent || 0) / 100),
+                );
+
+                // Optional UI trick: Highlight items this specific staff member worked on
+                const isStaffItem =
+                  cartItem.stylists &&
+                  cartItem.stylists.includes(selectedPayrollStaff.name);
+
+                return (
+                  <View
+                    key={index}
+                    style={{
+                      marginBottom: 12,
+                      paddingBottom: 8,
+                      borderBottomWidth: 1,
+                      borderBottomColor: "#F2F2F7",
+                    }}
+                  >
+                    <View
+                      style={{
+                        flexDirection: "row",
+                        justifyContent: "space-between",
+                      }}
+                    >
+                      <Text
+                        style={[
+                          styles.receiptLine,
+                          {
+                            flex: 1,
+                            fontWeight: "bold",
+                            color: isStaffItem ? "#0A84FF" : "#000",
+                          },
+                        ]}
+                      >
+                        {cartItem.name} {isStaffItem ? "★" : ""}
+                      </Text>
+                    </View>
+
+                    <View
+                      style={{
+                        flexDirection: "row",
+                        justifyContent: "space-between",
+                        marginTop: 4,
+                      }}
+                    >
+                      <Text style={styles.receiptLine}>
+                        {cartItem.quantity}x Rp{" "}
+                        {cartItem.price.toLocaleString("id-ID")}
+                      </Text>
+                      <Text style={styles.receiptLine}>
+                        Rp{" "}
+                        {(cartItem.quantity * cartItem.price).toLocaleString(
+                          "id-ID",
+                        )}
+                      </Text>
+                    </View>
+
+                    {cartItem.stylists && cartItem.stylists.length > 0 && (
+                      <View style={styles.receiptRowWrap}>
+                        <Text
+                          style={[
+                            styles.receiptTextLeftWrap,
+                            { fontStyle: "italic", paddingLeft: 0 },
+                          ]}
+                        >
+                          {cartItem.stylists
+                            .map((s: string) => `@${s}`)
+                            .join(", ")}
+                        </Text>
+                      </View>
+                    )}
+
+                    {cartItem.selectedAddOns?.map((addon: any, idx: number) => {
+                      const totalAddonQty =
+                        (addon.quantity || 1) * cartItem.quantity;
+                      const totalAddonPrice = addon.price * totalAddonQty;
+                      return (
+                        <View
+                          key={idx}
+                          style={{
+                            flexDirection: "row",
+                            justifyContent: "space-between",
+                            marginVertical: 2,
+                          }}
+                        >
+                          <Text
+                            style={{ color: "#555", fontSize: 12, flex: 1 }}
+                          >
+                            + {addon.name}{" "}
+                            {totalAddonQty > 1 ? `(${totalAddonQty}x)` : ""}
+                          </Text>
+                          <Text style={{ color: "#555", fontSize: 12 }}>
+                            Rp {totalAddonPrice.toLocaleString("id-ID")}
+                          </Text>
+                        </View>
+                      );
+                    })}
+
+                    {cartItem.discountPercent > 0 && (
+                      <View style={styles.receiptRowWrap}>
+                        <Text
+                          style={[
+                            styles.receiptDiscountLeftWrap,
+                            { paddingLeft: 10 },
+                          ]}
+                        >
+                          Disc {cartItem.discountPercent}%
+                        </Text>
+                        <Text style={styles.receiptDiscountRight}>
+                          -Rp {discountNominal.toLocaleString("id-ID")}
+                        </Text>
+                      </View>
+                    )}
+
+                    <View
+                      style={{
+                        flexDirection: "row",
+                        justifyContent: "flex-end",
+                        marginTop: 2,
+                      }}
+                    >
+                      <Text
+                        style={[styles.receiptLine, { fontWeight: "bold" }]}
+                      >
+                        Subtotal: Rp{" "}
+                        {cartItem.itemTotal.toLocaleString("id-ID")}
+                      </Text>
+                    </View>
+                  </View>
+                );
+              })}
+
+              <Text style={styles.receiptDivider}>
+                --------------------------------
+              </Text>
+
+              {/* Payment Method Details added to match Recap tab */}
+              <View style={styles.receiptRowWrap}>
+                <Text style={styles.receiptLine}>PEMBAYARAN:</Text>
+                <Text style={styles.receiptLine}>
+                  {selectedTx?.paymentMethod}
+                </Text>
+              </View>
+
+              <View>
+                <View style={[styles.receiptRowWrap, { marginTop: 4 }]}>
+                  <Text style={styles.receiptLine}>UANG TUNAI:</Text>
+                  <Text style={styles.receiptLine}>
+                    Rp {selectedTx?.amountTendered?.toLocaleString("id-ID")}
+                  </Text>
+                </View>
+                <View style={[styles.receiptRowWrap, { marginTop: 4 }]}>
+                  <Text
+                    style={[
+                      styles.receiptLine,
+                      { fontWeight: "bold", color: "#cf2d18" },
+                    ]}
+                  >
+                    KEMBALIAN:
+                  </Text>
+                  <Text
+                    style={[
+                      styles.receiptLine,
+                      { fontWeight: "bold", color: "#cf2d18" },
+                    ]}
+                  >
+                    Rp {selectedTx?.changeAmount?.toLocaleString("id-ID")}
+                  </Text>
+                </View>
+              </View>
+
+              <Text style={styles.receiptDivider}>
+                --------------------------------
+              </Text>
+
+              {/* Grand Total */}
+              <View style={styles.receiptRowWrap}>
+                <Text
+                  style={{ color: "#000", fontSize: 14, fontWeight: "bold" }}
+                >
+                  TOTAL TRANSAKSI:
+                </Text>
+                <Text
+                  style={{ color: "#000", fontSize: 14, fontWeight: "bold" }}
+                >
+                  Rp {selectedTx?.amount?.toLocaleString("id-ID")}
+                </Text>
+              </View>
+            </View>
+          </ScrollView>
+
+          <View style={styles.modalActionsCenter}>
+            <TouchableOpacity
+              onPress={() => setSelectedTx(null)}
+              style={styles.closeBtnPill}
+            >
+              <Text style={styles.textWhiteBold}>Tutup Preview</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -2532,5 +2827,64 @@ const styles = StyleSheet.create({
   },
   statusText: {
     fontSize: 12,
+  },
+
+  payrollModalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.8)",
+    justifyContent: "center",
+    padding: 20,
+  },
+  receiptPaper: {
+    backgroundColor: "#FFF",
+    padding: 20,
+    borderRadius: 8,
+    width: "100%",
+    maxWidth: 350,
+    alignSelf: "center",
+  },
+  receiptTitle: {
+    color: "#000",
+    fontSize: 20,
+    fontWeight: "bold",
+    textAlign: "center",
+    letterSpacing: 2,
+    marginBottom: 5,
+  },
+  receiptCenter: { color: "#000", textAlign: "center", fontSize: 12 },
+  receiptDivider: { color: "#000", textAlign: "center", marginVertical: 5 },
+  receiptLine: { color: "#000", fontSize: 12, marginVertical: 2 },
+  receiptRowWrap: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "flex-start",
+    marginVertical: 2,
+  },
+  receiptTextLeftWrap: {
+    color: "#555",
+    fontSize: 12,
+    flex: 1,
+    flexShrink: 1,
+    paddingRight: 15,
+  },
+  receiptDiscountLeftWrap: {
+    color: "#FF453A",
+    fontSize: 12,
+    flex: 1,
+    flexShrink: 1,
+    paddingRight: 15,
+  },
+  receiptDiscountRight: { color: "#FF453A", fontSize: 12, textAlign: "right" },
+  modalActionsCenter: {
+    flexDirection: "row",
+    justifyContent: "center",
+    width: "100%",
+    marginTop: 20,
+  },
+  closeBtnPill: {
+    backgroundColor: "#2C2C2E",
+    paddingVertical: 15,
+    paddingHorizontal: 30,
+    borderRadius: 30,
   },
 });
