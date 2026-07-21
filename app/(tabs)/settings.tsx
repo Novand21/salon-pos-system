@@ -44,7 +44,7 @@ export default function SettingsScreen() {
         granted[PermissionsAndroid.PERMISSIONS.BLUETOOTH_CONNECT] !==
         PermissionsAndroid.RESULTS.GRANTED
       ) {
-        alert("Izin Bluetooth diperlukan untuk mencari printer salon!");
+        alert("Izin Bluetooth diperlukan untuk mencari printer!");
         setIsLoading(false);
         return; // Stops the code so it doesn't crash!
       }
@@ -68,9 +68,9 @@ export default function SettingsScreen() {
     const success = await connectToPrinter(device.address);
     if (success) {
       setActiveAddress(device.address);
-      alert(`Successfully connected to ${device.name}!`);
+      alert(`Sukses menghubungkan dengan ${device.name}!`);
     } else {
-      alert("Failed to connect. Make sure the printer is turned on.");
+      alert("Gagal menghubungkan, pastikan printer sudah aktif.");
     }
     setIsConnecting(false);
   };
@@ -337,7 +337,9 @@ export default function SettingsScreen() {
           </ScrollView>
         ) : (
           <View style={{ flex: 1 }}>
-            <Text style={styles.sectionTitle}>PAIRED BLUETOOTH PRINTERS</Text>
+            <Text style={styles.sectionTitle}>
+              DEVICE BLUETOOTH YANG TERHUBUNG
+            </Text>
 
             {isLoading ? (
               <ActivityIndicator
@@ -349,8 +351,8 @@ export default function SettingsScreen() {
               <ScrollView style={styles.deviceList}>
                 {devices.length === 0 ? (
                   <Text style={styles.textGrayCenter}>
-                    No paired Bluetooth printers found. Pair one in your Android
-                    Settings first.
+                    Tidak ditemukan printer bluetooth yang terhubung, Pasangkan
+                    printer terlebih dahulu di pengaturan android
                   </Text>
                 ) : (
                   devices.map((device, index) => (

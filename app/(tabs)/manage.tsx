@@ -54,6 +54,35 @@ export default function ManageScreen() {
   } | null>(null);
   const [attendanceData, setAttendanceData] = useState<any[]>([]);
 
+  // menu management states
+  const [showAddMenuModal, setShowAddMenuModal] = useState(false);
+  const [editingItemId, setEditingItemId] = useState<number | null>(null);
+  const [newItemName, setNewItemName] = useState("");
+  const [newItemCategory, setNewItemCategory] = useState("");
+  const [newItemPrice, setNewItemPrice] = useState("");
+  const [newItemDesc, setNewItemDesc] = useState("");
+  const [newItemImage, setNewItemImage] = useState<string | null>(null);
+  const [isStockEnabled, setIsStockEnabled] = useState(false);
+  const [stockQuantity, setStockQuantity] = useState("");
+  const [itemAddOns, setItemAddOns] = useState<any[]>([]);
+
+  // staff menagement states
+  const [showAddStaffModal, setShowAddStaffModal] = useState(false);
+  const [newStaffName, setNewStaffName] = useState("");
+  const [newStaffRole, setNewStaffRole] = useState("Stylist");
+
+  // payroll for staff and bonuses
+  const [selectedPayrollStaff, setSelectedPayrollStaff] = useState<any>(null);
+  const [payrollStartDate, setPayrollStartDate] = useState<Date>(new Date());
+  const [payrollEndDate, setPayrollEndDate] = useState<Date>(new Date());
+  const [activePayrollPicker, setActivePayrollPicker] = useState<
+    "start" | "end" | null
+  >(null);
+  const [payrollSortMode, setPayrollSortMode] = useState<"desc" | "asc">(
+    "desc",
+  );
+  const [payrollTransactions, setPayrollTransactions] = useState<any[]>([]);
+
   const handleAttDateChange = (event: any, date?: Date) => {
     if (Platform.OS === "android") setActiveAttPicker(null);
     if (date) {
@@ -221,23 +250,6 @@ export default function ManageScreen() {
     }
     return item.category === activeCategory;
   });
-
-  // menu management states
-  const [showAddMenuModal, setShowAddMenuModal] = useState(false);
-  const [editingItemId, setEditingItemId] = useState<number | null>(null);
-  const [newItemName, setNewItemName] = useState("");
-  const [newItemCategory, setNewItemCategory] = useState("");
-  const [newItemPrice, setNewItemPrice] = useState("");
-  const [newItemDesc, setNewItemDesc] = useState("");
-  const [newItemImage, setNewItemImage] = useState<string | null>(null);
-  const [isStockEnabled, setIsStockEnabled] = useState(false);
-  const [stockQuantity, setStockQuantity] = useState("");
-  const [itemAddOns, setItemAddOns] = useState<any[]>([]);
-
-  // staff menagement states
-  const [showAddStaffModal, setShowAddStaffModal] = useState(false);
-  const [newStaffName, setNewStaffName] = useState("");
-  const [newStaffRole, setNewStaffRole] = useState("Stylist");
 
   const handleAddAddOnRow = () => {
     setItemAddOns([
@@ -527,6 +539,82 @@ export default function ManageScreen() {
     }
   };
 
+  const handlePayrollDateChange = (event: any, date?: Date) => {
+    if (Platform.OS === "android") setActivePayrollPicker(null);
+    if (date) {
+      if (activePayrollPicker === "start") {
+        setPayrollStartDate(date);
+        if (date > payrollEndDate) setPayrollEndDate(date);
+      } else if (activePayrollPicker === "end") {
+        setPayrollEndDate(date);
+        if (date < payrollStartDate) setPayrollStartDate(date);
+      }
+    }
+  };
+
+  const loadPayrollData = useCallback(() => {
+    if (!selectedPayrollStaff) return;
+
+    const startOfDay = new Date(payrollStartDate);
+    startOfDay.setHours(0, 0, 0, 0);
+    const endOfDay = new Date(payrollEndDate);
+    endOfDay.setHours(23, 59, 59, 999);
+
+    try {
+      const rawTx = db.getAllSync(
+        "SELECT * FROM Transactions WHERE timestamp >= ? AND timestamp <= ? AND status = 'completed'",
+        [startOfDay.toISOString(), endOfDay.toISOString()],
+      );
+
+      const staffTxs: any[] = [];
+
+      rawTx.forEach((tx: any) => {
+        const cart = JSON.parse(tx.cart_json || "[]");
+
+        // Filter the cart to find only items this specific staff member worked on
+        const staffItems = cart.filter(
+          (item: any) =>
+            item.stylists && item.stylists.includes(selectedPayrollStaff.name),
+        );
+
+        if (staffItems.length > 0) {
+          const txDate = new Date(tx.timestamp);
+          staffTxs.push({
+            id: tx.id,
+            queue_number: tx.queue_number,
+            trx_code: tx.trx_code,
+            timestamp: tx.timestamp,
+            dateStr: txDate.toLocaleDateString("id-ID", {
+              day: "numeric",
+              month: "short",
+              year: "numeric",
+            }),
+            time: txDate.toLocaleTimeString("en-GB", {
+              hour: "2-digit",
+              minute: "2-digit",
+              hour12: false,
+            }),
+            staffItems: staffItems,
+          });
+        }
+      });
+
+      setPayrollTransactions(staffTxs);
+    } catch (e) {
+      console.error("Error loading payroll tx:", e);
+    }
+  }, [payrollStartDate, payrollEndDate, selectedPayrollStaff]);
+
+  React.useEffect(() => {
+    loadPayrollData();
+  }, [loadPayrollData]);
+
+  const sortedPayrollTransactions = [...payrollTransactions].sort((a, b) => {
+    return payrollSortMode === "desc"
+      ? new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
+      : new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime();
+  });
+
   // Fetch Data
   useFocusEffect(
     useCallback(() => {
@@ -744,7 +832,7 @@ export default function ManageScreen() {
                 >
                   {staffDashboardTab === "List" && "Daftar Staff"}
                   {staffDashboardTab === "Attendance" && "Absensi Staff"}
-                  {staffDashboardTab === "Bonus" && "Perhitungan Komisi"}
+                  {staffDashboardTab === "Bonus" && "Gaji & Bonus"}
                 </Text>
               </View>
 
@@ -1139,23 +1227,324 @@ export default function ManageScreen() {
               )}
               {/* BONUS CALCULATION FOR STAFF */}
               {staffDashboardTab === "Bonus" && (
-                <View
-                  style={{
-                    flex: 1,
-                    justifyContent: "center",
-                    alignItems: "center",
-                  }}
-                >
-                  <MaterialCommunityIcons
-                    name="tools"
-                    size={60}
-                    color="#8E8E93"
-                  />
-                  <Text
-                    style={{ color: "#8E8E93", marginTop: 15, fontSize: 16 }}
-                  >
-                    Fitur Perhitungan Komisi sedang dibangun...
-                  </Text>
+                <View style={{ flex: 1 }}>
+                  {/* Staff Selection List */}
+                  {!selectedPayrollStaff ? (
+                    <FlatList
+                      contentContainerStyle={styles.listContainer}
+                      data={staffList}
+                      keyExtractor={(staff) => `payroll-${staff.id}`}
+                      initialNumToRender={15}
+                      ListHeaderComponent={
+                        <Text
+                          style={{
+                            color: "#8E8E93",
+                            fontSize: 12,
+                            fontWeight: "bold",
+                            marginBottom: 15,
+                          }}
+                        >
+                          PILIH STAFF UNTUK PERHITUNGAN GAJI
+                        </Text>
+                      }
+                      renderItem={({ item: staff }) => (
+                        <TouchableOpacity
+                          style={styles.listItem}
+                          onPress={() => setSelectedPayrollStaff(staff)}
+                        >
+                          <View
+                            style={{
+                              flexDirection: "row",
+                              alignItems: "center",
+                            }}
+                          >
+                            <MaterialCommunityIcons
+                              name="account-circle"
+                              size={40}
+                              color="#8E8E93"
+                              style={{ marginRight: 15 }}
+                            />
+                            <View>
+                              <Text style={styles.itemTitle}>{staff.name}</Text>
+                              <Text style={styles.itemSubtitle}>
+                                Posisi: {staff.role}
+                              </Text>
+                            </View>
+                          </View>
+                          <MaterialCommunityIcons
+                            name="chevron-right"
+                            size={24}
+                            color="#8E8E93"
+                          />
+                        </TouchableOpacity>
+                      )}
+                    />
+                  ) : (
+                    /* Detailed Payroll Interface */
+                    <View style={{ flex: 1 }}>
+                      {/* Detailed View Header */}
+                      <View
+                        style={{
+                          padding: 20,
+                          borderBottomWidth: 1,
+                          borderColor: "#2C2C2E",
+                        }}
+                      >
+                        <View
+                          style={{
+                            flexDirection: "row",
+                            justifyContent: "space-between",
+                            alignItems: "flex-start",
+                            marginBottom: 15,
+                          }}
+                        >
+                          <View>
+                            <TouchableOpacity
+                              onPress={() => setSelectedPayrollStaff(null)}
+                              style={{ marginBottom: 5 }}
+                            >
+                              <Text
+                                style={{
+                                  color: "#0A84FF",
+                                  fontWeight: "bold",
+                                  fontSize: 14,
+                                }}
+                              >
+                                ← Kembali
+                              </Text>
+                            </TouchableOpacity>
+                            <Text
+                              style={{
+                                color: "#FFF",
+                                fontSize: 20,
+                                fontWeight: "bold",
+                              }}
+                            >
+                              {selectedPayrollStaff.name}
+                            </Text>
+                          </View>
+
+                          <TouchableOpacity
+                            style={{
+                              backgroundColor: "#2C2C2E",
+                              paddingVertical: 10,
+                              paddingHorizontal: 15,
+                              borderRadius: 8,
+                            }}
+                            onPress={() => alert("FTest")}
+                          >
+                            <Text style={styles.textWhiteBold}>
+                              + Gaji Dasar
+                            </Text>
+                          </TouchableOpacity>
+                        </View>
+
+                        {/* Date Range Selectors */}
+                        <View style={styles.dateRangeRow}>
+                          <TouchableOpacity
+                            onPress={() => setActivePayrollPicker("start")}
+                            style={styles.datePickerBox}
+                          >
+                            <Text style={styles.dateLabel}>DARI TANGGAL</Text>
+                            <Text style={styles.dateValue}>
+                              {payrollStartDate.toLocaleDateString("id-ID")}
+                            </Text>
+                          </TouchableOpacity>
+
+                          <Text style={styles.dateDivider}>-</Text>
+
+                          <TouchableOpacity
+                            onPress={() => setActivePayrollPicker("end")}
+                            style={styles.datePickerBox}
+                          >
+                            <Text style={styles.dateLabel}>SAMPAI TANGGAL</Text>
+                            <Text style={styles.dateValue}>
+                              {payrollEndDate.toLocaleDateString("id-ID")}
+                            </Text>
+                          </TouchableOpacity>
+
+                          <TouchableOpacity
+                            onPress={() => {
+                              setPayrollStartDate(new Date());
+                              setPayrollEndDate(new Date());
+                            }}
+                            style={{
+                              backgroundColor: "#1C1C1E",
+                              borderRadius: 8,
+                              borderWidth: 1,
+                              borderColor: "#2C2C2E",
+                              alignItems: "center",
+                              justifyContent: "center",
+                              paddingHorizontal: 15,
+                              alignSelf: "stretch",
+                            }}
+                          >
+                            <MaterialCommunityIcons
+                              name="calendar-today"
+                              size={22}
+                              color="#0A84FF"
+                            />
+                          </TouchableOpacity>
+                        </View>
+                      </View>
+
+                      {/* Native Pickers */}
+                      {activePayrollPicker && (
+                        <DateTimePicker
+                          value={
+                            activePayrollPicker === "start"
+                              ? payrollStartDate
+                              : payrollEndDate
+                          }
+                          mode="date"
+                          display="default"
+                          onChange={handlePayrollDateChange}
+                        />
+                      )}
+
+                      {/* Filtered Transactions List */}
+                      <FlatList
+                        contentContainerStyle={styles.listContainer}
+                        data={sortedPayrollTransactions}
+                        keyExtractor={(tx) => `ptrx-${tx.id}`}
+                        ListHeaderComponent={
+                          <View style={{ marginBottom: 15 }}>
+                            <Text
+                              style={{
+                                color: "#8E8E93",
+                                fontSize: 12,
+                                fontWeight: "bold",
+                                marginBottom: 10,
+                              }}
+                            >
+                              RIWAYAT PEKERJAAN
+                            </Text>
+                            <ScrollView
+                              horizontal
+                              showsHorizontalScrollIndicator={false}
+                              style={{ flexDirection: "row" }}
+                            >
+                              {[
+                                { id: "desc", label: "↓ Terbaru" },
+                                { id: "asc", label: "↑ Terlama" },
+                              ].map((sort) => (
+                                <TouchableOpacity
+                                  key={sort.id}
+                                  onPress={() =>
+                                    setPayrollSortMode(sort.id as any)
+                                  }
+                                  style={{
+                                    paddingHorizontal: 12,
+                                    paddingVertical: 6,
+                                    borderRadius: 15,
+                                    marginRight: 8,
+                                    borderWidth: 1,
+                                    borderColor:
+                                      payrollSortMode === sort.id
+                                        ? "#0A84FF"
+                                        : "#2C2C2E",
+                                    backgroundColor:
+                                      payrollSortMode === sort.id
+                                        ? "rgba(10,132,255,0.2)"
+                                        : "#1C1C1E",
+                                  }}
+                                >
+                                  <Text
+                                    style={{
+                                      color:
+                                        payrollSortMode === sort.id
+                                          ? "#0A84FF"
+                                          : "#8E8E93",
+                                      fontSize: 12,
+                                      fontWeight: "bold",
+                                    }}
+                                  >
+                                    {sort.label}
+                                  </Text>
+                                </TouchableOpacity>
+                              ))}
+                            </ScrollView>
+                          </View>
+                        }
+                        ListEmptyComponent={
+                          <Text
+                            style={{
+                              color: "#8E8E93",
+                              textAlign: "center",
+                              marginTop: 20,
+                            }}
+                          >
+                            Belum ada pekerjaan di rentang tanggal ini.
+                          </Text>
+                        }
+                        renderItem={({ item: tx }) => (
+                          <View style={styles.listItem}>
+                            <View style={{ flex: 1 }}>
+                              <Text style={styles.itemTitle}>
+                                {tx.trx_code}
+                              </Text>
+                              <Text style={styles.itemSubtitle}>
+                                {tx.dateStr} • Pukul {tx.time}
+                              </Text>
+
+                              <View
+                                style={{
+                                  marginTop: 10,
+                                  paddingLeft: 10,
+                                  borderLeftWidth: 2,
+                                  borderColor: "#2C2C2E",
+                                  gap: 5,
+                                }}
+                              >
+                                {tx.staffItems.map(
+                                  (cartItem: any, idx: number) => {
+                                    // Re-calculate the specific value of the item they worked on
+                                    const addOnsTotal =
+                                      cartItem.selectedAddOns?.reduce(
+                                        (sum: number, addon: any) =>
+                                          sum + addon.price,
+                                        0,
+                                      ) || 0;
+                                    const base = cartItem.price + addOnsTotal;
+                                    const discount = Math.round(
+                                      base *
+                                        cartItem.quantity *
+                                        ((cartItem.discountPercent || 0) / 100),
+                                    );
+                                    const finalValue =
+                                      base * cartItem.quantity - discount;
+
+                                    return (
+                                      <View key={idx}>
+                                        <Text
+                                          style={{
+                                            color: "#FFF",
+                                            fontSize: 13,
+                                          }}
+                                        >
+                                          {cartItem.quantity}x {cartItem.name}
+                                        </Text>
+                                        <Text
+                                          style={{
+                                            color: "#34C759",
+                                            fontSize: 12,
+                                            fontWeight: "bold",
+                                          }}
+                                        >
+                                          Nilai Menu: Rp{" "}
+                                          {finalValue.toLocaleString("id-ID")}
+                                        </Text>
+                                      </View>
+                                    );
+                                  },
+                                )}
+                              </View>
+                            </View>
+                          </View>
+                        )}
+                      />
+                    </View>
+                  )}
                 </View>
               )}
             </View>
@@ -1315,7 +1704,7 @@ export default function ManageScreen() {
                               },
                             ]}
                           >
-                            Perhitungan Komisi
+                            Gaji & Bonus
                           </Text>
                         </TouchableOpacity>
 
