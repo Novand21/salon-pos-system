@@ -86,6 +86,25 @@ export default function ManageScreen() {
   );
   const [payrollTransactions, setPayrollTransactions] = useState<any[]>([]);
   const [selectedTx, setSelectedTx] = useState<any>(null);
+  const [attendanceStats, setAttendanceStats] = useState({
+    extraMins: 0,
+    penaltyMins: 0,
+  });
+  const [showBonusModal, setShowBonusModal] = useState(false);
+  const [customBonusAmount, setCustomBonusAmount] = useState("");
+  const [menuBonuses, setMenuBonuses] = useState<{
+    [key: string]: { method: "percent" | "nominal"; value: string };
+  }>({});
+  const [selectedBonusItem, setSelectedBonusItem] = useState<{
+    key: string;
+    name: string;
+    quantity: number;
+    finalValue: number;
+  } | null>(null);
+  const [bonusMethod, setBonusMethod] = useState<"percent" | "nominal">(
+    "percent",
+  );
+  const [bonusValueInput, setBonusValueInput] = useState("");
 
   const handleAttDateChange = (event: any, date?: Date) => {
     if (Platform.OS === "android") setActiveAttPicker(null);
@@ -629,6 +648,59 @@ export default function ManageScreen() {
       });
 
       setPayrollTransactions(staffTxs);
+
+      // --- ATTENDANCE EARLY/LATE CALCULATION ---
+      const formatDate = (d: Date) => {
+        const year = d.getFullYear();
+        const month = String(d.getMonth() + 1).padStart(2, "0");
+        const day = String(d.getDate()).padStart(2, "0");
+        return `${year}-${month}-${day}`;
+      };
+
+      // Fetch standard operational hours
+      const settings: any = db.getFirstSync(
+        "SELECT open_time, close_time FROM Settings WHERE id = 1",
+      ) || { open_time: "09:00", close_time: "20:00" };
+
+      const attRecords = db.getAllSync(
+        "SELECT * FROM Attendance WHERE employee_id = ? AND date >= ? AND date <= ? AND status = 'Hadir'",
+        [
+          selectedPayrollStaff.id,
+          formatDate(payrollStartDate),
+          formatDate(payrollEndDate),
+        ],
+      );
+
+      const parseTime = (tStr: string) => {
+        if (!tStr || tStr === "-") return null;
+        const [h, m] = tStr.split(":");
+        return parseInt(h, 10) * 60 + parseInt(m, 10);
+      };
+
+      const openMins = parseTime(settings.open_time);
+      const closeMins = parseTime(settings.close_time);
+
+      let totalExtraMins = 0;
+      let totalPenaltyMins = 0;
+
+      attRecords.forEach((rec: any) => {
+        const sMins = parseTime(rec.start_time);
+        const eMins = parseTime(rec.end_time);
+
+        if (sMins !== null && openMins !== null) {
+          if (sMins < openMins) totalExtraMins += openMins - sMins;
+          if (sMins > openMins) totalPenaltyMins += sMins - openMins;
+        }
+        if (eMins !== null && closeMins !== null) {
+          if (eMins > closeMins) totalExtraMins += eMins - closeMins;
+          if (eMins < closeMins) totalPenaltyMins += closeMins - eMins;
+        }
+      });
+
+      setAttendanceStats({
+        extraMins: totalExtraMins,
+        penaltyMins: totalPenaltyMins,
+      });
     } catch (e) {
       console.error("Error loading payroll tx:", e);
     }
@@ -1373,7 +1445,6 @@ export default function ManageScreen() {
                       )}
                     />
                   ) : (
-                    /* Detailed Payroll Interface */
                     <View style={{ flex: 1 }}>
                       {/* Detailed View Header */}
                       <View
@@ -1419,27 +1490,73 @@ export default function ManageScreen() {
                             </Text>
                           </View>
 
-                          <TouchableOpacity
-                            style={{
-                              backgroundColor: "#2C2C2E",
-                              paddingVertical: 8,
-                              paddingHorizontal: 12,
-                              borderRadius: 6,
-                            }}
-                            onPress={() =>
-                              alert("Form Gaji Dasar segera hadir!")
-                            }
-                          >
-                            <Text
-                              style={{
-                                color: "#FFF",
-                                fontWeight: "bold",
-                                fontSize: 12,
-                              }}
+                          <View style={{ flexDirection: "row", gap: 10 }}>
+                            <TouchableOpacity
+                              style={[
+                                styles.bonusStatBtn,
+                                {
+                                  backgroundColor:
+                                    attendanceStats.extraMins > 0
+                                      ? "rgba(52, 199, 89, 0.1)"
+                                      : "#1C1C1E",
+                                  borderColor:
+                                    attendanceStats.extraMins > 0
+                                      ? "#34C759"
+                                      : "#2C2C2E",
+                                },
+                              ]}
+                              onPress={() => setShowBonusModal(true)}
                             >
-                              + Gaji Dasar
-                            </Text>
-                          </TouchableOpacity>
+                              <Text
+                                style={{
+                                  color: "#8E8E93",
+                                  fontSize: 10,
+                                  fontWeight: "bold",
+                                }}
+                              >
+                                EKSTRA / TELAT
+                              </Text>
+                              <Text
+                                style={{
+                                  color: "#34C759",
+                                  fontSize: 12,
+                                  fontWeight: "bold",
+                                }}
+                              >
+                                +{Math.floor(attendanceStats.extraMins / 60)}j{" "}
+                                {attendanceStats.extraMins % 60}m
+                                <Text style={{ color: "#FF453A" }}>
+                                  {" "}
+                                  / -
+                                  {Math.floor(attendanceStats.penaltyMins / 60)}
+                                  j {attendanceStats.penaltyMins % 60}m
+                                </Text>
+                              </Text>
+                            </TouchableOpacity>
+
+                            <TouchableOpacity
+                              style={{
+                                backgroundColor: "#2C2C2E",
+                                paddingVertical: 8,
+                                paddingHorizontal: 12,
+                                borderRadius: 6,
+                                justifyContent: "center",
+                              }}
+                              onPress={() =>
+                                alert("Form Gaji Dasar segera hadir!")
+                              }
+                            >
+                              <Text
+                                style={{
+                                  color: "#FFF",
+                                  fontWeight: "bold",
+                                  fontSize: 12,
+                                }}
+                              >
+                                + Gaji Dasar
+                              </Text>
+                            </TouchableOpacity>
+                          </View>
                         </View>
 
                         {/* Compact Date Range Selectors */}
@@ -1593,17 +1710,18 @@ export default function ManageScreen() {
                           </Text>
                         }
                         renderItem={({ item: tx }) => (
-                          <TouchableOpacity
-                            style={styles.listItem}
-                            onPress={() => setSelectedTx(tx)}
-                          >
+                          <View style={styles.listItem}>
                             <View style={{ flex: 1 }}>
-                              <Text style={styles.itemTitle}>
-                                {tx.trx_code}
-                              </Text>
-                              <Text style={styles.itemSubtitle}>
-                                {tx.dateStr} • Pukul {tx.time}
-                              </Text>
+                              <TouchableOpacity
+                                onPress={() => setSelectedTx(tx)}
+                              >
+                                <Text style={styles.itemTitle}>
+                                  {tx.trx_code}
+                                </Text>
+                                <Text style={styles.itemSubtitle}>
+                                  {tx.dateStr} • Pukul {tx.time}
+                                </Text>
+                              </TouchableOpacity>
 
                               <View
                                 style={{
@@ -1631,33 +1749,112 @@ export default function ManageScreen() {
                                     const finalValue =
                                       base * cartItem.quantity - discount;
 
+                                    // Unique item key across transactions
+                                    const itemKey = `${tx.id}-${cartItem.cartId || idx}`;
+                                    const itemBonusConfig =
+                                      menuBonuses[itemKey];
+
+                                    // Calculate Bonus Amount
+                                    let calculatedBonus = 0;
+                                    if (
+                                      itemBonusConfig &&
+                                      itemBonusConfig.value
+                                    ) {
+                                      const val =
+                                        Number(itemBonusConfig.value) || 0;
+                                      calculatedBonus =
+                                        itemBonusConfig.method === "percent"
+                                          ? Math.round(finalValue * (val / 100))
+                                          : val;
+                                    }
+
                                     return (
-                                      <View key={idx}>
-                                        <Text
-                                          style={{
-                                            color: "#FFF",
-                                            fontSize: 13,
+                                      <View
+                                        key={idx}
+                                        style={styles.itemBonusRowContainer}
+                                      >
+                                        <View style={{ flex: 1 }}>
+                                          <Text
+                                            style={{
+                                              color: "#FFF",
+                                              fontSize: 13,
+                                            }}
+                                          >
+                                            {cartItem.quantity}x {cartItem.name}
+                                          </Text>
+
+                                          <Text
+                                            style={{
+                                              color: "#34C759",
+                                              fontSize: 12,
+                                              fontWeight: "bold",
+                                              marginTop: 2,
+                                            }}
+                                          >
+                                            Nilai Menu: Rp{" "}
+                                            {finalValue.toLocaleString("id-ID")}
+                                          </Text>
+
+                                          {/* Dynamic Bonus Display */}
+                                          {calculatedBonus > 0 && (
+                                            <Text
+                                              style={{
+                                                color: "#FF9F0A",
+                                                fontSize: 12,
+                                                fontWeight: "bold",
+                                                marginTop: 2,
+                                              }}
+                                            >
+                                              Bonus Staff: Rp{" "}
+                                              {calculatedBonus.toLocaleString(
+                                                "id-ID",
+                                              )}
+                                              {itemBonusConfig.method ===
+                                              "percent"
+                                                ? ` (${itemBonusConfig.value}%)`
+                                                : ""}
+                                            </Text>
+                                          )}
+                                        </View>
+
+                                        {/* + Bonus Button on the Right */}
+                                        <TouchableOpacity
+                                          style={[
+                                            styles.addBonusItemBtn,
+                                            calculatedBonus > 0 &&
+                                              styles.addBonusItemBtnActive,
+                                          ]}
+                                          onPress={() => {
+                                            setSelectedBonusItem({
+                                              key: itemKey,
+                                              name: cartItem.name,
+                                              quantity: cartItem.quantity,
+                                              finalValue: finalValue,
+                                            });
+                                            setBonusMethod(
+                                              itemBonusConfig?.method ||
+                                                "percent",
+                                            );
+                                            setBonusValueInput(
+                                              itemBonusConfig?.value || "",
+                                            );
                                           }}
                                         >
-                                          {cartItem.quantity}x {cartItem.name}
-                                        </Text>
-                                        <Text
-                                          style={{
-                                            color: "#34C759",
-                                            fontSize: 12,
-                                            fontWeight: "bold",
-                                          }}
-                                        >
-                                          Nilai Menu: Rp{" "}
-                                          {finalValue.toLocaleString("id-ID")}
-                                        </Text>
+                                          <Text
+                                            style={styles.addBonusItemBtnText}
+                                          >
+                                            {calculatedBonus > 0
+                                              ? "Edit Bonus"
+                                              : "+ Bonus"}
+                                          </Text>
+                                        </TouchableOpacity>
                                       </View>
                                     );
                                   },
                                 )}
                               </View>
                             </View>
-                          </TouchableOpacity>
+                          </View>
                         )}
                       />
                     </View>
@@ -2393,7 +2590,7 @@ export default function ManageScreen() {
               </Text>
 
               {/* Map through parsedCart to show EVERYTHING in the order */}
-              {selectedTx?.parsedCart.map((cartItem: any, index: number) => {
+              {selectedTx?.parsedCart?.map((cartItem: any, index: number) => {
                 const addOnsTotal =
                   cartItem.selectedAddOns?.reduce(
                     (sum: number, addon: any) => sum + addon.price,
@@ -2603,6 +2800,249 @@ export default function ManageScreen() {
             </TouchableOpacity>
           </View>
         </View>
+      </Modal>
+      {/* BONUS INPUT MODAL */}
+      <Modal
+        visible={showBonusModal}
+        animationType="fade"
+        transparent={true}
+        onRequestClose={() => setShowBonusModal(false)}
+      >
+        <KeyboardAvoidingView
+          behavior={Platform.OS === "ios" ? "padding" : "height"}
+          style={{ flex: 1, justifyContent: "center" }}
+        >
+          <SafeAreaView style={styles.payrollModalOverlay}>
+            <View style={styles.bonusModalContainer}>
+              <Text style={styles.bonusModalTitle}>Input Bonus Staff</Text>
+
+              <View style={styles.bonusStatsRow}>
+                <View style={styles.bonusStatBox}>
+                  <Text style={styles.bonusStatLabel}>Total Ekstra</Text>
+                  <Text style={[styles.bonusStatValue, { color: "#34C759" }]}>
+                    {Math.floor(attendanceStats.extraMins / 60)} Jam{" "}
+                    {attendanceStats.extraMins % 60} Min
+                  </Text>
+                </View>
+                <View style={styles.bonusStatBox}>
+                  <Text style={styles.bonusStatLabel}>Total Telat</Text>
+                  <Text style={[styles.bonusStatValue, { color: "#FF453A" }]}>
+                    {Math.floor(attendanceStats.penaltyMins / 60)} Jam{" "}
+                    {attendanceStats.penaltyMins % 60} Min
+                  </Text>
+                </View>
+              </View>
+
+              <Text style={styles.bonusInputLabel}>
+                NOMINAL BONUS / POTONGAN (Rp)
+              </Text>
+              <TextInput
+                style={styles.bonusInput}
+                placeholder="e.g. 50000 (Gunakan - untuk potongan)"
+                placeholderTextColor="#8E8E93"
+                keyboardType="numbers-and-punctuation"
+                value={customBonusAmount}
+                onChangeText={(text) => {
+                  const cleanText = text
+                    .replace(/[^0-9-]/g, "")
+                    .replace(/(?!^)-/g, "");
+                  setCustomBonusAmount(cleanText);
+                }}
+              />
+
+              <View style={{ flexDirection: "row", gap: 10 }}>
+                <TouchableOpacity
+                  style={[styles.closeBtnPill, { flex: 1, borderRadius: 8 }]}
+                  onPress={() => setShowBonusModal(false)}
+                >
+                  <Text style={styles.textWhiteBold}>Batal</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[
+                    styles.closeBtnPill,
+                    { flex: 1, borderRadius: 8, backgroundColor: "#0A84FF" },
+                  ]}
+                  onPress={() => {
+                    alert(
+                      `Bonus Rp ${customBonusAmount} siap ditambahkan ke total gaji!`,
+                    );
+                    setShowBonusModal(false);
+                    setCustomBonusAmount("");
+                  }}
+                >
+                  <Text style={styles.textWhiteBold}>Simpan</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </SafeAreaView>
+        </KeyboardAvoidingView>
+      </Modal>
+      {/* BONUS MODAL */}
+      <Modal
+        visible={!!selectedBonusItem}
+        animationType="fade"
+        transparent={true}
+        onRequestClose={() => setSelectedBonusItem(null)}
+      >
+        <KeyboardAvoidingView
+          behavior={Platform.OS === "ios" ? "padding" : "height"}
+          style={{ flex: 1 }}
+        >
+          <SafeAreaView
+            style={[
+              styles.payrollModalOverlay,
+              { flex: 1, justifyContent: "center" },
+            ]}
+          >
+            <View style={styles.bonusModalContainer}>
+              <Text style={styles.bonusModalTitle}>Hitung Bonus Menu</Text>
+
+              {/* Item Info Summary */}
+              <View style={styles.bonusItemSummaryBox}>
+                <Text
+                  style={{ color: "#FFF", fontSize: 14, fontWeight: "bold" }}
+                >
+                  {selectedBonusItem?.quantity}x {selectedBonusItem?.name}
+                </Text>
+                <Text
+                  style={{
+                    color: "#34C759",
+                    fontSize: 13,
+                    fontWeight: "bold",
+                    marginTop: 4,
+                  }}
+                >
+                  Nilai Menu: Rp{" "}
+                  {selectedBonusItem?.finalValue?.toLocaleString("id-ID")}
+                </Text>
+              </View>
+
+              {/* Method Selector (Persentase vs Nominal) */}
+              <Text style={styles.bonusInputLabel}>METODE PERHITUNGAN</Text>
+              <View style={styles.methodSelectorRow}>
+                <TouchableOpacity
+                  style={[
+                    styles.methodBtn,
+                    bonusMethod === "percent" && styles.methodBtnActive,
+                  ]}
+                  onPress={() => setBonusMethod("percent")}
+                >
+                  <Text
+                    style={
+                      bonusMethod === "percent"
+                        ? styles.textWhiteBold
+                        : styles.textGray
+                    }
+                  >
+                    Persentase (%)
+                  </Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={[
+                    styles.methodBtn,
+                    bonusMethod === "nominal" && styles.methodBtnActive,
+                  ]}
+                  onPress={() => setBonusMethod("nominal")}
+                >
+                  <Text
+                    style={
+                      bonusMethod === "nominal"
+                        ? styles.textWhiteBold
+                        : styles.textGray
+                    }
+                  >
+                    Nominal (Rp)
+                  </Text>
+                </TouchableOpacity>
+              </View>
+
+              {/* Value Input Box */}
+              <Text style={styles.bonusInputLabel}>
+                {bonusMethod === "percent"
+                  ? "PERSENTASE BONUS (%)"
+                  : "NOMINAL BONUS (Rp)"}
+              </Text>
+              <TextInput
+                style={styles.bonusInput}
+                placeholder={
+                  bonusMethod === "percent" ? "e.g. 10" : "e.g. 15000"
+                }
+                placeholderTextColor="#8E8E93"
+                keyboardType="numeric"
+                value={bonusValueInput}
+                onChangeText={(text) => {
+                  // Number only filter
+                  const cleanText = text.replace(/[^0-9]/g, "");
+                  setBonusValueInput(cleanText);
+                }}
+              />
+
+              {/* Live Preview Result */}
+              {selectedBonusItem && bonusValueInput.length > 0 && (
+                <View style={styles.liveBonusPreviewBox}>
+                  <Text
+                    style={{
+                      color: "#8E8E93",
+                      fontSize: 11,
+                      fontWeight: "bold",
+                    }}
+                  >
+                    HASIL BONUS:
+                  </Text>
+                  <Text
+                    style={{
+                      color: "#FF9F0A",
+                      fontSize: 16,
+                      fontWeight: "bold",
+                      marginTop: 2,
+                    }}
+                  >
+                    Rp{" "}
+                    {(bonusMethod === "percent"
+                      ? Math.round(
+                          selectedBonusItem.finalValue *
+                            ((Number(bonusValueInput) || 0) / 100),
+                        )
+                      : Number(bonusValueInput) || 0
+                    ).toLocaleString("id-ID")}
+                  </Text>
+                </View>
+              )}
+
+              {/* Action Buttons */}
+              <View style={{ flexDirection: "row", gap: 10, marginTop: 15 }}>
+                <TouchableOpacity
+                  style={[styles.closeBtnPill, { flex: 1, borderRadius: 8 }]}
+                  onPress={() => setSelectedBonusItem(null)}
+                >
+                  <Text style={styles.textWhiteBold}>Batal</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={[
+                    styles.closeBtnPill,
+                    { flex: 1, borderRadius: 8, backgroundColor: "#0A84FF" },
+                  ]}
+                  onPress={() => {
+                    if (selectedBonusItem) {
+                      setMenuBonuses((prev) => ({
+                        ...prev,
+                        [selectedBonusItem.key]: {
+                          method: bonusMethod,
+                          value: bonusValueInput,
+                        },
+                      }));
+                    }
+                    setSelectedBonusItem(null);
+                  }}
+                >
+                  <Text style={styles.textWhiteBold}>Simpan</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </SafeAreaView>
+        </KeyboardAvoidingView>
       </Modal>
     </SafeAreaView>
   );
@@ -2963,5 +3403,130 @@ const styles = StyleSheet.create({
     paddingVertical: 15,
     paddingHorizontal: 30,
     borderRadius: 30,
+  },
+
+  // Bonus Modal & Stats Styles
+  bonusStatBtn: {
+    paddingVertical: 4,
+    paddingHorizontal: 10,
+    borderRadius: 6,
+    borderWidth: 1,
+    justifyContent: "center",
+  },
+  bonusModalContainer: {
+    backgroundColor: "#1C1C1E",
+    padding: 20,
+    borderRadius: 15,
+    width: "100%",
+    maxWidth: 400,
+    alignSelf: "center",
+  },
+  bonusModalTitle: {
+    color: "#FFF",
+    fontSize: 20,
+    fontWeight: "bold",
+    marginBottom: 20,
+    textAlign: "center",
+  },
+  bonusStatsRow: {
+    flexDirection: "row",
+    gap: 10,
+    marginBottom: 20,
+  },
+  bonusStatBox: {
+    flex: 1,
+    backgroundColor: "#121212",
+    padding: 15,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "#2C2C2E",
+    alignItems: "center",
+  },
+  bonusStatLabel: {
+    color: "#8E8E93",
+    fontSize: 12,
+    fontWeight: "bold",
+    marginBottom: 5,
+  },
+  bonusStatValue: {
+    fontSize: 16,
+    fontWeight: "bold",
+  },
+  bonusInputLabel: {
+    color: "#8E8E93",
+    fontSize: 12,
+    fontWeight: "bold",
+    marginBottom: 10,
+  },
+  bonusInput: {
+    backgroundColor: "#121212",
+    color: "#FFF",
+    padding: 15,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "#0A84FF",
+    fontSize: 16,
+    marginBottom: 25,
+  },
+
+  // Menu Item Bonus Styles
+  itemBonusRowContainer: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingVertical: 4,
+  },
+  addBonusItemBtn: {
+    backgroundColor: "#2C2C2E",
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: "#3A3A3C",
+    marginLeft: 10,
+  },
+  addBonusItemBtnActive: {
+    backgroundColor: "rgba(255, 159, 10, 0.15)",
+    borderColor: "#FF9F0A",
+  },
+  addBonusItemBtnText: {
+    color: "#FFF",
+    fontSize: 11,
+    fontWeight: "bold",
+  },
+  bonusItemSummaryBox: {
+    backgroundColor: "#121212",
+    padding: 12,
+    borderRadius: 8,
+    marginBottom: 20,
+    borderWidth: 1,
+    borderColor: "#2C2C2E",
+  },
+  methodSelectorRow: {
+    flexDirection: "row",
+    gap: 10,
+    marginBottom: 20,
+  },
+  methodBtn: {
+    flex: 1,
+    backgroundColor: "#121212",
+    paddingVertical: 12,
+    alignItems: "center",
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "#2C2C2E",
+  },
+  methodBtnActive: {
+    backgroundColor: "rgba(10, 132, 255, 0.2)",
+    borderColor: "#0A84FF",
+  },
+  liveBonusPreviewBox: {
+    backgroundColor: "#121212",
+    padding: 12,
+    borderRadius: 8,
+    alignItems: "center",
+    marginBottom: 10,
+    borderWidth: 1,
+    borderColor: "#2C2C2E",
   },
 });
