@@ -92,6 +92,13 @@ export const initDB = () => {
                 description TEXT,
                 FOREIGN KEY (employee_id) REFERENCES Employees (id)
             );
+
+            -- TABLE 8: Settings
+            CREATE TABLE IF NOT EXISTS Settings (
+              id INTEGER PRIMARY KEY AUTOINCREMENT,
+              open_time TEXT DEFAULT '09:00',
+              close_time TEXT DEFAULT '20:00'
+            );
             `);
     // Check the current version of the installed database
     const result: any = db.getFirstSync("PRAGMA user_version");

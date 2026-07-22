@@ -24,6 +24,8 @@ import { OWNER_PASSWORD } from "@/utils/pass";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import DateTimePicker from "@react-native-community/datetimepicker";
 
+import { db } from "@/database/db";
+
 export default function SettingsScreen() {
   // Navigation State
   const [activeTab, setActiveTab] = useState<"General" | "Printer">("Printer");
@@ -53,6 +55,32 @@ export default function SettingsScreen() {
   const [inputPassword, setInputPassword] = useState("");
   const [isPasswordVisible, setIsPasswordVisible] = useState(false);
 
+  // Load Operational Hours from DB
+  useEffect(() => {
+    try {
+      const settings: any = db.getFirstSync(
+        "SELECT * FROM Settings WHERE id = 1",
+      );
+      if (settings) {
+        const [openH, openM] = settings.open_time.split(":");
+        const [closeH, closeM] = settings.close_time.split(":");
+
+        const loadedOpen = new Date();
+        loadedOpen.setHours(parseInt(openH), parseInt(openM), 0, 0);
+
+        const loadedClose = new Date();
+        loadedClose.setHours(parseInt(closeH), parseInt(closeM), 0, 0);
+
+        setOpenTime(loadedOpen);
+        setCloseTime(loadedClose);
+        setTempOpenTime(loadedOpen);
+        setTempCloseTime(loadedClose);
+      }
+    } catch (e) {
+      console.error("Failed to load settings:", e);
+    }
+  }, []);
+
   const handleTimeChange = (event: any, selectedTime?: Date) => {
     if (Platform.OS === "android") setActiveTimePicker(null);
     if (selectedTime) {
@@ -63,11 +91,39 @@ export default function SettingsScreen() {
 
   const handleSaveHours = () => {
     if (inputPassword === OWNER_PASSWORD) {
-      setOpenTime(tempOpenTime);
-      setCloseTime(tempCloseTime);
-      setShowPasswordModal(false);
-      setInputPassword("");
-      alert("Jam operasional berhasil disimpan!");
+      const openStr = tempOpenTime.toLocaleTimeString("en-GB", {
+        hour: "2-digit",
+        minute: "2-digit",
+      });
+      const closeStr = tempCloseTime.toLocaleTimeString("en-GB", {
+        hour: "2-digit",
+        minute: "2-digit",
+      });
+
+      try {
+        const existing = db.getFirstSync(
+          "SELECT id FROM Settings WHERE id = 1",
+        );
+        if (existing) {
+          db.runSync(
+            "UPDATE Settings SET open_time = ?, close_time = ? WHERE id = 1",
+            [openStr, closeStr],
+          );
+        } else {
+          db.runSync(
+            "INSERT INTO Settings (id, open_time, close_time) VALUES (1, ?, ?)",
+            [openStr, closeStr],
+          );
+        }
+        setOpenTime(tempOpenTime);
+        setCloseTime(tempCloseTime);
+        setShowPasswordModal(false);
+        setInputPassword("");
+        alert("Jam operasional berhasil disimpan permanen!");
+      } catch (e) {
+        console.error("Error saving hours:", e);
+        alert("Gagal menyimpan ke database.");
+      }
     } else {
       alert("Password salah!");
     }
