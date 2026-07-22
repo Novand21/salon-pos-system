@@ -51,6 +51,9 @@ export default function ManageScreen() {
     dateStr: string;
     currentDate: Date;
     desc: string;
+    type: "start" | "end";
+    existingStart: string;
+    existingEnd: string;
   } | null>(null);
   const [attendanceData, setAttendanceData] = useState<any[]>([]);
 
@@ -108,11 +111,21 @@ export default function ManageScreen() {
         hour12: false,
       });
 
+      const newStart =
+        activeTimePicker.type === "start"
+          ? timeStr
+          : activeTimePicker.existingStart;
+      const newEnd =
+        activeTimePicker.type === "end"
+          ? timeStr
+          : activeTimePicker.existingEnd;
+
       markAttendance(
         activeTimePicker.staffId,
         activeTimePicker.dateStr,
         "Hadir",
-        timeStr,
+        newStart,
+        newEnd,
         activeTimePicker.desc,
       );
     }
@@ -158,7 +171,8 @@ export default function ManageScreen() {
             staffName: staff.name,
             date: dateStr,
             displayDate: displayDate,
-            startTime: record ? record.start_time : "-",
+            startTime: record && record.start_time ? record.start_time : "-",
+            endTime: record && record.end_time ? record.end_time : "-",
             status: record ? record.status : null,
             description: record ? record.description || "" : "",
           });
@@ -170,7 +184,6 @@ export default function ManageScreen() {
       console.error("Error loading attendance:", e);
     }
   }, [attStartDate, attEndDate, staffList]);
-
   // Reload table whenever dates or staff list change
   React.useEffect(() => {
     loadAttendance();
@@ -181,7 +194,8 @@ export default function ManageScreen() {
       employeeId: number,
       dateStr: string,
       status: string,
-      time: string,
+      startTime: string,
+      endTime: string,
       desc: string,
     ) => {
       try {
@@ -190,17 +204,18 @@ export default function ManageScreen() {
           [employeeId, dateStr],
         );
 
-        const startTime = status === "Hadir" ? time : "-";
+        const finalStartTime = status === "Hadir" ? startTime : "-";
+        const finalEndTime = status === "Hadir" ? endTime : "-";
 
         if (existing) {
           db.runSync(
-            "UPDATE Attendance SET status = ?, start_time = ?, description = ? WHERE id = ?",
-            [status, startTime, desc, existing.id],
+            "UPDATE Attendance SET status = ?, start_time = ?, end_time = ?, description = ? WHERE id = ?",
+            [status, finalStartTime, finalEndTime, desc, existing.id],
           );
         } else {
           db.runSync(
-            "INSERT INTO Attendance (employee_id, date, start_time, status, description) VALUES (?, ?, ?, ?, ?)",
-            [employeeId, dateStr, startTime, status, desc],
+            "INSERT INTO Attendance (employee_id, date, start_time, end_time, status, description) VALUES (?, ?, ?, ?, ?, ?)",
+            [employeeId, dateStr, finalStartTime, finalEndTime, status, desc],
           );
         }
         loadAttendance();
@@ -994,6 +1009,11 @@ export default function ManageScreen() {
                             MULAI
                           </Text>
                           <Text
+                            style={[styles.tableHeaderText, styles.colTime]}
+                          >
+                            KELUAR
+                          </Text>
+                          <Text
                             style={[
                               styles.tableHeaderText,
                               styles.colStatus,
@@ -1059,51 +1079,106 @@ export default function ManageScreen() {
                                   {row.displayDate}
                                 </Text>
 
-                                {/* Time Picker */}
-                                <TouchableOpacity
-                                  style={{
-                                    width: 60,
-                                    backgroundColor: "#121212",
-                                    padding: 5,
-                                    borderRadius: 4,
-                                    alignItems: "center",
-                                    justifyContent: "center",
-                                  }}
-                                  onPress={() => {
-                                    let initDate = new Date();
-                                    if (
-                                      row.startTime &&
-                                      row.startTime !== "-"
-                                    ) {
-                                      const [hours, minutes] =
-                                        row.startTime.split(":");
-                                      initDate.setHours(
-                                        parseInt(hours, 10),
-                                        parseInt(minutes, 10),
-                                        0,
-                                        0,
-                                      );
-                                    }
-                                    setActiveTimePicker({
-                                      staffId: row.staffId,
-                                      dateStr: row.date,
-                                      currentDate: initDate,
-                                      desc: row.description || "",
-                                    });
-                                  }}
-                                >
-                                  <Text
+                                {/* Time Picker MULAI */}
+                                <View style={styles.colTime}>
+                                  <TouchableOpacity
                                     style={{
-                                      color:
-                                        row.startTime === "-" ? "#555" : "#FFF",
-                                      fontWeight: "bold",
+                                      width: 55,
+                                      backgroundColor: "#121212",
+                                      padding: 5,
+                                      borderRadius: 4,
+                                      alignItems: "center",
+                                    }}
+                                    onPress={() => {
+                                      let initDate = new Date();
+                                      if (
+                                        row.startTime &&
+                                        row.startTime !== "-"
+                                      ) {
+                                        const [hours, minutes] =
+                                          row.startTime.split(":");
+                                        initDate.setHours(
+                                          parseInt(hours, 10),
+                                          parseInt(minutes, 10),
+                                          0,
+                                          0,
+                                        );
+                                      }
+                                      setActiveTimePicker({
+                                        staffId: row.staffId,
+                                        dateStr: row.date,
+                                        currentDate: initDate,
+                                        desc: row.description || "",
+                                        type: "start",
+                                        existingStart: row.startTime,
+                                        existingEnd: row.endTime,
+                                      });
                                     }}
                                   >
-                                    {row.startTime === "-"
-                                      ? "09:00"
-                                      : row.startTime}
-                                  </Text>
-                                </TouchableOpacity>
+                                    <Text
+                                      style={{
+                                        color:
+                                          row.startTime === "-"
+                                            ? "#555"
+                                            : "#FFF",
+                                        fontWeight: "bold",
+                                      }}
+                                    >
+                                      {row.startTime === "-"
+                                        ? "09:00"
+                                        : row.startTime}
+                                    </Text>
+                                  </TouchableOpacity>
+                                </View>
+
+                                {/* Time Picker KELUAR */}
+                                <View style={styles.colTime}>
+                                  <TouchableOpacity
+                                    style={{
+                                      width: 55,
+                                      backgroundColor: "#121212",
+                                      padding: 5,
+                                      borderRadius: 4,
+                                      alignItems: "center",
+                                    }}
+                                    onPress={() => {
+                                      let initDate = new Date();
+                                      if (row.endTime && row.endTime !== "-") {
+                                        const [hours, minutes] =
+                                          row.endTime.split(":");
+                                        initDate.setHours(
+                                          parseInt(hours, 10),
+                                          parseInt(minutes, 10),
+                                          0,
+                                          0,
+                                        );
+                                      } else {
+                                        initDate.setHours(17, 0, 0, 0); // Suggests 5:00 PM for checkout
+                                      }
+                                      setActiveTimePicker({
+                                        staffId: row.staffId,
+                                        dateStr: row.date,
+                                        currentDate: initDate,
+                                        desc: row.description || "",
+                                        type: "end",
+                                        existingStart: row.startTime,
+                                        existingEnd: row.endTime,
+                                      });
+                                    }}
+                                  >
+                                    <Text
+                                      style={{
+                                        color:
+                                          row.endTime === "-" ? "#555" : "#FFF",
+                                        fontWeight: "bold",
+                                      }}
+                                    >
+                                      {row.endTime === "-"
+                                        ? "17:00"
+                                        : row.endTime}
+                                    </Text>
+                                  </TouchableOpacity>
+                                </View>
 
                                 {/* Status Radio Buttons */}
                                 <View
@@ -1117,11 +1192,10 @@ export default function ManageScreen() {
                                       key={st}
                                       onPress={() => {
                                         let timeToSave = row.startTime;
+                                        let endTimeToSave = row.endTime || "-";
                                         if (
                                           st === "Hadir" &&
-                                          (timeToSave === "-" ||
-                                            timeToSave === "" ||
-                                            !timeToSave)
+                                          (timeToSave === "-" || !timeToSave)
                                         ) {
                                           timeToSave =
                                             new Date().toLocaleTimeString(
@@ -1142,6 +1216,7 @@ export default function ManageScreen() {
                                                   ...item,
                                                   status: st,
                                                   startTime: timeToSave,
+                                                  endTime: endTimeToSave,
                                                 }
                                               : item,
                                           ),
@@ -1152,6 +1227,7 @@ export default function ManageScreen() {
                                           row.date,
                                           st,
                                           timeToSave,
+                                          endTimeToSave,
                                           row.description || "",
                                         );
                                       }}
@@ -1228,6 +1304,7 @@ export default function ManageScreen() {
                                       row.date,
                                       row.status || "Hadir",
                                       row.startTime || "-",
+                                      row.endTime || "-",
                                       e.nativeEvent.text,
                                     );
                                   }}
@@ -2810,10 +2887,10 @@ const styles = StyleSheet.create({
   },
 
   // Table Column Widths
-  colName: { width: 140 },
-  colDate: { width: 100 },
-  colTime: { width: 80 },
-  colStatus: { width: 220 },
+  colName: { width: 130 },
+  colDate: { width: 90 },
+  colTime: { width: 70 },
+  colStatus: { width: 190 },
 
   statusContainer: {
     flexDirection: "row",

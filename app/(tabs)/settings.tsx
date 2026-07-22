@@ -1,11 +1,14 @@
 import React, { useEffect, useState } from "react";
 import {
   ActivityIndicator,
+  KeyboardAvoidingView,
+  Modal,
   PermissionsAndroid,
   Platform,
   ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   TouchableOpacity,
   View,
 } from "react-native";
@@ -17,6 +20,10 @@ import * as FileSystem from "expo-file-system/legacy"; // Using legacy to keep y
 import * as Sharing from "expo-sharing";
 import { connectToPrinter, fetchPairedPrinters } from "../../utils/bluetooth";
 
+import { OWNER_PASSWORD } from "@/utils/pass";
+import { MaterialCommunityIcons } from "@expo/vector-icons";
+import DateTimePicker from "@react-native-community/datetimepicker";
+
 export default function SettingsScreen() {
   // Navigation State
   const [activeTab, setActiveTab] = useState<"General" | "Printer">("Printer");
@@ -26,6 +33,45 @@ export default function SettingsScreen() {
   const [isConnecting, setIsConnecting] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [activeAddress, setActiveAddress] = useState<string | null>(null);
+
+  // Operational Hours State
+  const [openTime, setOpenTime] = useState(
+    new Date(new Date().setHours(9, 0, 0, 0)),
+  );
+  const [closeTime, setCloseTime] = useState(
+    new Date(new Date().setHours(20, 0, 0, 0)),
+  );
+
+  const [tempOpenTime, setTempOpenTime] = useState(openTime);
+  const [tempCloseTime, setTempCloseTime] = useState(closeTime);
+  const [activeTimePicker, setActiveTimePicker] = useState<
+    "open" | "close" | null
+  >(null);
+
+  // Password Modal State
+  const [showPasswordModal, setShowPasswordModal] = useState(false);
+  const [inputPassword, setInputPassword] = useState("");
+  const [isPasswordVisible, setIsPasswordVisible] = useState(false);
+
+  const handleTimeChange = (event: any, selectedTime?: Date) => {
+    if (Platform.OS === "android") setActiveTimePicker(null);
+    if (selectedTime) {
+      if (activeTimePicker === "open") setTempOpenTime(selectedTime);
+      if (activeTimePicker === "close") setTempCloseTime(selectedTime);
+    }
+  };
+
+  const handleSaveHours = () => {
+    if (inputPassword === OWNER_PASSWORD) {
+      setOpenTime(tempOpenTime);
+      setCloseTime(tempCloseTime);
+      setShowPasswordModal(false);
+      setInputPassword("");
+      alert("Jam operasional berhasil disimpan!");
+    } else {
+      alert("Password salah!");
+    }
+  };
 
   useEffect(() => {
     loadPrinters();
@@ -266,6 +312,68 @@ export default function SettingsScreen() {
             style={styles.deviceList}
             showsVerticalScrollIndicator={false}
           >
+            <Text style={styles.sectionTitle}>PENGATURAN OPERASIONAL</Text>
+            <View style={[styles.placeholderCard, { marginBottom: 20 }]}>
+              <Text style={styles.textWhiteBold}>
+                Jam Operasional Salon {"\n"}
+              </Text>
+
+              <View style={styles.timePickerRow}>
+                <TouchableOpacity
+                  style={[
+                    styles.dbActionBtn,
+                    styles.timePickerBtn,
+                    styles.timePickerBtnLeft,
+                  ]}
+                  onPress={() => setActiveTimePicker("open")}
+                >
+                  <Text style={styles.textGray}>Jam Buka</Text>
+                  <Text style={styles.textWhiteBold}>
+                    {tempOpenTime.toLocaleTimeString("en-GB", {
+                      hour: "2-digit",
+                      minute: "2-digit",
+                    })}
+                  </Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={[
+                    styles.dbActionBtn,
+                    styles.timePickerBtn,
+                    styles.timePickerBtnRight,
+                  ]}
+                  onPress={() => setActiveTimePicker("close")}
+                >
+                  <Text style={styles.textGray}>Jam Tutup</Text>
+                  <Text style={styles.textWhiteBold}>
+                    {tempCloseTime.toLocaleTimeString("en-GB", {
+                      hour: "2-digit",
+                      minute: "2-digit",
+                    })}
+                  </Text>
+                </TouchableOpacity>
+              </View>
+
+              <TouchableOpacity
+                style={[styles.dbActionBtn, { backgroundColor: "#34C759" }]}
+                onPress={() => setShowPasswordModal(true)}
+              >
+                <Text style={styles.textWhiteBold}>Simpan</Text>
+              </TouchableOpacity>
+            </View>
+
+            {activeTimePicker && (
+              <DateTimePicker
+                value={
+                  activeTimePicker === "open" ? tempOpenTime : tempCloseTime
+                }
+                mode="time"
+                is24Hour={true}
+                display={Platform.OS === "ios" ? "spinner" : "clock"}
+                onChange={handleTimeChange}
+              />
+            )}
+
             <Text style={styles.sectionTitle}>MANAJEMEN DATA</Text>
 
             <View style={styles.placeholderCard}>
@@ -380,6 +488,64 @@ export default function SettingsScreen() {
           </View>
         )}
       </View>
+      {/* PASSWORD MODAL */}
+      <Modal
+        visible={showPasswordModal}
+        animationType="fade"
+        transparent={true}
+        onRequestClose={() => setShowPasswordModal(false)}
+      >
+        <SafeAreaView style={styles.modalOverlay}>
+          <KeyboardAvoidingView
+            behavior={Platform.OS === "ios" ? "padding" : "height"}
+            style={{ flex: 1, justifyContent: "center" }}
+          >
+            <View style={styles.passwordModalContainer}>
+              <Text style={styles.passwordModalTitle}>Izin Owner</Text>
+              <Text style={styles.passwordModalSubtitle}>
+                Masukkan password untuk mengubah jam operasional.
+              </Text>
+
+              <View style={styles.passwordInputContainer}>
+                <TextInput
+                  style={styles.passwordInputInner}
+                  placeholder="Password..."
+                  placeholderTextColor="#8E8E93"
+                  secureTextEntry={!isPasswordVisible}
+                  value={inputPassword}
+                  onChangeText={setInputPassword}
+                  autoFocus={true}
+                />
+                <TouchableOpacity
+                  onPress={() => setIsPasswordVisible(!isPasswordVisible)}
+                  style={{ padding: 10 }}
+                >
+                  <MaterialCommunityIcons
+                    name={isPasswordVisible ? "eye" : "eye-off"}
+                    size={20}
+                    color="#8E8E93"
+                  />
+                </TouchableOpacity>
+              </View>
+
+              <View style={styles.passwordBtnRow}>
+                <TouchableOpacity
+                  style={[styles.dbActionBtn, styles.passwordCancelBtn]}
+                  onPress={() => setShowPasswordModal(false)}
+                >
+                  <Text style={styles.textWhiteBold}>Batal</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.dbActionBtn, styles.passwordSaveBtn]}
+                  onPress={handleSaveHours}
+                >
+                  <Text style={styles.textWhiteBold}>Simpan</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </KeyboardAvoidingView>
+        </SafeAreaView>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -450,4 +616,50 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     alignItems: "center",
   },
+
+  // Operational Hours & Password Modal Styles
+  timePickerRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    marginBottom: 15,
+  },
+  timePickerBtn: { flex: 1, backgroundColor: "#2C2C2E" },
+  timePickerBtnLeft: { marginRight: 5 },
+  timePickerBtnRight: { marginLeft: 5 },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.8)",
+    justifyContent: "center",
+    padding: 20,
+  },
+  passwordModalContainer: {
+    backgroundColor: "#1C1C1E",
+    padding: 20,
+    borderRadius: 15,
+    width: "100%",
+    maxWidth: 400,
+    alignSelf: "center",
+  },
+  passwordModalTitle: {
+    color: "#FFF",
+    fontSize: 20,
+    fontWeight: "bold",
+    marginBottom: 10,
+  },
+  passwordModalSubtitle: { color: "#8E8E93", fontSize: 14, marginBottom: 20 },
+  passwordInputContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#121212",
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "#0A84FF",
+    marginBottom: 25,
+    paddingHorizontal: 15,
+    height: 55,
+  },
+  passwordInputInner: { flex: 1, color: "#FFF", height: "100%", fontSize: 16 },
+  passwordBtnRow: { flexDirection: "row", gap: 10 },
+  passwordCancelBtn: { flex: 1, backgroundColor: "#2C2C2E" },
+  passwordSaveBtn: { flex: 1, backgroundColor: "#0A84FF" },
 });

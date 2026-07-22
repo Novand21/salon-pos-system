@@ -80,12 +80,14 @@ export const initDB = () => {
                 description TEXT NOT NULL,
                 amount INTEGER NOT NULL
             );
+
             -- TABLE 7: Attendance
             CREATE TABLE IF NOT EXISTS Attendance (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 employee_id INTEGER,
                 date TEXT,
                 start_time TEXT,
+                end_time TEXT,
                 status TEXT,
                 description TEXT,
                 FOREIGN KEY (employee_id) REFERENCES Employees (id)
