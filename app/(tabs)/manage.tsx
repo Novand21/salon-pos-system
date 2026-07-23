@@ -715,8 +715,12 @@ export default function ManageScreen() {
         penaltyMins: totalPenaltyMins,
       });
 
+      // Fetch MENU BONUSES (Linked to Transactions in the Date Range)
       const dbMenuBonuses = db.getAllSync(
-        "SELECT * FROM Staff_Bonuses WHERE employee_id = ? AND transaction_id IS NOT NULL AND timestamp >= ? AND timestamp <= ?",
+        `SELECT sb.* FROM Staff_Bonuses sb
+         JOIN Transactions t ON sb.transaction_id = t.id
+         WHERE sb.employee_id = ? AND sb.transaction_id IS NOT NULL 
+         AND t.timestamp >= ? AND t.timestamp <= ?`,
         [
           selectedPayrollStaff.id,
           startOfDay.toISOString(),
@@ -735,16 +739,16 @@ export default function ManageScreen() {
       setMenuBonuses(loadedBonuses);
       setMenuBonusesTotal(sumMenu);
 
-      // Fetch EKSTRA / TELAT Manual Bonuses (Where transaction_id is NULL)
+      // Fetch EKSTRA / TELAT Manual Bonuses (Single value for the period)
       const dbManual: any = db.getFirstSync(
-        "SELECT SUM(amount) as total FROM Staff_Bonuses WHERE employee_id = ? AND transaction_id IS NULL AND timestamp >= ? AND timestamp <= ?",
+        "SELECT id, amount FROM Staff_Bonuses WHERE employee_id = ? AND transaction_id IS NULL AND timestamp >= ? AND timestamp <= ? ORDER BY timestamp DESC LIMIT 1",
         [
           selectedPayrollStaff.id,
           startOfDay.toISOString(),
           endOfDay.toISOString(),
         ],
       );
-      setManualBonuses(dbManual?.total || 0);
+      setManualBonuses(dbManual?.amount || 0);
       setCurrentManualBonusId(dbManual?.id || null);
 
       // Fetch base salary
@@ -2974,6 +2978,13 @@ export default function ManageScreen() {
 
               <View style={{ flexDirection: "row", gap: 10 }}>
                 <TouchableOpacity
+                  style={[styles.closeBtnPill, { flex: 1, borderRadius: 8 }]}
+                  onPress={() => setShowBonusModal(false)}
+                >
+                  <Text style={styles.textWhiteBold}>Batal</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
                   style={[
                     styles.closeBtnPill,
                     { flex: 1, borderRadius: 8, backgroundColor: "#0A84FF" },
@@ -2988,10 +2999,19 @@ export default function ManageScreen() {
                       const timestamp = new Date().toISOString();
                       const desc = `Bonus/Potongan Staff (Periode: ${payrollStartDate.toLocaleDateString("id-ID")} - ${payrollEndDate.toLocaleDateString("id-ID")})`;
 
-                      db.runSync(
-                        "INSERT INTO Staff_Bonuses (employee_id, timestamp, amount, description) VALUES (?, ?, ?, ?)",
-                        [selectedPayrollStaff.id, timestamp, amount, desc],
-                      );
+                      if (currentManualBonusId) {
+                        // UPDATE the existing record
+                        db.runSync(
+                          "UPDATE Staff_Bonuses SET amount = ?, timestamp = ? WHERE id = ?",
+                          [amount, timestamp, currentManualBonusId],
+                        );
+                      } else {
+                        // INSERT a brand new record
+                        db.runSync(
+                          "INSERT INTO Staff_Bonuses (employee_id, timestamp, amount, description) VALUES (?, ?, ?, ?)",
+                          [selectedPayrollStaff.id, timestamp, amount, desc],
+                        );
+                      }
 
                       alert(
                         `Data Rp ${amount.toLocaleString("id-ID")} berhasil disimpan!`,
