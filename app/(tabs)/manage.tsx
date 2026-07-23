@@ -90,6 +90,8 @@ export default function ManageScreen() {
     extraMins: 0,
     penaltyMins: 0,
   });
+
+  // for staff bonuses
   const [showBonusModal, setShowBonusModal] = useState(false);
   const [customBonusAmount, setCustomBonusAmount] = useState("");
   const [menuBonuses, setMenuBonuses] = useState<{
@@ -111,11 +113,22 @@ export default function ManageScreen() {
   const [currentManualBonusId, setCurrentManualBonusId] = useState<
     number | null
   >(null);
+  const [manualBonuses, setManualBonuses] = useState(0);
 
+  // base salary states
   const [showBaseSalaryModal, setShowBaseSalaryModal] = useState(false);
   const [baseSalaryInput, setBaseSalaryInput] = useState("");
   const [baseSalary, setBaseSalary] = useState(0);
-  const [manualBonuses, setManualBonuses] = useState(0);
+
+  const [totalKasbon, setTotalKasbon] = useState(0);
+  const [linkedExpensesTotal, setLinkedExpensesTotal] = useState(0);
+
+  const [payrollSubTab, setPayrollSubTab] = useState<"Bonus" | "Lainnya">(
+    "Bonus",
+  );
+  const [staffOtherTransactions, setStaffOtherTransactions] = useState<any[]>(
+    [],
+  );
 
   const handleAttDateChange = (event: any, date?: Date) => {
     if (Platform.OS === "android") setActiveAttPicker(null);
@@ -741,7 +754,7 @@ export default function ManageScreen() {
 
       // Fetch EKSTRA / TELAT Manual Bonuses (Single value for the period)
       const dbManual: any = db.getFirstSync(
-        "SELECT id, amount FROM Staff_Bonuses WHERE employee_id = ? AND transaction_id IS NULL AND timestamp >= ? AND timestamp <= ? ORDER BY timestamp DESC LIMIT 1",
+        "SELECT id, amount FROM Staff_Bonuses WHERE employee_id = ? AND transaction_id IS NULL AND method IS NULL AND timestamp >= ? AND timestamp <= ? ORDER BY timestamp DESC LIMIT 1",
         [
           selectedPayrollStaff.id,
           startOfDay.toISOString(),
@@ -750,6 +763,61 @@ export default function ManageScreen() {
       );
       setManualBonuses(dbManual?.amount || 0);
       setCurrentManualBonusId(dbManual?.id || null);
+
+      // Fetch KASBON
+      const dbKasbon: any = db.getFirstSync(
+        "SELECT SUM(amount) as total FROM Staff_Bonuses WHERE employee_id = ? AND transaction_id IS NULL AND method = 'Kasbon' AND timestamp >= ? AND timestamp <= ?",
+        [
+          selectedPayrollStaff.id,
+          startOfDay.toISOString(),
+          endOfDay.toISOString(),
+        ],
+      );
+      setTotalKasbon(dbKasbon?.total || 0);
+
+      // Fetch LINKED RECAP EXPENSES (Uang Makan, Beli Bahan, etc.)
+      const dbLinkedExpenses: any = db.getFirstSync(
+        "SELECT SUM(amount) as total FROM Staff_Bonuses WHERE employee_id = ? AND transaction_id IS NULL AND method IS NOT NULL AND method != 'Kasbon' AND timestamp >= ? AND timestamp <= ?",
+        [
+          selectedPayrollStaff.id,
+          startOfDay.toISOString(),
+          endOfDay.toISOString(),
+        ],
+      );
+      setLinkedExpensesTotal(dbLinkedExpenses?.total || 0);
+
+      // This fetches Kasbon, Uang Makan, Beli Bahan, and Ekstra/Telat for this specific staff
+      const dbOtherTx = db.getAllSync(
+        "SELECT * FROM Staff_Bonuses WHERE employee_id = ? AND transaction_id IS NULL AND timestamp >= ? AND timestamp <= ? ORDER BY timestamp DESC",
+        [
+          selectedPayrollStaff.id,
+          startOfDay.toISOString(),
+          endOfDay.toISOString(),
+        ],
+      );
+
+      const formattedOther = dbOtherTx.map((b: any) => {
+        const txDate = new Date(b.timestamp);
+        return {
+          id: `other-${b.id}`,
+          type: "expense",
+          title: b.method || "Manual (Ekstra / Telat)",
+          dateStr: txDate.toLocaleDateString("id-ID", {
+            day: "numeric",
+            month: "short",
+            year: "numeric",
+          }),
+          time: txDate.toLocaleTimeString("en-GB", {
+            hour: "2-digit",
+            minute: "2-digit",
+            hour12: false,
+          }),
+          amount: b.amount,
+          details: b.description,
+          timestamp: b.timestamp,
+        };
+      });
+      setStaffOtherTransactions(formattedOther);
 
       // Fetch base salary
       setBaseSalary(selectedPayrollStaff.base_salary || 0);
@@ -763,6 +831,12 @@ export default function ManageScreen() {
   }, [loadPayrollData]);
 
   const sortedPayrollTransactions = [...payrollTransactions].sort((a, b) => {
+    return payrollSortMode === "desc"
+      ? new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
+      : new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime();
+  });
+
+  const sortedOtherTransactions = [...staffOtherTransactions].sort((a, b) => {
     return payrollSortMode === "desc"
       ? new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
       : new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime();
@@ -800,7 +874,12 @@ export default function ManageScreen() {
   );
 
   // GRAND TOTAL CALCULATION
-  const grandTotalGaji = baseSalary + menuBonusesTotal + manualBonuses;
+  const grandTotalGaji =
+    baseSalary +
+    menuBonusesTotal +
+    manualBonuses -
+    totalKasbon +
+    linkedExpensesTotal;
 
   return (
     <SafeAreaView style={styles.container} edges={["top", "left", "right"]}>
@@ -1545,7 +1624,14 @@ export default function ManageScreen() {
                             </Text>
                           </View>
 
-                          <View style={{ flexDirection: "row", gap: 10 }}>
+                          <View
+                            style={{
+                              flexDirection: "row",
+                              gap: 6,
+                              flexWrap: "wrap",
+                              justifyContent: "flex-end",
+                            }}
+                          >
                             <TouchableOpacity
                               style={[
                                 styles.bonusStatBtn,
@@ -1558,6 +1644,8 @@ export default function ManageScreen() {
                                     attendanceStats.extraMins > 0
                                       ? "#34C759"
                                       : "#2C2C2E",
+                                  paddingHorizontal: 8,
+                                  paddingVertical: 6, // Resized
                                 },
                               ]}
                               onPress={() => {
@@ -1572,7 +1660,7 @@ export default function ManageScreen() {
                               <Text
                                 style={{
                                   color: "#8E8E93",
-                                  fontSize: 10,
+                                  fontSize: 9,
                                   fontWeight: "bold",
                                 }}
                               >
@@ -1581,7 +1669,7 @@ export default function ManageScreen() {
                               <Text
                                 style={{
                                   color: "#34C759",
-                                  fontSize: 12,
+                                  fontSize: 11,
                                   fontWeight: "bold",
                                 }}
                               >
@@ -1599,8 +1687,8 @@ export default function ManageScreen() {
                             <TouchableOpacity
                               style={{
                                 backgroundColor: "#2C2C2E",
-                                paddingVertical: 8,
-                                paddingHorizontal: 12,
+                                paddingVertical: 6,
+                                paddingHorizontal: 10,
                                 borderRadius: 6,
                                 justifyContent: "center",
                               }}
@@ -1613,7 +1701,7 @@ export default function ManageScreen() {
                                 style={{
                                   color: "#FFF",
                                   fontWeight: "bold",
-                                  fontSize: 12,
+                                  fontSize: 11,
                                 }}
                               >
                                 + Gaji Dasar
@@ -1681,6 +1769,78 @@ export default function ManageScreen() {
                             />
                           </TouchableOpacity>
                         </View>
+
+                        <View
+                          style={{
+                            flexDirection: "row",
+                            gap: 8,
+                            paddingTop: 15,
+                            justifyContent: "flex-start",
+                          }}
+                        >
+                          <TouchableOpacity
+                            style={{
+                              paddingVertical: 6,
+                              paddingHorizontal: 12,
+                              alignItems: "center",
+                              borderRadius: 12,
+                              backgroundColor:
+                                payrollSubTab === "Bonus"
+                                  ? "#0A84FF"
+                                  : "#1C1C1E",
+                              borderWidth: 1,
+                              borderColor:
+                                payrollSubTab === "Bonus"
+                                  ? "#0A84FF"
+                                  : "#2C2C2E",
+                            }}
+                            onPress={() => setPayrollSubTab("Bonus")}
+                          >
+                            <Text
+                              style={{
+                                color:
+                                  payrollSubTab === "Bonus"
+                                    ? "#FFF"
+                                    : "#8E8E93",
+                                fontSize: 11,
+                                fontWeight: "bold",
+                              }}
+                            >
+                              Riwayat Pekerjaan
+                            </Text>
+                          </TouchableOpacity>
+                          <TouchableOpacity
+                            style={{
+                              paddingVertical: 6,
+                              paddingHorizontal: 12,
+                              alignItems: "center",
+                              borderRadius: 12,
+                              backgroundColor:
+                                payrollSubTab === "Lainnya"
+                                  ? "#0A84FF"
+                                  : "#1C1C1E",
+                              borderWidth: 1,
+                              borderColor:
+                                payrollSubTab === "Lainnya"
+                                  ? "#0A84FF"
+                                  : "#2C2C2E",
+                            }}
+                            onPress={() => setPayrollSubTab("Lainnya")}
+                          >
+                            <Text
+                              style={{
+                                color:
+                                  payrollSubTab === "Lainnya"
+                                    ? "#FFF"
+                                    : "#8E8E93",
+                                fontSize: 11,
+                                fontWeight: "bold",
+                              }}
+                            >
+                              Lain-Lain
+                            </Text>
+                          </TouchableOpacity>
+                        </View>
                       </View>
 
                       {/* Native Pickers */}
@@ -1698,257 +1858,403 @@ export default function ManageScreen() {
                       )}
 
                       {/* Filtered Transactions List */}
-                      <FlatList
-                        contentContainerStyle={styles.listContainer}
-                        data={sortedPayrollTransactions}
-                        keyExtractor={(tx) => `ptrx-${tx.id}`}
-                        ListHeaderComponent={
-                          <View style={{ marginBottom: 15 }}>
+                      {payrollSubTab === "Bonus" ? (
+                        <FlatList
+                          contentContainerStyle={styles.listContainer}
+                          data={sortedPayrollTransactions}
+                          keyExtractor={(tx) => `ptrx-${tx.id}`}
+                          ListHeaderComponent={
+                            <View style={{ marginBottom: 15 }}>
+                              <Text
+                                style={{
+                                  color: "#8E8E93",
+                                  fontSize: 12,
+                                  fontWeight: "bold",
+                                  marginBottom: 10,
+                                }}
+                              >
+                                RIWAYAT PEKERJAAN
+                              </Text>
+                              <ScrollView
+                                horizontal
+                                showsHorizontalScrollIndicator={false}
+                                style={{ flexDirection: "row" }}
+                              >
+                                {[
+                                  { id: "desc", label: "↓ Terbaru" },
+                                  { id: "asc", label: "↑ Terlama" },
+                                ].map((sort) => (
+                                  <TouchableOpacity
+                                    key={sort.id}
+                                    onPress={() =>
+                                      setPayrollSortMode(sort.id as any)
+                                    }
+                                    style={{
+                                      paddingHorizontal: 12,
+                                      paddingVertical: 6,
+                                      borderRadius: 15,
+                                      marginRight: 8,
+                                      borderWidth: 1,
+                                      borderColor:
+                                        payrollSortMode === sort.id
+                                          ? "#0A84FF"
+                                          : "#2C2C2E",
+                                      backgroundColor:
+                                        payrollSortMode === sort.id
+                                          ? "rgba(10,132,255,0.2)"
+                                          : "#1C1C1E",
+                                    }}
+                                  >
+                                    <Text
+                                      style={{
+                                        color:
+                                          payrollSortMode === sort.id
+                                            ? "#0A84FF"
+                                            : "#8E8E93",
+                                        fontSize: 12,
+                                        fontWeight: "bold",
+                                      }}
+                                    >
+                                      {sort.label}
+                                    </Text>
+                                  </TouchableOpacity>
+                                ))}
+                              </ScrollView>
+                            </View>
+                          }
+                          ListEmptyComponent={
                             <Text
                               style={{
                                 color: "#8E8E93",
-                                fontSize: 12,
-                                fontWeight: "bold",
-                                marginBottom: 10,
+                                textAlign: "center",
+                                marginTop: 20,
                               }}
                             >
-                              RIWAYAT PEKERJAAN
+                              Belum ada pekerjaan di rentang tanggal ini.
                             </Text>
-                            <ScrollView
-                              horizontal
-                              showsHorizontalScrollIndicator={false}
-                              style={{ flexDirection: "row" }}
-                            >
-                              {[
-                                { id: "desc", label: "↓ Terbaru" },
-                                { id: "asc", label: "↑ Terlama" },
-                              ].map((sort) => (
+                          }
+                          renderItem={({ item: tx }) => (
+                            <View style={styles.listItem}>
+                              {/* ... (Keep all your existing complex item rendering logic here exactly as it is) ... */}
+                              <View style={{ flex: 1 }}>
                                 <TouchableOpacity
-                                  key={sort.id}
-                                  onPress={() =>
-                                    setPayrollSortMode(sort.id as any)
-                                  }
-                                  style={{
-                                    paddingHorizontal: 12,
-                                    paddingVertical: 6,
-                                    borderRadius: 15,
-                                    marginRight: 8,
-                                    borderWidth: 1,
-                                    borderColor:
-                                      payrollSortMode === sort.id
-                                        ? "#0A84FF"
-                                        : "#2C2C2E",
-                                    backgroundColor:
-                                      payrollSortMode === sort.id
-                                        ? "rgba(10,132,255,0.2)"
-                                        : "#1C1C1E",
-                                  }}
+                                  onPress={() => setSelectedTx(tx)}
                                 >
-                                  <Text
-                                    style={{
-                                      color:
-                                        payrollSortMode === sort.id
-                                          ? "#0A84FF"
-                                          : "#8E8E93",
-                                      fontSize: 12,
-                                      fontWeight: "bold",
-                                    }}
-                                  >
-                                    {sort.label}
+                                  <Text style={styles.itemTitle}>
+                                    {tx.trx_code}
+                                  </Text>
+                                  <Text style={styles.itemSubtitle}>
+                                    {tx.dateStr} • Pukul {tx.time}
                                   </Text>
                                 </TouchableOpacity>
-                              ))}
-                            </ScrollView>
-                          </View>
-                        }
-                        ListEmptyComponent={
-                          <Text
-                            style={{
-                              color: "#8E8E93",
-                              textAlign: "center",
-                              marginTop: 20,
-                            }}
-                          >
-                            Belum ada pekerjaan di rentang tanggal ini.
-                          </Text>
-                        }
-                        renderItem={({ item: tx }) => (
-                          <View style={styles.listItem}>
-                            <View style={{ flex: 1 }}>
-                              <TouchableOpacity
-                                onPress={() => setSelectedTx(tx)}
-                              >
-                                <Text style={styles.itemTitle}>
-                                  {tx.trx_code}
-                                </Text>
-                                <Text style={styles.itemSubtitle}>
-                                  {tx.dateStr} • Pukul {tx.time}
-                                </Text>
-                              </TouchableOpacity>
 
-                              <View
-                                style={{
-                                  marginTop: 10,
-                                  paddingLeft: 10,
-                                  borderLeftWidth: 2,
-                                  borderColor: "#2C2C2E",
-                                  gap: 5,
-                                }}
-                              >
-                                {tx.staffItems.map(
-                                  (cartItem: any, idx: number) => {
-                                    const addOnsTotal =
-                                      cartItem.selectedAddOns?.reduce(
-                                        (sum: number, addon: any) =>
-                                          sum + addon.price,
-                                        0,
-                                      ) || 0;
-                                    const base = cartItem.price + addOnsTotal;
-                                    const discount = Math.round(
-                                      base *
-                                        cartItem.quantity *
-                                        ((cartItem.discountPercent || 0) / 100),
-                                    );
-                                    const finalValue =
-                                      base * cartItem.quantity - discount;
-
-                                    // Unique item key across transactions
-                                    const itemKey = `${tx.id}-${cartItem.cartId || idx}`;
-                                    const itemBonusConfig =
-                                      menuBonuses[itemKey];
-
-                                    // Calculate Bonus Amount
-                                    let calculatedBonus = 0;
-                                    if (
-                                      itemBonusConfig &&
-                                      itemBonusConfig.value
-                                    ) {
-                                      const val =
-                                        Number(itemBonusConfig.value) || 0;
-                                      calculatedBonus =
-                                        itemBonusConfig.method === "percent"
-                                          ? Math.round(finalValue * (val / 100))
-                                          : val;
-                                    }
-
-                                    return (
-                                      <View
-                                        key={idx}
-                                        style={styles.itemBonusRowContainer}
-                                      >
-                                        <View style={{ flex: 1 }}>
-                                          <Text
-                                            style={{
-                                              color: "#FFF",
-                                              fontSize: 13,
-                                            }}
-                                          >
-                                            {cartItem.quantity}x {cartItem.name}
-                                          </Text>
-
-                                          <Text
-                                            style={{
-                                              color: "#34C759",
-                                              fontSize: 12,
-                                              fontWeight: "bold",
-                                              marginTop: 2,
-                                            }}
-                                          >
-                                            Nilai Menu: Rp{" "}
-                                            {finalValue.toLocaleString("id-ID")}
-                                          </Text>
-
-                                          {/* Dynamic Bonus Display */}
-                                          {calculatedBonus > 0 && (
+                                <View
+                                  style={{
+                                    marginTop: 10,
+                                    paddingLeft: 10,
+                                    borderLeftWidth: 2,
+                                    borderColor: "#2C2C2E",
+                                    gap: 5,
+                                  }}
+                                >
+                                  {tx.staffItems.map(
+                                    (cartItem: any, idx: number) => {
+                                      const addOnsTotal =
+                                        cartItem.selectedAddOns?.reduce(
+                                          (sum: number, addon: any) =>
+                                            sum + addon.price,
+                                          0,
+                                        ) || 0;
+                                      const base = cartItem.price + addOnsTotal;
+                                      const discount = Math.round(
+                                        base *
+                                          cartItem.quantity *
+                                          ((cartItem.discountPercent || 0) /
+                                            100),
+                                      );
+                                      const finalValue =
+                                        base * cartItem.quantity - discount;
+                                      const itemKey = `${tx.id}-${cartItem.cartId || idx}`;
+                                      const itemBonusConfig =
+                                        menuBonuses[itemKey];
+                                      let calculatedBonus = 0;
+                                      if (
+                                        itemBonusConfig &&
+                                        itemBonusConfig.value
+                                      ) {
+                                        const val =
+                                          Number(itemBonusConfig.value) || 0;
+                                        calculatedBonus =
+                                          itemBonusConfig.method === "percent"
+                                            ? Math.round(
+                                                finalValue * (val / 100),
+                                              )
+                                            : val;
+                                      }
+                                      return (
+                                        <View
+                                          key={idx}
+                                          style={styles.itemBonusRowContainer}
+                                        >
+                                          <View style={{ flex: 1 }}>
                                             <Text
                                               style={{
-                                                color: "#FF9F0A",
+                                                color: "#FFF",
+                                                fontSize: 13,
+                                              }}
+                                            >
+                                              {cartItem.quantity}x{" "}
+                                              {cartItem.name}
+                                            </Text>
+                                            <Text
+                                              style={{
+                                                color: "#34C759",
                                                 fontSize: 12,
                                                 fontWeight: "bold",
                                                 marginTop: 2,
                                               }}
                                             >
-                                              Bonus Staff: Rp{" "}
-                                              {calculatedBonus.toLocaleString(
+                                              Nilai Menu: Rp{" "}
+                                              {finalValue.toLocaleString(
                                                 "id-ID",
                                               )}
-                                              {itemBonusConfig.method ===
-                                              "percent"
-                                                ? ` (${itemBonusConfig.value}%)`
-                                                : ""}
                                             </Text>
-                                          )}
-                                        </View>
-
-                                        {/* + Bonus Button on the Right */}
-                                        <TouchableOpacity
-                                          style={[
-                                            styles.addBonusItemBtn,
-                                            calculatedBonus > 0 &&
-                                              styles.addBonusItemBtnActive,
-                                          ]}
-                                          onPress={() => {
-                                            setSelectedBonusItem({
-                                              key: itemKey,
-                                              name: cartItem.name,
-                                              quantity: cartItem.quantity,
-                                              finalValue: finalValue,
-                                              txId: tx.id,
-                                              cartId: (
-                                                cartItem.cartId || idx
-                                              ).toString(),
-                                            });
-                                            setBonusMethod(
-                                              itemBonusConfig?.method ||
-                                                "percent",
-                                            );
-                                            setBonusValueInput(
-                                              itemBonusConfig?.value || "",
-                                            );
-                                          }}
-                                        >
-                                          <Text
-                                            style={styles.addBonusItemBtnText}
+                                            {calculatedBonus > 0 && (
+                                              <Text
+                                                style={{
+                                                  color: "#FF9F0A",
+                                                  fontSize: 12,
+                                                  fontWeight: "bold",
+                                                  marginTop: 2,
+                                                }}
+                                              >
+                                                Bonus Staff: Rp{" "}
+                                                {calculatedBonus.toLocaleString(
+                                                  "id-ID",
+                                                )}
+                                                {itemBonusConfig.method ===
+                                                "percent"
+                                                  ? ` (${itemBonusConfig.value}%)`
+                                                  : ""}
+                                              </Text>
+                                            )}
+                                          </View>
+                                          <TouchableOpacity
+                                            style={[
+                                              styles.addBonusItemBtn,
+                                              calculatedBonus > 0 &&
+                                                styles.addBonusItemBtnActive,
+                                            ]}
+                                            onPress={() => {
+                                              setSelectedBonusItem({
+                                                key: itemKey,
+                                                name: cartItem.name,
+                                                quantity: cartItem.quantity,
+                                                finalValue: finalValue,
+                                                txId: tx.id,
+                                                cartId: (
+                                                  cartItem.cartId || idx
+                                                ).toString(),
+                                              });
+                                              setBonusMethod(
+                                                itemBonusConfig?.method ||
+                                                  "percent",
+                                              );
+                                              setBonusValueInput(
+                                                itemBonusConfig?.value || "",
+                                              );
+                                            }}
                                           >
-                                            {calculatedBonus > 0
-                                              ? "Edit Bonus"
-                                              : "+ Bonus"}
-                                          </Text>
-                                        </TouchableOpacity>
-                                      </View>
-                                    );
-                                  },
-                                )}
+                                            <Text
+                                              style={styles.addBonusItemBtnText}
+                                            >
+                                              {calculatedBonus > 0
+                                                ? "Edit Bonus"
+                                                : "+ Bonus"}
+                                            </Text>
+                                          </TouchableOpacity>
+                                        </View>
+                                      );
+                                    },
+                                  )}
+                                </View>
                               </View>
                             </View>
-                          </View>
-                        )}
-                      />
+                          )}
+                        />
+                      ) : (
+                        <FlatList
+                          contentContainerStyle={styles.listContainer}
+                          data={sortedOtherTransactions}
+                          keyExtractor={(tx) => tx.id}
+                          ListHeaderComponent={
+                            <View style={{ marginBottom: 15 }}>
+                              <Text
+                                style={{
+                                  color: "#8E8E93",
+                                  fontSize: 12,
+                                  fontWeight: "bold",
+                                  marginBottom: 10,
+                                }}
+                              >
+                                PENGELUARAN & LAINNYA
+                              </Text>
+                              <ScrollView
+                                horizontal
+                                showsHorizontalScrollIndicator={false}
+                                style={{ flexDirection: "row" }}
+                              >
+                                {[
+                                  { id: "desc", label: "↓ Terbaru" },
+                                  { id: "asc", label: "↑ Terlama" },
+                                ].map((sort) => (
+                                  <TouchableOpacity
+                                    key={sort.id}
+                                    onPress={() =>
+                                      setPayrollSortMode(sort.id as any)
+                                    }
+                                    style={{
+                                      paddingHorizontal: 12,
+                                      paddingVertical: 6,
+                                      borderRadius: 15,
+                                      marginRight: 8,
+                                      borderWidth: 1,
+                                      borderColor:
+                                        payrollSortMode === sort.id
+                                          ? "#0A84FF"
+                                          : "#2C2C2E",
+                                      backgroundColor:
+                                        payrollSortMode === sort.id
+                                          ? "rgba(10,132,255,0.2)"
+                                          : "#1C1C1E",
+                                    }}
+                                  >
+                                    <Text
+                                      style={{
+                                        color:
+                                          payrollSortMode === sort.id
+                                            ? "#0A84FF"
+                                            : "#8E8E93",
+                                        fontSize: 12,
+                                        fontWeight: "bold",
+                                      }}
+                                    >
+                                      {sort.label}
+                                    </Text>
+                                  </TouchableOpacity>
+                                ))}
+                              </ScrollView>
+                            </View>
+                          }
+                          ListEmptyComponent={
+                            <Text
+                              style={{
+                                color: "#8E8E93",
+                                textAlign: "center",
+                                marginTop: 20,
+                              }}
+                            >
+                              Belum ada data pengeluaran / kasbon.
+                            </Text>
+                          }
+                          renderItem={({ item: tx }) => (
+                            <TouchableOpacity
+                              onPress={() => setSelectedTx(tx)}
+                              style={styles.listItem}
+                            >
+                              <View style={{ flex: 1, marginRight: 10 }}>
+                                <Text style={styles.itemTitle}>{tx.title}</Text>
+                                <Text style={styles.itemSubtitle}>
+                                  {tx.dateStr} • {tx.time}
+                                </Text>
+                                {tx.details ? (
+                                  <Text
+                                    style={{
+                                      color: "#8E8E93",
+                                      fontSize: 12,
+                                      marginTop: 4,
+                                    }}
+                                  >
+                                    {tx.details}
+                                  </Text>
+                                ) : null}
+                              </View>
+                              <Text
+                                style={{
+                                  color: tx.amount < 0 ? "#FF453A" : "#34C759",
+                                  fontWeight: "bold",
+                                  fontSize: 14,
+                                }}
+                              >
+                                {tx.amount < 0 ? "-" : "+"} Rp{" "}
+                                {Math.abs(tx.amount).toLocaleString("id-ID")}
+                              </Text>
+                            </TouchableOpacity>
+                          )}
+                        />
+                      )}
                       {/* TOTAL GAJI BOTTOM BAR */}
-                      <View style={styles.payrollBottomBar}>
+                      <View style={[styles.payrollBottomBar, { padding: 12 }]}>
                         <View style={styles.payrollRow}>
-                          <Text style={styles.textGray}>Gaji Dasar:</Text>
-                          <Text style={styles.textWhite}>
+                          <Text style={[styles.textGray, { fontSize: 12 }]}>
+                            Gaji Dasar:
+                          </Text>
+                          <Text style={[styles.textWhite, { fontSize: 12 }]}>
                             Rp {baseSalary.toLocaleString("id-ID")}
                           </Text>
                         </View>
                         <View style={styles.payrollRow}>
-                          <Text style={styles.textGray}>Total Bonus Menu:</Text>
-                          <Text style={{ color: "#34C759" }}>
+                          <Text style={[styles.textGray, { fontSize: 12 }]}>
+                            Total Bonus Menu:
+                          </Text>
+                          <Text style={{ color: "#34C759", fontSize: 12 }}>
                             + Rp {menuBonusesTotal.toLocaleString("id-ID")}
                           </Text>
                         </View>
                         <View style={styles.payrollRow}>
-                          <Text style={styles.textGray}>
+                          <Text style={[styles.textGray, { fontSize: 12 }]}>
                             Total Ekstra / Telat:
                           </Text>
                           <Text
                             style={{
                               color: manualBonuses < 0 ? "#FF453A" : "#34C759",
+                              fontSize: 12,
                             }}
                           >
                             {manualBonuses < 0 ? "- " : "+ "}Rp{" "}
                             {Math.abs(manualBonuses).toLocaleString("id-ID")}
+                          </Text>
+                        </View>
+
+                        <View style={styles.payrollRow}>
+                          <Text style={[styles.textGray, { fontSize: 12 }]}>
+                            Total Kasbon:
+                          </Text>
+                          <Text
+                            style={{
+                              color: totalKasbon < 0 ? "#FF453A" : "#34C759",
+                              fontSize: 12,
+                            }}
+                          >
+                            {totalKasbon < 0 ? "- " : "+ "}Rp{" "}
+                            {Math.abs(totalKasbon).toLocaleString("id-ID")}
+                          </Text>
+                        </View>
+                        <View style={styles.payrollRow}>
+                          <Text style={[styles.textGray, { fontSize: 12 }]}>
+                            Lain-Lain (Dari Recap):
+                          </Text>
+                          <Text
+                            style={{
+                              color:
+                                linkedExpensesTotal < 0 ? "#FF453A" : "#34C759",
+                              fontSize: 12,
+                            }}
+                          >
+                            {linkedExpensesTotal < 0 ? "- " : "+ "}Rp{" "}
+                            {Math.abs(linkedExpensesTotal).toLocaleString(
+                              "id-ID",
+                            )}
                           </Text>
                         </View>
                         <View
@@ -1957,7 +2263,7 @@ export default function ManageScreen() {
                             {
                               borderTopWidth: 1,
                               borderColor: "#2C2C2E",
-                              paddingTop: 15,
+                              paddingTop: 10,
                               marginTop: 5,
                               marginBottom: 0,
                             },
@@ -1966,7 +2272,7 @@ export default function ManageScreen() {
                           <Text
                             style={{
                               color: "#FFF",
-                              fontSize: 18,
+                              fontSize: 16,
                               fontWeight: "bold",
                             }}
                           >
@@ -1975,7 +2281,7 @@ export default function ManageScreen() {
                           <Text
                             style={{
                               color: "#0A84FF",
-                              fontSize: 20,
+                              fontSize: 18,
                               fontWeight: "bold",
                             }}
                           >
@@ -2708,212 +3014,273 @@ export default function ManageScreen() {
                   : ""}
               </Text>
               <Text style={styles.receiptLine}>Waktu: {selectedTx?.time}</Text>
-              <Text style={styles.receiptLine}>
-                Cashier: {selectedTx?.stylist}
-              </Text>
+
+              {/* Only show Cashier if it is a transaction */}
+              {selectedTx?.type !== "expense" && (
+                <Text style={styles.receiptLine}>
+                  Cashier: {selectedTx?.stylist}
+                </Text>
+              )}
+
               <Text style={styles.receiptDivider}>
                 --------------------------------
               </Text>
 
-              {/* Map through parsedCart to show EVERYTHING in the order */}
-              {selectedTx?.parsedCart?.map((cartItem: any, index: number) => {
-                const addOnsTotal =
-                  cartItem.selectedAddOns?.reduce(
-                    (sum: number, addon: any) => sum + addon.price,
-                    0,
-                  ) || 0;
-                const basePriceWithAddons = cartItem.price + addOnsTotal;
-                const discountNominal = Math.round(
-                  basePriceWithAddons *
-                    cartItem.quantity *
-                    ((cartItem.discountPercent || 0) / 100),
-                );
+              {/* DYNAMIC RECEIPT TOGGLE */}
+              {selectedTx?.type !== "expense" ? (
+                <View>
+                  {/* ORIGINAL 'RIWAYAT PEKERJAAN' RENDERER */}
+                  {selectedTx?.parsedCart?.map(
+                    (cartItem: any, index: number) => {
+                      const addOnsTotal =
+                        cartItem.selectedAddOns?.reduce(
+                          (sum: number, addon: any) => sum + addon.price,
+                          0,
+                        ) || 0;
+                      const basePriceWithAddons = cartItem.price + addOnsTotal;
+                      const discountNominal = Math.round(
+                        basePriceWithAddons *
+                          cartItem.quantity *
+                          ((cartItem.discountPercent || 0) / 100),
+                      );
 
-                // Optional UI trick: Highlight items this specific staff member worked on
-                const isStaffItem =
-                  cartItem.stylists &&
-                  cartItem.stylists.includes(selectedPayrollStaff.name);
+                      const isStaffItem =
+                        cartItem.stylists &&
+                        cartItem.stylists.includes(selectedPayrollStaff.name);
 
-                return (
-                  <View
-                    key={index}
-                    style={{
-                      marginBottom: 12,
-                      paddingBottom: 8,
-                      borderBottomWidth: 1,
-                      borderBottomColor: "#F2F2F7",
-                    }}
-                  >
-                    <View
-                      style={{
-                        flexDirection: "row",
-                        justifyContent: "space-between",
-                      }}
-                    >
+                      return (
+                        <View
+                          key={index}
+                          style={{
+                            marginBottom: 12,
+                            paddingBottom: 8,
+                            borderBottomWidth: 1,
+                            borderBottomColor: "#F2F2F7",
+                          }}
+                        >
+                          <View
+                            style={{
+                              flexDirection: "row",
+                              justifyContent: "space-between",
+                            }}
+                          >
+                            <Text
+                              style={[
+                                styles.receiptLine,
+                                {
+                                  flex: 1,
+                                  fontWeight: "bold",
+                                  color: isStaffItem ? "#0A84FF" : "#000",
+                                },
+                              ]}
+                            >
+                              {cartItem.name} {isStaffItem ? "★" : ""}
+                            </Text>
+                          </View>
+
+                          <View
+                            style={{
+                              flexDirection: "row",
+                              justifyContent: "space-between",
+                              marginTop: 4,
+                            }}
+                          >
+                            <Text style={styles.receiptLine}>
+                              {cartItem.quantity}x Rp{" "}
+                              {cartItem.price.toLocaleString("id-ID")}
+                            </Text>
+                            <Text style={styles.receiptLine}>
+                              Rp{" "}
+                              {(
+                                cartItem.quantity * cartItem.price
+                              ).toLocaleString("id-ID")}
+                            </Text>
+                          </View>
+
+                          {cartItem.stylists &&
+                            cartItem.stylists.length > 0 && (
+                              <View style={styles.receiptRowWrap}>
+                                <Text
+                                  style={[
+                                    styles.receiptTextLeftWrap,
+                                    { fontStyle: "italic", paddingLeft: 0 },
+                                  ]}
+                                >
+                                  {cartItem.stylists
+                                    .map((s: string) => `@${s}`)
+                                    .join(", ")}
+                                </Text>
+                              </View>
+                            )}
+
+                          {cartItem.selectedAddOns?.map(
+                            (addon: any, idx: number) => {
+                              const totalAddonQty =
+                                (addon.quantity || 1) * cartItem.quantity;
+                              const totalAddonPrice =
+                                addon.price * totalAddonQty;
+                              return (
+                                <View
+                                  key={idx}
+                                  style={{
+                                    flexDirection: "row",
+                                    justifyContent: "space-between",
+                                    marginVertical: 2,
+                                  }}
+                                >
+                                  <Text
+                                    style={{
+                                      color: "#555",
+                                      fontSize: 12,
+                                      flex: 1,
+                                    }}
+                                  >
+                                    + {addon.name}{" "}
+                                    {totalAddonQty > 1
+                                      ? `(${totalAddonQty}x)`
+                                      : ""}
+                                  </Text>
+                                  <Text style={{ color: "#555", fontSize: 12 }}>
+                                    Rp {totalAddonPrice.toLocaleString("id-ID")}
+                                  </Text>
+                                </View>
+                              );
+                            },
+                          )}
+
+                          {cartItem.discountPercent > 0 && (
+                            <View style={styles.receiptRowWrap}>
+                              <Text
+                                style={[
+                                  styles.receiptDiscountLeftWrap,
+                                  { paddingLeft: 10 },
+                                ]}
+                              >
+                                Disc {cartItem.discountPercent}%
+                              </Text>
+                              <Text style={styles.receiptDiscountRight}>
+                                -Rp {discountNominal.toLocaleString("id-ID")}
+                              </Text>
+                            </View>
+                          )}
+
+                          <View
+                            style={{
+                              flexDirection: "row",
+                              justifyContent: "flex-end",
+                              marginTop: 2,
+                            }}
+                          >
+                            <Text
+                              style={[
+                                styles.receiptLine,
+                                { fontWeight: "bold" },
+                              ]}
+                            >
+                              Subtotal: Rp{" "}
+                              {cartItem.itemTotal.toLocaleString("id-ID")}
+                            </Text>
+                          </View>
+                        </View>
+                      );
+                    },
+                  )}
+
+                  <Text style={styles.receiptDivider}>
+                    --------------------------------
+                  </Text>
+
+                  <View style={styles.receiptRowWrap}>
+                    <Text style={styles.receiptLine}>PEMBAYARAN:</Text>
+                    <Text style={styles.receiptLine}>
+                      {selectedTx?.paymentMethod}
+                    </Text>
+                  </View>
+
+                  <View>
+                    <View style={[styles.receiptRowWrap, { marginTop: 4 }]}>
+                      <Text style={styles.receiptLine}>UANG TUNAI:</Text>
+                      <Text style={styles.receiptLine}>
+                        Rp {selectedTx?.amountTendered?.toLocaleString("id-ID")}
+                      </Text>
+                    </View>
+                    <View style={[styles.receiptRowWrap, { marginTop: 4 }]}>
                       <Text
                         style={[
                           styles.receiptLine,
-                          {
-                            flex: 1,
-                            fontWeight: "bold",
-                            color: isStaffItem ? "#0A84FF" : "#000",
-                          },
+                          { fontWeight: "bold", color: "#cf2d18" },
                         ]}
                       >
-                        {cartItem.name} {isStaffItem ? "★" : ""}
+                        KEMBALIAN:
                       </Text>
-                    </View>
-
-                    <View
-                      style={{
-                        flexDirection: "row",
-                        justifyContent: "space-between",
-                        marginTop: 4,
-                      }}
-                    >
-                      <Text style={styles.receiptLine}>
-                        {cartItem.quantity}x Rp{" "}
-                        {cartItem.price.toLocaleString("id-ID")}
-                      </Text>
-                      <Text style={styles.receiptLine}>
-                        Rp{" "}
-                        {(cartItem.quantity * cartItem.price).toLocaleString(
-                          "id-ID",
-                        )}
-                      </Text>
-                    </View>
-
-                    {cartItem.stylists && cartItem.stylists.length > 0 && (
-                      <View style={styles.receiptRowWrap}>
-                        <Text
-                          style={[
-                            styles.receiptTextLeftWrap,
-                            { fontStyle: "italic", paddingLeft: 0 },
-                          ]}
-                        >
-                          {cartItem.stylists
-                            .map((s: string) => `@${s}`)
-                            .join(", ")}
-                        </Text>
-                      </View>
-                    )}
-
-                    {cartItem.selectedAddOns?.map((addon: any, idx: number) => {
-                      const totalAddonQty =
-                        (addon.quantity || 1) * cartItem.quantity;
-                      const totalAddonPrice = addon.price * totalAddonQty;
-                      return (
-                        <View
-                          key={idx}
-                          style={{
-                            flexDirection: "row",
-                            justifyContent: "space-between",
-                            marginVertical: 2,
-                          }}
-                        >
-                          <Text
-                            style={{ color: "#555", fontSize: 12, flex: 1 }}
-                          >
-                            + {addon.name}{" "}
-                            {totalAddonQty > 1 ? `(${totalAddonQty}x)` : ""}
-                          </Text>
-                          <Text style={{ color: "#555", fontSize: 12 }}>
-                            Rp {totalAddonPrice.toLocaleString("id-ID")}
-                          </Text>
-                        </View>
-                      );
-                    })}
-
-                    {cartItem.discountPercent > 0 && (
-                      <View style={styles.receiptRowWrap}>
-                        <Text
-                          style={[
-                            styles.receiptDiscountLeftWrap,
-                            { paddingLeft: 10 },
-                          ]}
-                        >
-                          Disc {cartItem.discountPercent}%
-                        </Text>
-                        <Text style={styles.receiptDiscountRight}>
-                          -Rp {discountNominal.toLocaleString("id-ID")}
-                        </Text>
-                      </View>
-                    )}
-
-                    <View
-                      style={{
-                        flexDirection: "row",
-                        justifyContent: "flex-end",
-                        marginTop: 2,
-                      }}
-                    >
                       <Text
-                        style={[styles.receiptLine, { fontWeight: "bold" }]}
+                        style={[
+                          styles.receiptLine,
+                          { fontWeight: "bold", color: "#cf2d18" },
+                        ]}
                       >
-                        Subtotal: Rp{" "}
-                        {cartItem.itemTotal.toLocaleString("id-ID")}
+                        Rp {selectedTx?.changeAmount?.toLocaleString("id-ID")}
                       </Text>
                     </View>
                   </View>
-                );
-              })}
+
+                  <Text style={styles.receiptDivider}>
+                    --------------------------------
+                  </Text>
+
+                  <View style={styles.receiptRowWrap}>
+                    <Text
+                      style={{
+                        color: "#000",
+                        fontSize: 14,
+                        fontWeight: "bold",
+                      }}
+                    >
+                      TOTAL TRANSAKSI:
+                    </Text>
+                    <Text
+                      style={{
+                        color: "#000",
+                        fontSize: 14,
+                        fontWeight: "bold",
+                      }}
+                    >
+                      Rp {selectedTx?.amount?.toLocaleString("id-ID")}
+                    </Text>
+                  </View>
+                </View>
+              ) : (
+                <View>
+                  <Text
+                    style={{
+                      color: "#000",
+                      fontSize: 14,
+                      fontWeight: "bold",
+                      textAlign: "center",
+                      marginVertical: 10,
+                    }}
+                  >
+                    {selectedTx?.title?.toUpperCase() || "PENGELUARAN"}
+                  </Text>
+                  <Text style={styles.receiptLine}>{selectedTx?.details}</Text>
+                  <Text
+                    style={{
+                      color: "#000",
+                      fontSize: 14,
+                      fontWeight: "bold",
+                      textAlign: "center",
+                      marginVertical: 10,
+                    }}
+                  >
+                    TOTAL: {selectedTx?.amount < 0 ? "- Rp " : "+ Rp "}
+                    {Math.abs(selectedTx?.amount || 0).toLocaleString("id-ID")}
+                  </Text>
+                </View>
+              )}
 
               <Text style={styles.receiptDivider}>
                 --------------------------------
               </Text>
-
-              {/* Payment Method Details added to match Recap tab */}
-              <View style={styles.receiptRowWrap}>
-                <Text style={styles.receiptLine}>PEMBAYARAN:</Text>
-                <Text style={styles.receiptLine}>
-                  {selectedTx?.paymentMethod}
-                </Text>
-              </View>
-
-              <View>
-                <View style={[styles.receiptRowWrap, { marginTop: 4 }]}>
-                  <Text style={styles.receiptLine}>UANG TUNAI:</Text>
-                  <Text style={styles.receiptLine}>
-                    Rp {selectedTx?.amountTendered?.toLocaleString("id-ID")}
-                  </Text>
-                </View>
-                <View style={[styles.receiptRowWrap, { marginTop: 4 }]}>
-                  <Text
-                    style={[
-                      styles.receiptLine,
-                      { fontWeight: "bold", color: "#cf2d18" },
-                    ]}
-                  >
-                    KEMBALIAN:
-                  </Text>
-                  <Text
-                    style={[
-                      styles.receiptLine,
-                      { fontWeight: "bold", color: "#cf2d18" },
-                    ]}
-                  >
-                    Rp {selectedTx?.changeAmount?.toLocaleString("id-ID")}
-                  </Text>
-                </View>
-              </View>
-
-              <Text style={styles.receiptDivider}>
-                --------------------------------
-              </Text>
-
-              {/* Grand Total */}
-              <View style={styles.receiptRowWrap}>
-                <Text
-                  style={{ color: "#000", fontSize: 14, fontWeight: "bold" }}
-                >
-                  TOTAL TRANSAKSI:
-                </Text>
-                <Text
-                  style={{ color: "#000", fontSize: 14, fontWeight: "bold" }}
-                >
-                  Rp {selectedTx?.amount?.toLocaleString("id-ID")}
-                </Text>
-              </View>
             </View>
           </ScrollView>
 

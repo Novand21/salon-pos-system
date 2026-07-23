@@ -79,7 +79,8 @@ export const initDB = () => {
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 timestamp TEXT NOT NULL,
                 description TEXT NOT NULL,
-                amount INTEGER NOT NULL
+                amount INTEGER NOT NULL,
+                category TEXT DEFAULT 'Operasional'
             );
 
             -- TABLE 7: Attendance
@@ -285,6 +286,18 @@ export const initDB = () => {
       db.execSync("PRAGMA user_version = 8;");
       currentVersion = 8;
       console.log("Database migrated to version 8 successfully");
+    }
+    if (currentVersion === 8) {
+      try {
+        db.execSync(`
+          ALTER TABLE Expenditures ADD COLUMN category TEXT DEFAULT 'Operasional';
+        `);
+      } catch (e) {
+        console.log("Expenditures category column already exists, skipping...");
+      }
+      db.execSync("PRAGMA user_version = 9;");
+      currentVersion = 9;
+      console.log("Database migrated to version 9 successfully");
     }
   } catch (e) {
     console.error("Error initializing database:", e);

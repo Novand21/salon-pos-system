@@ -49,6 +49,16 @@ export default function RecapScreen() {
   const [expenseDesc, setExpenseDesc] = useState("");
   const [expenseAmount, setExpenseAmount] = useState("");
   const [expenseStaffs, setExpenseStaffs] = useState<string[]>([]);
+  const [expenseCategory, setExpenseCategory] = useState("Operasional");
+  const [salaryEffect, setSalaryEffect] = useState<"none" | "add" | "subtract">(
+    "none",
+  );
+  const defaultExpenseCategories = [
+    "Operasional",
+    "Kasbon",
+    "Uang Makan",
+    "Beli Bahan",
+  ];
 
   // passwords
   const [showPasswordModal, setShowPasswordModal] = useState(false);
@@ -92,30 +102,57 @@ export default function RecapScreen() {
     });
   };
 
-  // ==========================================
   // EXPENSE & TRANSACTION LOGIC
-  // ==========================================
   const handleSaveExpense = () => {
     if (!expenseDesc || !expenseAmount)
       return alert("Tolong isi seluruh deskripsi dan jumlah pengeluaran!");
 
     try {
       const timestamp = expenseDate.toISOString();
-
       const staffString =
         expenseStaffs.length > 0 ? ` (by ${expenseStaffs.join(", ")})` : "";
+
+      // Inject category into the description for the Recap list
       const finalDescription = `${expenseDesc}${staffString}`;
+      const amountNum = Number(expenseAmount);
 
       db.runSync(
-        "INSERT INTO Expenditures (timestamp, description, amount) VALUES (?, ?, ?)",
-        [timestamp, finalDescription, Number(expenseAmount)],
+        "INSERT INTO Expenditures (timestamp, description, amount, category) VALUES (?, ?, ?, ?)",
+        [timestamp, finalDescription, amountNum, expenseCategory],
       );
 
-      fetchDayData();
+      // Cross-link to Staff Bonuses if the owner applied a modifier
+      if (salaryEffect !== "none" && expenseStaffs.length > 0) {
+        // Apply the FULL amount to each selected staff member (No longer dividing)
+        const finalBonusAmount =
+          salaryEffect === "subtract" ? -amountNum : amountNum;
 
+        // Use the selected category as the "method" so manage.tsx can filter it
+        const methodToSave = expenseCategory;
+
+        expenseStaffs.forEach((staffName) => {
+          const staffObj = staffList.find((s) => s.name === staffName);
+          if (staffObj) {
+            db.runSync(
+              "INSERT INTO Staff_Bonuses (employee_id, method, timestamp, amount, description) VALUES (?, ?, ?, ?, ?)",
+              [
+                staffObj.id,
+                methodToSave,
+                timestamp,
+                finalBonusAmount,
+                `Description: ${expenseDesc}`,
+              ],
+            );
+          }
+        });
+      }
+
+      fetchDayData();
       setExpenseDesc("");
       setExpenseAmount("");
       setExpenseStaffs([]);
+      setExpenseCategory("Operasional");
+      setSalaryEffect("none");
       setShowExpenseModal(false);
     } catch (error) {
       console.error("Error saving expense:", error);
@@ -168,6 +205,7 @@ export default function RecapScreen() {
             amount: tx.total_amount,
             paymentMethod: tx.payment_method,
             timestamp: tx.timestamp,
+
             parsedCart: JSON.parse(tx.cart_json || "[]"),
             amountTendered: tx.amount_tendered || tx.total_amount,
             changeAmount: tx.change_amount || 0,
@@ -198,6 +236,7 @@ export default function RecapScreen() {
             amount: -exp.amount,
             details: exp.description,
             timestamp: exp.timestamp,
+            category: exp.category,
           };
         });
 
@@ -247,29 +286,28 @@ export default function RecapScreen() {
 
   const netEarning = totalEarnings - totalExpenses;
 
-  // SORTING LOGIC
   const sortedLedgerData = [...ledgerData].sort((a, b) => {
-    // 1. Get the pure Date (Midnight) to group days together
+    // 1Get the pure Date (Midnight) to group days together
     const dateA = new Date(a.timestamp).setHours(0, 0, 0, 0);
     const dateB = new Date(b.timestamp).setHours(0, 0, 0, 0);
 
-    // 2. Primary Sort: By Date
+    // Primary Sort: By Date
     if (dateA !== dateB) {
       return sortMode === "desc" ? dateB - dateA : dateA - dateB;
     }
 
-    // 3. Secondary Sort: If they are on the SAME day, separate Sales and Expenses
+    // Secondary Sort: If they are on the SAME day, separate Sales and Expenses
     if (a.type === "expense" && b.type === "sale") return 1; // Push expenses down
     if (a.type === "sale" && b.type === "expense") return -1; // Keep sales up top
 
-    // 4. Tertiary Sort: If both are Sales, sort by No. Urut
+    // Tertiary Sort: If both are Sales, sort by No. Urut
     if (a.type === "sale" && b.type === "sale") {
       return sortMode === "desc"
         ? (b.queue_number || 0) - (a.queue_number || 0)
         : (a.queue_number || 0) - (b.queue_number || 0);
     }
 
-    // 5. If both are Expenses, just sort them by exact time
+    // If both are Expenses, just sort them by exact time
     return sortMode === "desc"
       ? new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
       : new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime();
@@ -981,230 +1019,240 @@ export default function RecapScreen() {
         </View>
       </Modal>
 
+      {/* EXPENSE MODAL */}
       <Modal
         visible={showExpenseModal}
         animationType="fade"
         transparent={true}
         onRequestClose={() => setShowExpenseModal(false)}
       >
-        <SafeAreaView style={{ flex: 1, backgroundColor: "rgba(0,0,0,0.8)" }}>
-          <KeyboardAvoidingView
-            behavior={Platform.OS === "ios" ? "padding" : "height"}
+        <KeyboardAvoidingView
+          behavior={Platform.OS === "ios" ? "padding" : "height"}
+          style={{ flex: 1 }}
+        >
+          <View
             style={{
               flex: 1,
+              backgroundColor: "rgba(0,0,0,0.8)",
+              justifyContent: "center",
+              paddingHorizontal: 20,
+              paddingTop: insets.top || 20,
+              paddingBottom: (insets.bottom || 20) + 20, // Extra padding to clear Android buttons
             }}
           >
-            <ScrollView
-              contentContainerStyle={{ flexGrow: 1, justifyContent: "center" }}
-              keyboardShouldPersistTaps="handled"
-              showsVerticalScrollIndicator={false}
-              style={{ width: "100%" }}
-            >
-              <View
-                style={[
-                  styles.modalOverlay,
-                  { paddingTop: insets.top, paddingBottom: insets.bottom },
-                ]}
+            <View style={styles.expenseModalBox}>
+              <Text style={styles.expenseModalTitle}>Tambah Pengeluaran</Text>
+
+              {/* --- SCROLLABLE INPUTS AREA --- */}
+              <ScrollView
+                style={{ marginBottom: 20 }}
+                showsVerticalScrollIndicator={false}
               >
-                <View
-                  style={{
-                    backgroundColor: "#1C1C1E",
-                    padding: 20,
-                    borderRadius: 15,
-                    width: "90%",
-                    maxWidth: 400,
-                    alignSelf: "center",
-                  }}
+                <Text style={styles.inputLabel}>TANGGAL</Text>
+                <TouchableOpacity
+                  style={styles.datePickerInput}
+                  onPress={() => setActivePicker("expense")}
                 >
-                  <Text
-                    style={{
-                      color: "#FFF",
-                      fontSize: 20,
-                      fontWeight: "bold",
-                      marginBottom: 20,
-                    }}
-                  >
-                    Tambah Pengeluaran
+                  <Text style={{ color: "#FFF", fontSize: 16 }}>
+                    {formatDateLabel(expenseDate)}
                   </Text>
-                  <Text
-                    style={{
-                      color: "#8E8E93",
-                      fontSize: 12,
-                      fontWeight: "bold",
-                      marginBottom: 10,
-                    }}
-                  >
-                    TANGGAL
-                  </Text>
-                  <TouchableOpacity
-                    style={{
-                      backgroundColor: "#121212",
-                      padding: 15,
-                      borderRadius: 8,
-                      marginBottom: 15,
-                      borderWidth: 1,
-                      borderColor: "#2C2C2E",
-                      flexDirection: "row",
-                      justifyContent: "space-between",
-                      alignItems: "center",
-                    }}
-                    onPress={() => setActivePicker("expense")}
-                  >
-                    <Text style={{ color: "#FFF", fontSize: 16 }}>
-                      {formatDateLabel(expenseDate)}
-                    </Text>
-                    <MaterialCommunityIcons
-                      name="calendar"
-                      size={20}
-                      color="white"
-                      style={{ textAlign: "right" }}
-                    />
-                  </TouchableOpacity>
-                  <Text
-                    style={{
-                      color: "#8E8E93",
-                      fontSize: 12,
-                      fontWeight: "bold",
-                      marginBottom: 10,
-                    }}
-                  >
-                    NAMA
-                  </Text>
-                  <ScrollView
-                    horizontal
-                    showsHorizontalScrollIndicator={false}
-                    style={{ flexDirection: "row", marginBottom: 20 }}
-                  >
-                    {staffList.map((employee) => {
-                      const isSelected = expenseStaffs.includes(employee.name);
+                  <MaterialCommunityIcons
+                    name="calendar"
+                    size={20}
+                    color="white"
+                  />
+                </TouchableOpacity>
 
-                      return (
-                        <TouchableOpacity
-                          key={employee.id}
-                          onPress={() => {
-                            if (isSelected) {
-                              setExpenseStaffs(
-                                expenseStaffs.filter(
-                                  (name) => name !== employee.name,
-                                ),
-                              );
-                            } else {
-                              setExpenseStaffs([
-                                ...expenseStaffs,
-                                employee.name,
-                              ]);
-                            }
-                          }}
-                          style={{
-                            padding: 10,
-                            paddingHorizontal: 20,
-                            borderRadius: 10,
-                            borderWidth: 2,
-                            borderColor: isSelected ? "#0A84FF" : "#2C2C2E",
-                            backgroundColor: isSelected
-                              ? "rgba(10,132,255,0.2)"
-                              : "#1C1C1E",
-                            marginRight: 10,
-                          }}
+                <Text style={styles.inputLabel}>NAMA STAFF</Text>
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  style={{ flexDirection: "row", marginBottom: 20 }}
+                >
+                  {staffList.map((employee) => {
+                    const isSelected = expenseStaffs.includes(employee.name);
+                    return (
+                      <TouchableOpacity
+                        key={employee.id}
+                        onPress={() => {
+                          if (isSelected) {
+                            setExpenseStaffs(
+                              expenseStaffs.filter(
+                                (name) => name !== employee.name,
+                              ),
+                            );
+                          } else {
+                            setExpenseStaffs([...expenseStaffs, employee.name]);
+                          }
+                        }}
+                        style={[
+                          styles.pillBtn,
+                          isSelected && styles.pillBtnActive,
+                        ]}
+                      >
+                        <Text
+                          style={
+                            isSelected ? styles.textWhiteBold : styles.textGray
+                          }
                         >
-                          <Text
-                            style={
-                              isSelected
-                                ? styles.textWhiteBold
-                                : styles.textGray
-                            }
-                          >
-                            {employee.name}
-                          </Text>
-                        </TouchableOpacity>
-                      );
-                    })}
-                  </ScrollView>
+                          {employee.name}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </ScrollView>
 
-                  <Text
-                    style={{
-                      color: "#8E8E93",
-                      fontSize: 12,
-                      fontWeight: "bold",
-                      marginBottom: 10,
-                    }}
-                  >
-                    DESKRIPSI
-                  </Text>
-                  <TextInput
-                    style={{
-                      backgroundColor: "#121212",
-                      color: "#FFF",
-                      padding: 15,
-                      borderRadius: 8,
-                      marginBottom: 15,
-                      borderWidth: 1,
-                      borderColor: "#2C2C2E",
-                    }}
-                    placeholder="e.g., Beli Kopi..."
-                    placeholderTextColor="#8E8E93"
-                    value={expenseDesc}
-                    onChangeText={setExpenseDesc}
-                  />
-
-                  <Text
-                    style={{
-                      color: "#8E8E93",
-                      fontSize: 12,
-                      fontWeight: "bold",
-                      marginBottom: 10,
-                    }}
-                  >
-                    JUMLAH (Rp)
-                  </Text>
-                  <TextInput
-                    style={{
-                      backgroundColor: "#121212",
-                      color: "#FFF",
-                      padding: 15,
-                      borderRadius: 8,
-                      marginBottom: 25,
-                      borderWidth: 1,
-                      borderColor: "#2C2C2E",
-                    }}
-                    placeholder="0"
-                    placeholderTextColor="#8E8E93"
-                    keyboardType="numeric"
-                    value={expenseAmount}
-                    onChangeText={setExpenseAmount}
-                  />
-
-                  <View style={{ flexDirection: "row", gap: 10 }}>
+                <Text style={styles.inputLabel}>KATEGORI</Text>
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  style={{ flexDirection: "row", marginBottom: 10 }}
+                >
+                  {defaultExpenseCategories.map((cat) => (
                     <TouchableOpacity
-                      style={{
-                        flex: 1,
-                        padding: 15,
-                        borderRadius: 8,
-                        backgroundColor: "#2C2C2E",
-                        alignItems: "center",
-                      }}
-                      onPress={() => setShowExpenseModal(false)}
+                      key={cat}
+                      onPress={() => setExpenseCategory(cat)}
+                      style={[
+                        styles.pillBtn,
+                        expenseCategory === cat && styles.pillBtnActive,
+                      ]}
                     >
-                      <Text style={styles.textWhiteBold}>Batal</Text>
+                      <Text
+                        style={
+                          expenseCategory === cat
+                            ? styles.textWhiteBold
+                            : styles.textGray
+                        }
+                      >
+                        {cat}
+                      </Text>
                     </TouchableOpacity>
-                    <TouchableOpacity
-                      style={{
-                        flex: 1,
-                        padding: 15,
-                        borderRadius: 8,
-                        backgroundColor: "#37bb0e",
-                        alignItems: "center",
-                      }}
-                      onPress={handleSaveExpense}
+                  ))}
+                </ScrollView>
+                <TextInput
+                  style={styles.textInputBox}
+                  placeholder="Atau ketik kategori lain..."
+                  placeholderTextColor="#8E8E93"
+                  value={expenseCategory}
+                  onChangeText={setExpenseCategory}
+                />
+
+                <Text style={styles.inputLabel}>DESKRIPSI</Text>
+                <TextInput
+                  style={styles.textInputBox}
+                  placeholder="e.g., Beli Kopi..."
+                  placeholderTextColor="#8E8E93"
+                  value={expenseDesc}
+                  onChangeText={setExpenseDesc}
+                />
+
+                <Text style={styles.inputLabel}>JUMLAH (Rp)</Text>
+                <TextInput
+                  style={styles.textInputBox}
+                  placeholder="0"
+                  placeholderTextColor="#8E8E93"
+                  keyboardType="numeric"
+                  value={expenseAmount}
+                  onChangeText={setExpenseAmount}
+                />
+
+                <Text style={styles.inputLabel}>
+                  PENGARUH KE GAJI STAFF (Opsional)
+                </Text>
+                <View style={styles.toggleRow}>
+                  <TouchableOpacity
+                    onPress={() => setSalaryEffect("none")}
+                    style={[
+                      styles.toggleBtn,
+                      {
+                        borderColor:
+                          salaryEffect === "none" ? "#0A84FF" : "#2C2C2E",
+                        backgroundColor:
+                          salaryEffect === "none"
+                            ? "rgba(10,132,255,0.2)"
+                            : "#1C1C1E",
+                      },
+                    ]}
+                  >
+                    <Text
+                      style={
+                        salaryEffect === "none"
+                          ? styles.textWhiteBold
+                          : styles.textGray
+                      }
                     >
-                      <Text style={styles.textWhiteBold}>Simpan</Text>
-                    </TouchableOpacity>
-                  </View>
+                      Tidak Ada
+                    </Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    onPress={() => setSalaryEffect("subtract")}
+                    style={[
+                      styles.toggleBtn,
+                      {
+                        borderColor:
+                          salaryEffect === "subtract" ? "#FF453A" : "#2C2C2E",
+                        backgroundColor:
+                          salaryEffect === "subtract"
+                            ? "rgba(255,69,58,0.2)"
+                            : "#1C1C1E",
+                      },
+                    ]}
+                  >
+                    <Text
+                      style={
+                        salaryEffect === "subtract"
+                          ? { color: "#FF453A", fontWeight: "bold" }
+                          : styles.textGray
+                      }
+                    >
+                      - Potong
+                    </Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    onPress={() => setSalaryEffect("add")}
+                    style={[
+                      styles.toggleBtn,
+                      {
+                        borderColor:
+                          salaryEffect === "add" ? "#34C759" : "#2C2C2E",
+                        backgroundColor:
+                          salaryEffect === "add"
+                            ? "rgba(52,199,89,0.2)"
+                            : "#1C1C1E",
+                      },
+                    ]}
+                  >
+                    <Text
+                      style={
+                        salaryEffect === "add"
+                          ? { color: "#34C759", fontWeight: "bold" }
+                          : styles.textGray
+                      }
+                    >
+                      + Tambah
+                    </Text>
+                  </TouchableOpacity>
                 </View>
+              </ScrollView>
+
+              {/* --- PINNED BOTTOM BUTTONS --- */}
+              <View style={styles.actionRow}>
+                <TouchableOpacity
+                  style={styles.actionBtnCancel}
+                  onPress={() => setShowExpenseModal(false)}
+                >
+                  <Text style={styles.textWhiteBold}>Batal</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.actionBtnSave}
+                  onPress={handleSaveExpense}
+                >
+                  <Text style={styles.textWhiteBold}>Simpan</Text>
+                </TouchableOpacity>
               </View>
-            </ScrollView>
-          </KeyboardAvoidingView>
-        </SafeAreaView>
+            </View>
+          </View>
+        </KeyboardAvoidingView>
       </Modal>
 
       {/* PASSWORD MODAL FOR DELETION */}
@@ -1545,5 +1593,91 @@ const styles = StyleSheet.create({
     height: "100%",
     borderLeftWidth: 1,
     borderColor: "#2C2C2E",
+  },
+
+  // --- EXPENSE MODAL STYLES ---
+  expenseModalBox: {
+    backgroundColor: "#1C1C1E",
+    padding: 20,
+    borderRadius: 15,
+    width: "100%",
+    maxWidth: 400,
+    alignSelf: "center",
+    maxHeight: "90%",
+  },
+  expenseModalTitle: {
+    color: "#FFF",
+    fontSize: 20,
+    fontWeight: "bold",
+    marginBottom: 20,
+  },
+  inputLabel: {
+    color: "#8E8E93",
+    fontSize: 12,
+    fontWeight: "bold",
+    marginBottom: 10,
+  },
+  textInputBox: {
+    backgroundColor: "#121212",
+    color: "#FFF",
+    padding: 15,
+    borderRadius: 8,
+    marginBottom: 15,
+    borderWidth: 1,
+    borderColor: "#2C2C2E",
+  },
+  datePickerInput: {
+    backgroundColor: "#121212",
+    padding: 15,
+    borderRadius: 8,
+    marginBottom: 15,
+    borderWidth: 1,
+    borderColor: "#2C2C2E",
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
+  pillBtn: {
+    padding: 10,
+    paddingHorizontal: 15,
+    borderRadius: 10,
+    borderWidth: 2,
+    marginRight: 10,
+    borderColor: "#2C2C2E",
+    backgroundColor: "#1C1C1E",
+  },
+  pillBtnActive: {
+    borderColor: "#0A84FF",
+    backgroundColor: "rgba(10,132,255,0.2)",
+  },
+  toggleRow: {
+    flexDirection: "row",
+    gap: 10,
+    marginBottom: 15,
+  },
+  toggleBtn: {
+    flex: 1,
+    padding: 12,
+    borderRadius: 8,
+    borderWidth: 2,
+    alignItems: "center",
+  },
+  actionRow: {
+    flexDirection: "row",
+    gap: 10,
+  },
+  actionBtnCancel: {
+    flex: 1,
+    padding: 15,
+    borderRadius: 8,
+    backgroundColor: "#2C2C2E",
+    alignItems: "center",
+  },
+  actionBtnSave: {
+    flex: 1,
+    padding: 15,
+    borderRadius: 8,
+    backgroundColor: "#37bb0e",
+    alignItems: "center",
   },
 });
