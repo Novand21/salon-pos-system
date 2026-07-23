@@ -40,7 +40,8 @@ export const initDB = () => {
                 name TEXT NOT NULL,
                 role TEXT NOT NULL,
                 commision_rate REAL DEFAULT 0,
-                is_active BOOLEAN DEFAULT 1 -- Added here so new installs create it instantly
+                is_active BOOLEAN DEFAULT 1, -- Added here so new installs create it instantly
+                base_salary INTEGER DEFAULT 0
             );
 
             -- TABLE 4: Receipts
@@ -70,7 +71,7 @@ export const initDB = () => {
                 discount_percent INTEGER,
                 discount_desc TEXT,
                 final_price INTEGER NOT NULL,
-                FOREIGN KEY(transaction_id) REFERENCES Transactions(id)
+                FOREIGN KEY(transaction_id) REFERENCES Transactions(id) ON DELETE CASCADE
             );
 
             -- TABLE 6: Expenses
@@ -102,13 +103,18 @@ export const initDB = () => {
 
             -- TABLE 9: Staff Bonuses
             CREATE TABLE IF NOT EXISTS Staff_Bonuses (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                employee_id INTEGER,
-                timestamp TEXT NOT NULL,
-                amount INTEGER NOT NULL,
-                description TEXT,
-                FOREIGN KEY(employee_id) REFERENCES Employees(id) ON DELETE CASCADE
-            );
+              id INTEGER PRIMARY KEY AUTOINCREMENT,
+              employee_id INTEGER,
+              transaction_id INTEGER,
+              cart_id TEXT,
+              method TEXT,
+              value TEXT,
+              timestamp TEXT NOT NULL,
+              amount INTEGER NOT NULL,
+              description TEXT,
+              FOREIGN KEY(employee_id) REFERENCES Employees(id) ON DELETE CASCADE,
+              FOREIGN KEY(transaction_id) REFERENCES Transactions(id) ON DELETE CASCADE
+          );
             `);
     // Check the current version of the installed database
     const result: any = db.getFirstSync("PRAGMA user_version");
@@ -201,11 +207,8 @@ export const initDB = () => {
       currentVersion = 5;
       console.log("Database migrated to version 5 successfully");
     }
-    // VERSION 6: ADD ON DELETE CASCADE TO TRANSACTION ITEMS FIX and ADDING base_salary to Employees
+    // VERSION 6: ADD ON DELETE CASCADE TO TRANSACTION ITEMS FIX
     if (currentVersion === 5) {
-      console.log(
-        "Migrating database to version 9: Adding ON DELETE CASCADE to Transaction_Items",
-      );
       try {
         db.execSync(`
           PRAGMA foreign_keys = OFF;
@@ -227,9 +230,6 @@ export const initDB = () => {
           ALTER TABLE Transaction_Items_new RENAME TO Transaction_Items;
           PRAGMA foreign_keys = ON;
         `);
-        db.execSync(
-          `ALTER TABLE Employees ADD COLUMN base_salary INTEGER DEFAULT 0;`,
-        );
       } catch (e) {
         console.error(
           "Failed to migrate Transaction_Items and add base_salary:",
@@ -239,6 +239,52 @@ export const initDB = () => {
       db.execSync("PRAGMA user_version = 6;");
       currentVersion = 6;
       console.log("Database migrated to version 6 successfully");
+    }
+    if (currentVersion === 6) {
+      try {
+        db.execSync(
+          `ALTER TABLE Employees ADD COLUMN base_salary INTEGER DEFAULT 0;`,
+        );
+      } catch (e) {
+        console.log("Base salary column already exists, skipping...");
+      }
+      db.execSync("PRAGMA user_version = 7;");
+      currentVersion = 7;
+      console.log("Database migrated to version 7 successfully");
+    }
+    // VERSION 7: REBUILD STAFF_BONUSES TO LINK TO TRANSACTIONS
+    if (currentVersion === 7) {
+      try {
+        db.execSync(`
+          PRAGMA foreign_keys = OFF;
+
+          CREATE TABLE IF NOT EXISTS Staff_Bonuses_new (
+              id INTEGER PRIMARY KEY AUTOINCREMENT,
+              employee_id INTEGER,
+              transaction_id INTEGER,
+              cart_id TEXT,
+              method TEXT,
+              value TEXT,
+              timestamp TEXT NOT NULL,
+              amount INTEGER NOT NULL,
+              description TEXT,
+              FOREIGN KEY(employee_id) REFERENCES Employees(id) ON DELETE CASCADE,
+              FOREIGN KEY(transaction_id) REFERENCES Transactions(id) ON DELETE CASCADE
+          );
+          INSERT INTO Staff_Bonuses_new (id, employee_id, timestamp, amount, description) 
+          SELECT id, employee_id, timestamp, amount, description FROM Staff_Bonuses;
+
+          DROP TABLE Staff_Bonuses;
+          ALTER TABLE Staff_Bonuses_new RENAME TO Staff_Bonuses;
+
+          PRAGMA foreign_keys = ON;
+        `);
+      } catch (e) {
+        console.error("Failed to migrate Staff_Bonuses:", e);
+      }
+      db.execSync("PRAGMA user_version = 8;");
+      currentVersion = 8;
+      console.log("Database migrated to version 8 successfully");
     }
   } catch (e) {
     console.error("Error initializing database:", e);

@@ -100,11 +100,22 @@ export default function ManageScreen() {
     name: string;
     quantity: number;
     finalValue: number;
+    txId?: number;
+    cartId?: string;
   } | null>(null);
   const [bonusMethod, setBonusMethod] = useState<"percent" | "nominal">(
     "percent",
   );
   const [bonusValueInput, setBonusValueInput] = useState("");
+  const [menuBonusesTotal, setMenuBonusesTotal] = useState(0);
+  const [currentManualBonusId, setCurrentManualBonusId] = useState<
+    number | null
+  >(null);
+
+  const [showBaseSalaryModal, setShowBaseSalaryModal] = useState(false);
+  const [baseSalaryInput, setBaseSalaryInput] = useState("");
+  const [baseSalary, setBaseSalary] = useState(0);
+  const [manualBonuses, setManualBonuses] = useState(0);
 
   const handleAttDateChange = (event: any, date?: Date) => {
     if (Platform.OS === "android") setActiveAttPicker(null);
@@ -703,6 +714,41 @@ export default function ManageScreen() {
         extraMins: totalExtraMins,
         penaltyMins: totalPenaltyMins,
       });
+
+      const dbMenuBonuses = db.getAllSync(
+        "SELECT * FROM Staff_Bonuses WHERE employee_id = ? AND transaction_id IS NOT NULL AND timestamp >= ? AND timestamp <= ?",
+        [
+          selectedPayrollStaff.id,
+          startOfDay.toISOString(),
+          endOfDay.toISOString(),
+        ],
+      );
+
+      const loadedBonuses: any = {};
+      let sumMenu = 0;
+      dbMenuBonuses.forEach((b: any) => {
+        const itemKey = `${b.transaction_id}-${b.cart_id}`;
+        // Store method/value for UI rendering
+        loadedBonuses[itemKey] = { method: b.method, value: b.value };
+        sumMenu += b.amount;
+      });
+      setMenuBonuses(loadedBonuses);
+      setMenuBonusesTotal(sumMenu);
+
+      // Fetch EKSTRA / TELAT Manual Bonuses (Where transaction_id is NULL)
+      const dbManual: any = db.getFirstSync(
+        "SELECT SUM(amount) as total FROM Staff_Bonuses WHERE employee_id = ? AND transaction_id IS NULL AND timestamp >= ? AND timestamp <= ?",
+        [
+          selectedPayrollStaff.id,
+          startOfDay.toISOString(),
+          endOfDay.toISOString(),
+        ],
+      );
+      setManualBonuses(dbManual?.total || 0);
+      setCurrentManualBonusId(dbManual?.id || null);
+
+      // Fetch base salary
+      setBaseSalary(selectedPayrollStaff.base_salary || 0);
     } catch (e) {
       console.error("Error loading payroll tx:", e);
     }
@@ -748,6 +794,9 @@ export default function ManageScreen() {
       return () => cancelIdleCallback(handle);
     }, []),
   );
+
+  // GRAND TOTAL CALCULATION
+  const grandTotalGaji = baseSalary + menuBonusesTotal + manualBonuses;
 
   return (
     <SafeAreaView style={styles.container} edges={["top", "left", "right"]}>
@@ -1507,7 +1556,14 @@ export default function ManageScreen() {
                                       : "#2C2C2E",
                                 },
                               ]}
-                              onPress={() => setShowBonusModal(true)}
+                              onPress={() => {
+                                setCustomBonusAmount(
+                                  manualBonuses !== 0
+                                    ? manualBonuses.toString()
+                                    : "",
+                                );
+                                setShowBonusModal(true);
+                              }}
                             >
                               <Text
                                 style={{
@@ -1544,9 +1600,10 @@ export default function ManageScreen() {
                                 borderRadius: 6,
                                 justifyContent: "center",
                               }}
-                              onPress={() =>
-                                alert("Form Gaji Dasar segera hadir!")
-                              }
+                              onPress={() => {
+                                setBaseSalaryInput(baseSalary.toString());
+                                setShowBaseSalaryModal(true);
+                              }}
                             >
                               <Text
                                 style={{
@@ -1832,6 +1889,10 @@ export default function ManageScreen() {
                                               name: cartItem.name,
                                               quantity: cartItem.quantity,
                                               finalValue: finalValue,
+                                              txId: tx.id,
+                                              cartId: (
+                                                cartItem.cartId || idx
+                                              ).toString(),
                                             });
                                             setBonusMethod(
                                               itemBonusConfig?.method ||
@@ -1859,6 +1920,65 @@ export default function ManageScreen() {
                           </View>
                         )}
                       />
+                      {/* TOTAL GAJI BOTTOM BAR */}
+                      <View style={styles.payrollBottomBar}>
+                        <View style={styles.payrollRow}>
+                          <Text style={styles.textGray}>Gaji Dasar:</Text>
+                          <Text style={styles.textWhite}>
+                            Rp {baseSalary.toLocaleString("id-ID")}
+                          </Text>
+                        </View>
+                        <View style={styles.payrollRow}>
+                          <Text style={styles.textGray}>Total Bonus Menu:</Text>
+                          <Text style={{ color: "#34C759" }}>
+                            + Rp {menuBonusesTotal.toLocaleString("id-ID")}
+                          </Text>
+                        </View>
+                        <View style={styles.payrollRow}>
+                          <Text style={styles.textGray}>
+                            Total Ekstra / Telat:
+                          </Text>
+                          <Text
+                            style={{
+                              color: manualBonuses < 0 ? "#FF453A" : "#34C759",
+                            }}
+                          >
+                            {manualBonuses < 0 ? "- " : "+ "}Rp{" "}
+                            {Math.abs(manualBonuses).toLocaleString("id-ID")}
+                          </Text>
+                        </View>
+                        <View
+                          style={[
+                            styles.payrollRow,
+                            {
+                              borderTopWidth: 1,
+                              borderColor: "#2C2C2E",
+                              paddingTop: 15,
+                              marginTop: 5,
+                              marginBottom: 0,
+                            },
+                          ]}
+                        >
+                          <Text
+                            style={{
+                              color: "#FFF",
+                              fontSize: 18,
+                              fontWeight: "bold",
+                            }}
+                          >
+                            TOTAL GAJI:
+                          </Text>
+                          <Text
+                            style={{
+                              color: "#0A84FF",
+                              fontSize: 20,
+                              fontWeight: "bold",
+                            }}
+                          >
+                            Rp {grandTotalGaji.toLocaleString("id-ID")}
+                          </Text>
+                        </View>
+                      </View>
                     </View>
                   )}
                 </View>
@@ -2878,6 +2998,7 @@ export default function ManageScreen() {
                       );
                       setShowBonusModal(false);
                       setCustomBonusAmount("");
+                      loadPayrollData();
                     } catch (e) {
                       console.error("Error saving bonus:", e);
                       alert("Gagal menyimpan data ke database.");
@@ -3040,15 +3161,121 @@ export default function ManageScreen() {
                   ]}
                   onPress={() => {
                     if (selectedBonusItem) {
-                      setMenuBonuses((prev) => ({
-                        ...prev,
-                        [selectedBonusItem.key]: {
-                          method: bonusMethod,
-                          value: bonusValueInput,
-                        },
-                      }));
+                      const amount =
+                        bonusMethod === "percent"
+                          ? Math.round(
+                              selectedBonusItem.finalValue *
+                                ((Number(bonusValueInput) || 0) / 100),
+                            )
+                          : Number(bonusValueInput) || 0;
+
+                      const timestamp = new Date().toISOString();
+                      const desc = `Bonus Menu: ${selectedBonusItem.name}`;
+                      const cartIdStr =
+                        selectedBonusItem.cartId?.toString() || "0";
+
+                      try {
+                        // Check if a bonus for this exact item already exists
+                        const existing: any = db.getFirstSync(
+                          "SELECT id FROM Staff_Bonuses WHERE employee_id = ? AND transaction_id = ? AND cart_id = ?",
+                          [
+                            selectedPayrollStaff.id,
+                            selectedBonusItem.txId,
+                            cartIdStr,
+                          ],
+                        );
+
+                        if (existing) {
+                          db.runSync(
+                            "UPDATE Staff_Bonuses SET method = ?, value = ?, amount = ? WHERE id = ?",
+                            [bonusMethod, bonusValueInput, amount, existing.id],
+                          );
+                        } else {
+                          db.runSync(
+                            "INSERT INTO Staff_Bonuses (employee_id, transaction_id, cart_id, method, value, timestamp, amount, description) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                            [
+                              selectedPayrollStaff.id,
+                              selectedBonusItem.txId,
+                              cartIdStr,
+                              bonusMethod,
+                              bonusValueInput,
+                              timestamp,
+                              amount,
+                              desc,
+                            ],
+                          );
+                        }
+
+                        // Refresh all calculations!
+                        loadPayrollData();
+                      } catch (e) {
+                        console.error("Error saving menu bonus to db:", e);
+                      }
                     }
                     setSelectedBonusItem(null);
+                  }}
+                >
+                  <Text style={styles.textWhiteBold}>Simpan</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </SafeAreaView>
+        </KeyboardAvoidingView>
+      </Modal>
+
+      {/* BASE SALARY MODAL */}
+      <Modal
+        visible={showBaseSalaryModal}
+        animationType="fade"
+        transparent={true}
+        onRequestClose={() => setShowBaseSalaryModal(false)}
+      >
+        <KeyboardAvoidingView
+          behavior={Platform.OS === "ios" ? "padding" : "height"}
+          style={{ flex: 1, justifyContent: "center" }}
+        >
+          <SafeAreaView style={styles.payrollModalOverlay}>
+            <View style={styles.bonusModalContainer}>
+              <Text style={styles.bonusModalTitle}>Atur Gaji Dasar</Text>
+              <Text style={styles.bonusInputLabel}>GAJI POKOK STAFF (Rp)</Text>
+              <TextInput
+                style={styles.bonusInput}
+                placeholder="e.g. 2000000"
+                placeholderTextColor="#8E8E93"
+                keyboardType="numeric"
+                value={baseSalaryInput}
+                onChangeText={(text) =>
+                  setBaseSalaryInput(text.replace(/[^0-9]/g, ""))
+                }
+              />
+              <View style={{ flexDirection: "row", gap: 10 }}>
+                <TouchableOpacity
+                  style={[styles.closeBtnPill, { flex: 1, borderRadius: 8 }]}
+                  onPress={() => setShowBaseSalaryModal(false)}
+                >
+                  <Text style={styles.textWhiteBold}>Batal</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[
+                    styles.closeBtnPill,
+                    { flex: 1, borderRadius: 8, backgroundColor: "#0A84FF" },
+                  ]}
+                  onPress={() => {
+                    const cleanVal = Number(baseSalaryInput) || 0;
+                    try {
+                      db.runSync(
+                        "UPDATE Employees SET base_salary = ? WHERE id = ?",
+                        [cleanVal, selectedPayrollStaff.id],
+                      );
+                      setBaseSalary(cleanVal);
+                      setSelectedPayrollStaff({
+                        ...selectedPayrollStaff,
+                        base_salary: cleanVal,
+                      });
+                      setShowBaseSalaryModal(false);
+                    } catch (e) {
+                      console.error("Error saving base salary:", e);
+                    }
                   }}
                 >
                   <Text style={styles.textWhiteBold}>Simpan</Text>
@@ -3106,6 +3333,10 @@ const styles = StyleSheet.create({
 
   textGray: {
     color: "#8E8E93",
+  },
+
+  textWhite: {
+    color: "#FFF",
   },
 
   listContainer: {
@@ -3542,5 +3773,17 @@ const styles = StyleSheet.create({
     marginBottom: 10,
     borderWidth: 1,
     borderColor: "#2C2C2E",
+  },
+  payrollBottomBar: {
+    backgroundColor: "#121212",
+    borderTopWidth: 1,
+    borderColor: "#2C2C2E",
+    padding: 20,
+  },
+  payrollRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 8,
   },
 });
