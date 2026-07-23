@@ -7,6 +7,7 @@ import {
   Image,
   KeyboardAvoidingView,
   Modal,
+  PanResponder,
   Platform,
   ScrollView,
   StyleSheet,
@@ -129,6 +130,35 @@ export default function ManageScreen() {
   const [staffOtherTransactions, setStaffOtherTransactions] = useState<any[]>(
     [],
   );
+
+  // --- BOTTOM BAR ANIMATION STATES ---
+  const [isPayrollExpanded, setIsPayrollExpanded] = useState(false);
+
+  // We start the height at 0 (hidden)
+  const payrollDetailsHeight = useRef(new Animated.Value(0)).current;
+
+  const togglePayrollBar = (expand: boolean) => {
+    setIsPayrollExpanded(expand);
+    Animated.timing(payrollDetailsHeight, {
+      toValue: expand ? 160 : 0, // 160px is the exact height needed to fit the 5 detail rows
+      duration: 300, // 300ms is a pretty smooth
+      useNativeDriver: false,
+    }).start();
+  };
+
+  const payrollPanResponder = useRef(
+    PanResponder.create({
+      onMoveShouldSetPanResponder: (_, gestureState) =>
+        Math.abs(gestureState.dy) > 10,
+      onPanResponderRelease: (_, gestureState) => {
+        if (gestureState.dy > 20) {
+          togglePayrollBar(false); // Swipe Down -> Collapse
+        } else if (gestureState.dy < -20) {
+          togglePayrollBar(true); // Swipe Up -> Expand
+        }
+      },
+    }),
+  ).current;
 
   const handleAttDateChange = (event: any, date?: Date) => {
     if (Platform.OS === "android") setActiveAttPicker(null);
@@ -2194,80 +2224,130 @@ export default function ManageScreen() {
                         />
                       )}
                       {/* TOTAL GAJI BOTTOM BAR */}
-                      <View style={[styles.payrollBottomBar, { padding: 12 }]}>
-                        <View style={styles.payrollRow}>
-                          <Text style={[styles.textGray, { fontSize: 12 }]}>
-                            Gaji Dasar:
-                          </Text>
-                          <Text style={[styles.textWhite, { fontSize: 12 }]}>
-                            Rp {baseSalary.toLocaleString("id-ID")}
-                          </Text>
-                        </View>
-                        <View style={styles.payrollRow}>
-                          <Text style={[styles.textGray, { fontSize: 12 }]}>
-                            Total Bonus Menu:
-                          </Text>
-                          <Text style={{ color: "#34C759", fontSize: 12 }}>
-                            + Rp {menuBonusesTotal.toLocaleString("id-ID")}
-                          </Text>
-                        </View>
-                        <View style={styles.payrollRow}>
-                          <Text style={[styles.textGray, { fontSize: 12 }]}>
-                            Total Ekstra / Telat:
-                          </Text>
-                          <Text
+                      <View
+                        style={[
+                          styles.payrollBottomBar,
+                          {
+                            padding: 15,
+                            paddingBottom: Math.max(insets.bottom || 20, 20),
+                          },
+                        ]}
+                        {...payrollPanResponder.panHandlers}
+                      >
+                        {/* DRAG HANDLE */}
+                        <View
+                          style={{
+                            alignItems: "center",
+                            paddingBottom: 15,
+                            backgroundColor: "transparent",
+                          }}
+                        >
+                          <View
                             style={{
-                              color: manualBonuses < 0 ? "#FF453A" : "#34C759",
-                              fontSize: 12,
+                              width: 40,
+                              height: 5,
+                              backgroundColor: "#2C2C2E",
+                              borderRadius: 3,
                             }}
-                          >
-                            {manualBonuses < 0 ? "- " : "+ "}Rp{" "}
-                            {Math.abs(manualBonuses).toLocaleString("id-ID")}
-                          </Text>
+                          />
                         </View>
 
-                        <View style={styles.payrollRow}>
-                          <Text style={[styles.textGray, { fontSize: 12 }]}>
-                            Total Kasbon:
-                          </Text>
-                          <Text
+                        {/* COLLAPSIBLE DETAILS (ANIMATED) */}
+                        <Animated.View
+                          style={{
+                            height: payrollDetailsHeight,
+                            overflow: "hidden",
+                          }}
+                        >
+                          <View
                             style={{
-                              color: totalKasbon < 0 ? "#FF453A" : "#34C759",
-                              fontSize: 12,
-                            }}
-                          >
-                            {totalKasbon < 0 ? "- " : "+ "}Rp{" "}
-                            {Math.abs(totalKasbon).toLocaleString("id-ID")}
-                          </Text>
-                        </View>
-                        <View style={styles.payrollRow}>
-                          <Text style={[styles.textGray, { fontSize: 12 }]}>
-                            Lain-Lain (Dari Recap):
-                          </Text>
-                          <Text
-                            style={{
-                              color:
-                                linkedExpensesTotal < 0 ? "#FF453A" : "#34C759",
-                              fontSize: 12,
-                            }}
-                          >
-                            {linkedExpensesTotal < 0 ? "- " : "+ "}Rp{" "}
-                            {Math.abs(linkedExpensesTotal).toLocaleString(
-                              "id-ID",
-                            )}
-                          </Text>
-                        </View>
-                        <View
-                          style={[
-                            styles.payrollRow,
-                            {
-                              borderTopWidth: 1,
+                              paddingBottom: 15,
+                              borderBottomWidth: 1,
                               borderColor: "#2C2C2E",
-                              paddingTop: 10,
-                              marginTop: 5,
-                              marginBottom: 0,
-                            },
-                          ]}
+                              marginBottom: 15,
+                            }}
+                          >
+                            <View style={styles.payrollRow}>
+                              <Text style={[styles.textGray, { fontSize: 12 }]}>
+                                Gaji Dasar:
+                              </Text>
+                              <Text
+                                style={[styles.textWhite, { fontSize: 12 }]}
+                              >
+                                Rp {baseSalary.toLocaleString("id-ID")}
+                              </Text>
+                            </View>
+                            <View style={styles.payrollRow}>
+                              <Text style={[styles.textGray, { fontSize: 12 }]}>
+                                Total Bonus Menu:
+                              </Text>
+                              <Text style={{ color: "#34C759", fontSize: 12 }}>
+                                + Rp {menuBonusesTotal.toLocaleString("id-ID")}
+                              </Text>
+                            </View>
+                            <View style={styles.payrollRow}>
+                              <Text style={[styles.textGray, { fontSize: 12 }]}>
+                                Total Ekstra / Telat:
+                              </Text>
+                              <Text
+                                style={{
+                                  color:
+                                    manualBonuses < 0 ? "#FF453A" : "#34C759",
+                                  fontSize: 12,
+                                }}
+                              >
+                                {manualBonuses < 0 ? "- " : "+ "}Rp{" "}
+                                {Math.abs(manualBonuses).toLocaleString(
+                                  "id-ID",
+                                )}
+                              </Text>
+                            </View>
+                            <View style={styles.payrollRow}>
+                              <Text style={[styles.textGray, { fontSize: 12 }]}>
+                                Total Kasbon:
+                              </Text>
+                              <Text
+                                style={{
+                                  color:
+                                    totalKasbon < 0 ? "#FF453A" : "#34C759",
+                                  fontSize: 12,
+                                }}
+                              >
+                                {totalKasbon < 0 ? "- " : "+ "}Rp{" "}
+                                {Math.abs(totalKasbon).toLocaleString("id-ID")}
+                              </Text>
+                            </View>
+                            <View
+                              style={[styles.payrollRow, { marginBottom: 0 }]}
+                            >
+                              <Text style={[styles.textGray, { fontSize: 12 }]}>
+                                Lain-Lain (Dari Recap):
+                              </Text>
+                              <Text
+                                style={{
+                                  color:
+                                    linkedExpensesTotal < 0
+                                      ? "#FF453A"
+                                      : "#34C759",
+                                  fontSize: 12,
+                                }}
+                              >
+                                {linkedExpensesTotal < 0 ? "- " : "+ "}Rp{" "}
+                                {Math.abs(linkedExpensesTotal).toLocaleString(
+                                  "id-ID",
+                                )}
+                              </Text>
+                            </View>
+                          </View>
+                        </Animated.View>
+                        <TouchableOpacity
+                          activeOpacity={0.8}
+                          onPress={() => togglePayrollBar(!isPayrollExpanded)}
+                          style={{
+                            flexDirection: "row",
+                            justifyContent: "space-between",
+                            alignItems: "center",
+                          }}
                         >
                           <Text
                             style={{
@@ -2287,7 +2367,7 @@ export default function ManageScreen() {
                           >
                             Rp {grandTotalGaji.toLocaleString("id-ID")}
                           </Text>
-                        </View>
+                        </TouchableOpacity>
                       </View>
                     </View>
                   )}
