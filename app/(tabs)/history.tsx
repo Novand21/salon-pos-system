@@ -9,15 +9,26 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
+import {
+  SafeAreaView,
+  useSafeAreaInsets,
+} from "react-native-safe-area-context";
 
 export default function BasketScreen() {
+  const insets = useSafeAreaInsets();
   const [pendingOrders, setPendingOrders] = useState<any[]>([]);
   const [selectedOrder, setSelectedOrder] = useState<any>(null);
 
   useFocusEffect(
     useCallback(() => {
-      fetchPendingOrders();
+      const handle = requestIdleCallback(
+        () => {
+          fetchPendingOrders();
+        },
+        { timeout: 1000 },
+      );
+
+      return () => cancelIdleCallback(handle);
     }, []),
   );
 
@@ -38,7 +49,14 @@ export default function BasketScreen() {
         "SELECT * FROM Transactions WHERE status = 'pending' AND timestamp >= ? AND timestamp <= ? ORDER BY timestamp DESC",
         [startOfDay.toISOString(), endOfDay.toISOString()],
       );
-      setPendingOrders(data);
+
+      // parsing json after parsing
+      const parsedData = data.map((order: any) => ({
+        ...order,
+        parsedCart: JSON.parse(order.cart_json || "[]"),
+      }));
+
+      setPendingOrders(parsedData);
     } catch (e) {
       console.error("Error fetching basket:", e);
     }
@@ -57,6 +75,26 @@ export default function BasketScreen() {
 
     try {
       const deletedQueueNum = selectedOrder.queue_number;
+      const cartToRevert =
+        selectedOrder.parsedCart || JSON.parse(selectedOrder.cart_json || "[]");
+
+      cartToRevert.forEach((item: any) => {
+        // Revert Main Item
+        if (item.is_stock_enabled === 1) {
+          db.runSync(
+            "UPDATE Services_Products SET stock_quantity = stock_quantity + ? WHERE id = ?",
+            [item.quantity, item.id],
+          );
+        }
+        // Revert Linked Add-Ons
+        (item.selectedAddOns || []).forEach((addon: any) => {
+          db.runSync(
+            "UPDATE Services_Products SET stock_quantity = stock_quantity + ? WHERE lower(name) = lower(?) AND is_stock_enabled = 1",
+            [(addon.quantity || 1) * item.quantity, addon.name],
+          );
+        });
+      });
+
       db.runSync("DELETE FROM Transactions WHERE id = ?", selectedOrder.id);
 
       const startOfDay = new Date();
@@ -78,6 +116,7 @@ export default function BasketScreen() {
     if (!selectedOrder) return;
 
     const currentCart = JSON.parse(selectedOrder.cart_json || "[]");
+
     const updatedCart = currentCart.filter(
       (item: any) => item.cartId !== cartIdToRemove,
     );
@@ -85,6 +124,24 @@ export default function BasketScreen() {
     if (updatedCart.length === 0) {
       handleDeleteOrder();
       return;
+    }
+
+    const itemToRemove = currentCart.find(
+      (item: any) => item.cartId === cartIdToRemove,
+    );
+    if (itemToRemove) {
+      if (itemToRemove.is_stock_enabled === 1) {
+        db.runSync(
+          "UPDATE Services_Products SET stock_quantity = stock_quantity + ? WHERE id = ?",
+          [itemToRemove.quantity, itemToRemove.id],
+        );
+      }
+      (itemToRemove.selectedAddOns || []).forEach((addon: any) => {
+        db.runSync(
+          "UPDATE Services_Products SET stock_quantity = stock_quantity + ? WHERE lower(name) = lower(?) AND is_stock_enabled = 1",
+          [(addon.quantity || 1) * itemToRemove.quantity, addon.name],
+        );
+      });
     }
 
     const newTotal = updatedCart.reduce(
@@ -102,14 +159,13 @@ export default function BasketScreen() {
       ...selectedOrder,
       cart_json: newCartJson,
       total_amount: newTotal,
+      parsedCart: updatedCart,
     });
 
     fetchPendingOrders();
   };
 
-  const activeCartItems = selectedOrder
-    ? JSON.parse(selectedOrder.cart_json || "[]")
-    : [];
+  const activeCartItems = selectedOrder ? selectedOrder.parsedCart : [];
 
   return (
     <SafeAreaView style={styles.container} edges={["top", "left", "right"]}>
@@ -126,7 +182,7 @@ export default function BasketScreen() {
           </Text>
         ) : (
           pendingOrders.map((order) => {
-            const cartItems = JSON.parse(order.cart_json || "[]");
+            const cartItems = order.parsedCart;
             return (
               <TouchableOpacity
                 key={order.id}
@@ -135,7 +191,7 @@ export default function BasketScreen() {
               >
                 <View style={{ flex: 1, marginRight: 10 }}>
                   <Text style={styles.listCardTitle}>
-                    Queue #{order.queue_number} ({order.trx_code})
+                    Antrian #{order.queue_number} ({order.trx_code})
                   </Text>
                   <Text style={styles.listCardSubtitle}>
                     {new Date(order.timestamp).toLocaleTimeString([], {
@@ -161,7 +217,9 @@ export default function BasketScreen() {
         onRequestClose={() => setSelectedOrder(null)}
       >
         <View style={styles.modalOverlay}>
-          <View style={styles.checkoutModal}>
+          <View
+            style={[styles.checkoutModal, { paddingBottom: insets.bottom }]}
+          >
             <View style={styles.checkoutHeader}>
               <Text style={styles.modalTitle}>
                 Antrian #{selectedOrder?.queue_number} -{" "}
@@ -232,6 +290,27 @@ export default function BasketScreen() {
                         </TouchableOpacity>
                       </View>
 
+                      {/* Item QTY & Subtotal */}
+                      <View
+                        style={{
+                          flexDirection: "row",
+                          justifyContent: "space-between",
+                          marginTop: 4,
+                          marginLeft: 10,
+                        }}
+                      >
+                        <Text style={styles.receiptLine}>
+                          {cartItem.quantity}x Rp{" "}
+                          {cartItem.price.toLocaleString("id-ID")}
+                        </Text>
+                        <Text style={styles.receiptLine}>
+                          Rp{" "}
+                          {(cartItem.quantity * cartItem.price).toLocaleString(
+                            "id-ID",
+                          )}
+                        </Text>
+                      </View>
+
                       {/* Stylists */}
                       {cartItem.stylists && cartItem.stylists.length > 0 && (
                         <View
@@ -250,24 +329,91 @@ export default function BasketScreen() {
                         </View>
                       )}
 
-                      {/* Map Add-ons (Stylesheet Applied) */}
+                      {/* Map Add-ons  */}
                       {cartItem.selectedAddOns.map(
-                        (addon: any, idx: number) => (
-                          <View
-                            key={idx}
-                            style={[styles.receiptRowWrap, { marginLeft: 20 }]}
-                          >
-                            <Text style={styles.receiptTextLeftWrap}>
-                              + {addon.name}
-                            </Text>
-                            <Text style={styles.receiptTextRight}>
-                              Rp {addon.price.toLocaleString("id-ID")}
-                            </Text>
-                          </View>
-                        ),
+                        (addon: any, idx: number) => {
+                          const totalAddonQty =
+                            (addon.quantity || 1) * cartItem.quantity;
+                          const totalAddonPrice = addon.price * totalAddonQty;
+
+                          if (totalAddonQty === 1) {
+                            return (
+                              <View
+                                key={idx}
+                                style={{
+                                  flexDirection: "row",
+                                  justifyContent: "space-between",
+                                  alignItems: "flex-start",
+                                  marginVertical: 2,
+                                }}
+                              >
+                                <Text
+                                  style={{
+                                    color: "#555",
+                                    fontSize: 12,
+                                    flex: 1,
+                                    flexShrink: 1,
+                                    paddingRight: 15,
+                                  }}
+                                >
+                                  + {addon.name}
+                                </Text>
+                                <Text
+                                  style={{
+                                    color: "#555",
+                                    fontSize: 12,
+                                    textAlign: "right",
+                                  }}
+                                >
+                                  Rp {totalAddonPrice.toLocaleString("id-ID")}
+                                </Text>
+                              </View>
+                            );
+                          } else {
+                            return (
+                              <View key={idx} style={{ marginVertical: 2 }}>
+                                <Text style={{ color: "#555", fontSize: 12 }}>
+                                  + {addon.name}
+                                </Text>
+
+                                <View
+                                  style={{
+                                    flexDirection: "row",
+                                    justifyContent: "space-between",
+                                    alignItems: "flex-start",
+                                    paddingLeft: 14,
+                                    marginTop: 2,
+                                  }}
+                                >
+                                  <Text
+                                    style={{
+                                      color: "#555",
+                                      fontSize: 12,
+                                      flex: 1,
+                                      flexShrink: 1,
+                                      paddingRight: 15,
+                                    }}
+                                  >
+                                    ({totalAddonQty}x Rp{" "}
+                                    {addon.price.toLocaleString("id-ID")})
+                                  </Text>
+                                  <Text
+                                    style={{
+                                      color: "#555",
+                                      fontSize: 12,
+                                      textAlign: "right",
+                                    }}
+                                  >
+                                    Rp {totalAddonPrice.toLocaleString("id-ID")}
+                                  </Text>
+                                </View>
+                              </View>
+                            );
+                          }
+                        },
                       )}
 
-                      {/* Discount Data (Stylesheet Applied) */}
+                      {/* Discount Data */}
                       {cartItem.discountPercent > 0 && (
                         <View>
                           <View
@@ -293,25 +439,44 @@ export default function BasketScreen() {
                         </View>
                       )}
 
-                      {/* Item QTY & Subtotal */}
+                      {/* SUBTOTAL */}
                       <View
                         style={{
                           flexDirection: "row",
-                          justifyContent: "space-between",
+                          justifyContent: "flex-end",
                           marginTop: 4,
-                          marginLeft: 10,
                         }}
                       >
-                        <Text style={styles.receiptLine}>
-                          {cartItem.quantity}x Rp{" "}
-                          {cartItem.price.toLocaleString("id-ID")}
-                        </Text>
                         <Text
                           style={[styles.receiptLine, { fontWeight: "bold" }]}
                         >
-                          Rp {cartItem.itemTotal.toLocaleString("id-ID")}
+                          Subtotal: Rp{" "}
+                          {cartItem.itemTotal.toLocaleString("id-ID")}
                         </Text>
                       </View>
+
+                      {/* DISPLAY CUSTOM NOTE */}
+                      {cartItem.customNote ? (
+                        <View
+                          style={{
+                            marginTop: 4,
+                            marginLeft: 10,
+                            paddingTop: 4,
+                            borderTopWidth: 1,
+                            borderTopColor: "#F2F2F7",
+                            borderStyle: "dashed",
+                          }}
+                        >
+                          <Text
+                            style={[
+                              styles.receiptLine,
+                              { fontStyle: "italic", color: "#555" },
+                            ]}
+                          >
+                            Catatan: {cartItem.customNote}
+                          </Text>
+                        </View>
+                      ) : null}
 
                       {/* Dashed Line Separator */}
                       {index < activeCartItems.length - 1 && (

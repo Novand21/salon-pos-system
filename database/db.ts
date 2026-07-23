@@ -1,7 +1,5 @@
 import * as SQLite from "expo-sqlite";
 
-// This creates a file called 'salonpos.db' hidden on the device.
-// If it already exists, it just opens it.
 export const db = SQLite.openDatabaseSync("salonpos.db");
 
 try {
@@ -10,19 +8,8 @@ try {
   console.error("Failed to enable foreign keys:", e);
 }
 
-// we run this function when the app starts to ensure our table exists
-
 export const initDB = () => {
-  // anonymous function to initialize table
   try {
-    // db.execSync(`
-    //             DROP TABLE IF EXISTS Employees;
-    //             DROP TABLE IF EXISTS Services_Products;
-    //             DROP TABLE IF EXISTS Add_Ons;
-    //             DROP TABLE IF EXISTS Transactions;
-    //             DROP TABLE IF EXISTS Transaction_Items;
-    //             DROP TABLE IF EXISTS Expenditures;
-    //     `);
     db.execSync(`
             -- TABLE 1: the main menu (Haircuts, Coffee, Products)
             CREATE TABLE IF NOT EXISTS Services_Products (
@@ -31,7 +18,10 @@ export const initDB = () => {
                 category TEXT NOT NULL,
                 base_price INTEGER NOT NULL,
                 description TEXT,
-                add_ons TEXT
+                is_stock_enabled BOOLEAN DEFAULT 0,
+                stock_quantity INTEGER DEFAULT 0,
+                add_ons TEXT,
+                image_uri TEXT
             );
 
             -- TABLE 2: Optional add-ons
@@ -40,6 +30,8 @@ export const initDB = () => {
                 service_id INTEGER NOT NULL,
                 name TEXT NOT NULL,
                 additional_price INTEGER NOT NULL,
+                is_stock_enabled BOOLEAN DEFAULT 0,
+                stock_quantity INTEGER DEFAULT 0,
                 FOREIGN KEY(service_id) REFERENCES Services_Products(id) ON DELETE CASCADE
             );
             -- TABLE 3: Staff and Employees
@@ -47,8 +39,9 @@ export const initDB = () => {
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 name TEXT NOT NULL,
                 role TEXT NOT NULL,
-                commision_rate REAL DEFAULT 0.10
-                is_active BOOLEAN DEFAULT 1 -- Added here so new installs create it instantly
+                commision_rate REAL DEFAULT 0,
+                is_active BOOLEAN DEFAULT 1, -- Added here so new installs create it instantly
+                base_salary INTEGER DEFAULT 0
             );
 
             -- TABLE 4: Receipts
@@ -63,6 +56,8 @@ export const initDB = () => {
                 cart_json TEXT,
                 queue_number INTEGER,
                 trx_code TEXT,
+                amount_tendered INTEGER DEFAULT 0,
+                change_amount INTEGER DEFAULT 0,
                 FOREIGN KEY (employee_id) REFERENCES Employees(id)
             );
 
@@ -76,7 +71,7 @@ export const initDB = () => {
                 discount_percent INTEGER,
                 discount_desc TEXT,
                 final_price INTEGER NOT NULL,
-                FOREIGN KEY(transaction_id) REFERENCES Transactions(id)
+                FOREIGN KEY(transaction_id) REFERENCES Transactions(id) ON DELETE CASCADE
             );
 
             -- TABLE 6: Expenses
@@ -84,8 +79,43 @@ export const initDB = () => {
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 timestamp TEXT NOT NULL,
                 description TEXT NOT NULL,
-                amount INTEGER NOT NULL
+                amount INTEGER NOT NULL,
+                category TEXT DEFAULT 'Operasional'
             );
+
+            -- TABLE 7: Attendance
+            CREATE TABLE IF NOT EXISTS Attendance (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                employee_id INTEGER,
+                date TEXT,
+                start_time TEXT,
+                end_time TEXT,
+                status TEXT,
+                description TEXT,
+                FOREIGN KEY (employee_id) REFERENCES Employees (id)
+            );
+
+            -- TABLE 8: Settings
+            CREATE TABLE IF NOT EXISTS Settings (
+              id INTEGER PRIMARY KEY AUTOINCREMENT,
+              open_time TEXT DEFAULT '09:00',
+              close_time TEXT DEFAULT '20:00'
+            );
+
+            -- TABLE 9: Staff Bonuses
+            CREATE TABLE IF NOT EXISTS Staff_Bonuses (
+              id INTEGER PRIMARY KEY AUTOINCREMENT,
+              employee_id INTEGER,
+              transaction_id INTEGER,
+              cart_id TEXT,
+              method TEXT,
+              value TEXT,
+              timestamp TEXT NOT NULL,
+              amount INTEGER NOT NULL,
+              description TEXT,
+              FOREIGN KEY(employee_id) REFERENCES Employees(id) ON DELETE CASCADE,
+              FOREIGN KEY(transaction_id) REFERENCES Transactions(id) ON DELETE CASCADE
+          );
             `);
     // Check the current version of the installed database
     const result: any = db.getFirstSync("PRAGMA user_version");
@@ -97,22 +127,178 @@ export const initDB = () => {
         "Migrating database to version 1: Adding Staff active status...",
       );
 
-      // ALTER the existing table to add the new feature safely
-      db.execSync(`
-        ALTER TABLE Employees ADD COLUMN is_active BOOLEAN DEFAULT 1;
-      `);
+      try {
+        // ALTER the existing table to add the new feature safely
+        db.execSync(`
+          ALTER TABLE Employees ADD COLUMN is_active BOOLEAN DEFAULT 1;
+        `);
+      } catch (error) {
+        // If the column already exists, just skip
+        console.log("Column is_active already exists, skipping alter...");
+      }
 
       // Update the version tracker so this only runs once
       db.execSync("PRAGMA user_version = 1;");
       currentVersion = 1;
     }
 
-    // If you do another update next year:
-    // if (currentVersion === 1) {
-    //    ALTER TABLE... PRAGMA user_version = 2;
-    // }
+    // VERSION 2: ADDED TWO NEW COLUMNS FOR THE TRANSACTIONS TABLE -> AMOUNT_TENDERED AND CHANGE_AMOUNT
+    if (currentVersion === 1) {
+      console.log("Migrating database to version 2");
+      try {
+        db.execSync(`
+          ALTER TABLE Transactions ADD COLUMN amount_tendered INTEGER DEFAULT 0;
+          ALTER TABLE Transactions ADD COLUMN change_amount INTEGER DEFAULT 0;
+        `);
+      } catch (e) {
+        console.error("Failed executing Version 2 migration", e);
+      }
+      db.execSync("PRAGMA user_version = 2;");
+      currentVersion = 2;
+      console.log("Database migrated to version 2 succesfully");
+    }
+
+    // VERSION 3: ADDED TWO NEW COLUMNS FOR THE Services_Products Table -> Invetory Tracking
+    if (currentVersion === 2) {
+      console.log("Migrating database to version 3: Adding Inventory Stock...");
+      try {
+        db.execSync(`
+          ALTER TABLE Services_Products ADD COLUMN is_stock_enabled BOOLEAN DEFAULT 0;
+          ALTER TABLE Services_Products ADD COLUMN stock_quantity INTEGER DEFAULT 0;
+        `);
+      } catch (e) {
+        console.log("Stock columns already exist, skipping alter...");
+      }
+
+      db.execSync("PRAGMA user_version = 3;");
+      currentVersion = 3;
+      console.log("Database migrated to version 3 successfully");
+    }
 
     console.log("Database ready at version:", currentVersion);
+
+    // VERSION 4: ADDED MENU IMAGES COLUMN IN Services_Products TABLE
+    if (currentVersion === 3) {
+      console.log("Migrating database to version 4: Adding Image URI...");
+      try {
+        db.execSync(`ALTER TABLE Services_Products ADD COLUMN image_uri TEXT;`);
+      } catch (e) {
+        console.log("Image column already exists, skipping alter...");
+      }
+
+      db.execSync("PRAGMA user_version = 4;");
+      currentVersion = 4;
+      console.log("Database migrated to version 4 successfully");
+    }
+
+    // VERSION 5: ADDED ADD-ON INVENTORY SYSTEM
+    if (currentVersion === 4) {
+      console.log(
+        "Migrating database to version 5: Adding Add-On Inventory...",
+      );
+      try {
+        db.execSync(`
+          ALTER TABLE Add_Ons ADD COLUMN is_stock_enabled BOOLEAN DEFAULT 0;
+          ALTER TABLE Add_Ons ADD COLUMN stock_quantity INTEGER DEFAULT 0;
+        `);
+      } catch (e) {
+        console.log("Add-on stock columns already exist, skipping alter...");
+      }
+      db.execSync("PRAGMA user_version = 5;");
+      currentVersion = 5;
+      console.log("Database migrated to version 5 successfully");
+    }
+    // VERSION 6: ADD ON DELETE CASCADE TO TRANSACTION ITEMS FIX
+    if (currentVersion === 5) {
+      try {
+        db.execSync(`
+          PRAGMA foreign_keys = OFF;
+          
+          CREATE TABLE IF NOT EXISTS Transaction_Items_new (
+              id INTEGER PRIMARY KEY AUTOINCREMENT,
+              transaction_id INTEGER NOT NULL,
+              item_name TEXT NOT NULL,
+              add_ons_list TEXT,
+              stylists TEXT,
+              discount_percent INTEGER,
+              discount_desc TEXT,
+              final_price INTEGER NOT NULL,
+              FOREIGN KEY(transaction_id) REFERENCES Transactions(id) ON DELETE CASCADE
+          );
+          
+          INSERT INTO Transaction_Items_new SELECT * FROM Transaction_Items;
+          DROP TABLE Transaction_Items;
+          ALTER TABLE Transaction_Items_new RENAME TO Transaction_Items;
+          PRAGMA foreign_keys = ON;
+        `);
+      } catch (e) {
+        console.error(
+          "Failed to migrate Transaction_Items and add base_salary:",
+          e,
+        );
+      }
+      db.execSync("PRAGMA user_version = 6;");
+      currentVersion = 6;
+      console.log("Database migrated to version 6 successfully");
+    }
+    if (currentVersion === 6) {
+      try {
+        db.execSync(
+          `ALTER TABLE Employees ADD COLUMN base_salary INTEGER DEFAULT 0;`,
+        );
+      } catch (e) {
+        console.log("Base salary column already exists, skipping...");
+      }
+      db.execSync("PRAGMA user_version = 7;");
+      currentVersion = 7;
+      console.log("Database migrated to version 7 successfully");
+    }
+    // VERSION 7: REBUILD STAFF_BONUSES TO LINK TO TRANSACTIONS
+    if (currentVersion === 7) {
+      try {
+        db.execSync(`
+          PRAGMA foreign_keys = OFF;
+
+          CREATE TABLE IF NOT EXISTS Staff_Bonuses_new (
+              id INTEGER PRIMARY KEY AUTOINCREMENT,
+              employee_id INTEGER,
+              transaction_id INTEGER,
+              cart_id TEXT,
+              method TEXT,
+              value TEXT,
+              timestamp TEXT NOT NULL,
+              amount INTEGER NOT NULL,
+              description TEXT,
+              FOREIGN KEY(employee_id) REFERENCES Employees(id) ON DELETE CASCADE,
+              FOREIGN KEY(transaction_id) REFERENCES Transactions(id) ON DELETE CASCADE
+          );
+          INSERT INTO Staff_Bonuses_new (id, employee_id, timestamp, amount, description) 
+          SELECT id, employee_id, timestamp, amount, description FROM Staff_Bonuses;
+
+          DROP TABLE Staff_Bonuses;
+          ALTER TABLE Staff_Bonuses_new RENAME TO Staff_Bonuses;
+
+          PRAGMA foreign_keys = ON;
+        `);
+      } catch (e) {
+        console.error("Failed to migrate Staff_Bonuses:", e);
+      }
+      db.execSync("PRAGMA user_version = 8;");
+      currentVersion = 8;
+      console.log("Database migrated to version 8 successfully");
+    }
+    if (currentVersion === 8) {
+      try {
+        db.execSync(`
+          ALTER TABLE Expenditures ADD COLUMN category TEXT DEFAULT 'Operasional';
+        `);
+      } catch (e) {
+        console.log("Expenditures category column already exists, skipping...");
+      }
+      db.execSync("PRAGMA user_version = 9;");
+      currentVersion = 9;
+      console.log("Database migrated to version 9 successfully");
+    }
   } catch (e) {
     console.error("Error initializing database:", e);
   }

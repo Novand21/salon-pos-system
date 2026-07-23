@@ -1,7 +1,10 @@
 import { router, useFocusEffect, useLocalSearchParams } from "expo-router";
 import React, { useCallback, useState } from "react";
 import {
+  Image,
+  KeyboardAvoidingView,
   Modal,
+  Platform,
   ScrollView,
   StyleSheet,
   Text,
@@ -14,7 +17,10 @@ import {
 import { printReceiptRaw } from "../../utils/bluetooth";
 import { generateThermalReceiptString } from "../../utils/printer";
 
-import { SafeAreaView } from "react-native-safe-area-context";
+import {
+  SafeAreaView,
+  useSafeAreaInsets,
+} from "react-native-safe-area-context";
 // 🧠 1. IMPORT OUR GLOBAL BRAIN
 import { db } from "@/database/db";
 import { useCart } from "../../context/CartContext";
@@ -37,9 +43,10 @@ export default function RegisterScreen() {
   const [staffList, setStaffList] = useState<any[]>([]);
 
   // States for Menu and Side Panel
-  const [activeCategory, setActiveCategory] = useState("");
+  const [activeCategory, setActiveCategory] = useState("Semua");
   const [selectedItem, setSelectedItem] = useState<any>(null);
   const [selectedAddOns, setSelectedAddOns] = useState<any[]>([]);
+  const [searchQuery, setSearchQuery] = useState("");
 
   // States for Checkout Modal
   const [quantity, setQuantity] = useState(1);
@@ -50,84 +57,130 @@ export default function RegisterScreen() {
   const [itemStylists, setItemStylists] = useState<string[]>([]);
   const [itemDiscount, setItemDiscount] = useState("");
   const [itemDiscountDesc, setItemDiscountDesc] = useState("");
+  const [itemNote, setItemNote] = useState("");
+  const [customerNote, setCustomerNote] = useState("");
+
+  // for editing purposes
+  const [isEditingItem, setIsEditingItem] = useState(false);
+  const [editItemName, setEditItemName] = useState("");
+  const [editItemPrice, setEditItemPrice] = useState("");
+  const [isEditingAddOns, setIsEditingAddOns] = useState(false);
+  const [customAddOns, setCustomAddOns] = useState<any[]>([]);
+  // ---------------------------------
+
+  // area for the notch bar
+  const insets = useSafeAreaInsets();
 
   useFocusEffect(
     useCallback(() => {
-      // 1. Check if we are receiving an edit request from the Basket
-      if (params.editTxId) {
-        const id = Number(params.editTxId);
-        setPendingTxId(id);
+      const handle = requestIdleCallback(
+        () => {
+          // Check if we are receiving an edit request from the Basket
+          if (params.editTxId) {
+            const id = Number(params.editTxId);
+            setPendingTxId(id);
 
-        try {
-          // FETCH DIRECTLY FROM DB: Bypasses URL length limits!
-          const tx: any = db.getFirstSync(
-            "SELECT cart_json FROM Transactions WHERE id = ?",
-            [id],
-          );
-          if (tx && tx.cart_json) {
-            overwriteCart(JSON.parse(tx.cart_json));
+            try {
+              // FETCH DIRECTLY FROM DB: Bypasses URL length limits!
+              const tx: any = db.getFirstSync(
+                "SELECT cart_json FROM Transactions WHERE id = ?",
+                [id],
+              );
+              if (tx && tx.cart_json) {
+                const loadedCart = JSON.parse(tx.cart_json);
+                overwriteCart(JSON.parse(tx.cart_json));
+                // We temporarily put the stock back on the shelf so the math works while editing
+                loadedCart.forEach((item: any) => {
+                  if (item.is_stock_enabled === 1) {
+                    db.runSync(
+                      "UPDATE Services_Products SET stock_quantity = stock_quantity + ? WHERE id = ?",
+                      [item.quantity, item.id],
+                    );
+                  }
+                  (item.selectedAddOns || []).forEach((addon: any) => {
+                    db.runSync(
+                      "UPDATE Services_Products SET stock_quantity = stock_quantity + ? WHERE lower(name) = lower(?) AND is_stock_enabled = 1",
+                      [(addon.quantity || 1) * item.quantity, addon.name],
+                    );
+                  });
+                });
+              }
+            } catch (e) {
+              console.error("Error loading pending cart:", e);
+            }
+
+            // Clear the URL param so it doesn't loop
+            router.setParams({ editTxId: "" });
           }
-        } catch (e) {
-          console.error("Error loading pending cart:", e);
-        }
 
-        // Clear the URL param so it doesn't loop
-        router.setParams({ editTxId: "" });
-      }
+          // Fetch the standard menu data
+          try {
+            const services = db.getAllSync(
+              "SELECT * FROM Services_Products ORDER BY name ASC",
+            );
+            const addOns = db.getAllSync("SELECT * FROM Add_Ons");
+            const employees = db.getAllSync("SELECT * FROM Employees");
 
-      // 2. Fetch the standard menu data
-      try {
-        const services = db.getAllSync("SELECT * FROM Services_Products");
-        const addOns = db.getAllSync("SELECT * FROM Add_Ons");
-        const employees = db.getAllSync("SELECT * FROM Employees");
+            const formattedMenu = services.map((service: any) => ({
+              ...service,
+              price: service.base_price,
+              addOns: addOns
+                .filter((a: any) => a.service_id === service.id)
+                .map((a: any) => ({ ...a, price: a.additional_price })),
+            }));
+            setMenuItems(formattedMenu);
 
-        const formattedMenu = services.map((service: any) => ({
-          ...service,
-          price: service.base_price,
-          addOns: addOns
-            .filter((a: any) => a.service_id === service.id)
-            .map((a: any) => ({ ...a, price: a.additional_price })),
-        }));
-        setMenuItems(formattedMenu);
+            const uniqueCategories = Array.from(
+              new Set(services.map((s: any) => s.category)),
+            ) as string[];
+            setCategories(["Semua", ...uniqueCategories]);
 
-        const uniqueCategories = Array.from(
-          new Set(services.map((s: any) => s.category)),
-        ) as string[];
-        setCategories(uniqueCategories);
+            if (!activeCategory) {
+              setActiveCategory("Semua");
+            }
 
-        if (uniqueCategories.length > 0 && !activeCategory) {
-          setActiveCategory(uniqueCategories[0]);
-        }
+            setStaffList(employees);
+            if (employees.length > 0 && !cashier) {
+              setCashier((employees[0] as any).name);
+            }
+          } catch (e) {
+            console.error("Error loading data from database:", e);
+          }
+        },
+        { timeout: 1000 },
+      );
 
-        setStaffList(employees);
-        if (employees.length > 0 && !cashier) {
-          setCashier((employees[0] as any).name);
-        }
-      } catch (e) {
-        console.error("Error loading data from database:", e);
-      }
+      return () => cancelIdleCallback(handle);
     }, [params.editTxId]),
   );
 
-  // Derived Values
-  const displayedItems = menuItems.filter(
-    (item) => item.category === activeCategory,
-  );
+  // Filters items by Search Query (case-insensitive)
+  const displayedItems = menuItems.filter((item) => {
+    // If the search bar has text, search the ENTIRE database by item name only
+    if (searchQuery.length > 0) {
+      return item.name.toLowerCase().includes(searchQuery.toLowerCase());
+    }
+    // If the search bar is empty, just show the currently selected category
+    if (activeCategory === "Semua") {
+      return true;
+    }
+    return item.category === activeCategory;
+  });
 
-  // 1. Calculate the base cost before discounts
+  // Calculate the base cost before discounts
   const baseItemCost = selectedItem
     ? (selectedItem.price +
         selectedAddOns.reduce(
-          (sum: number, addon: any) => sum + addon.price,
+          (sum: number, addon: any) => sum + addon.price * addon.quantity,
           0,
         )) *
       quantity
     : 0;
 
-  // 2. Calculate the discount percentage amount
+  // Calculate the discount percentage amount
   const discountAmount = baseItemCost * (Number(itemDiscount || 0) / 100);
 
-  // 3. Final total for the UI button
+  // Final total for the UI button
   const currentItemTotal = baseItemCost - discountAmount;
 
   const toggleStylist = (name: string) => {
@@ -135,6 +188,52 @@ export default function RegisterScreen() {
       setItemStylists(itemStylists.filter((s) => s !== name));
     } else {
       setItemStylists([...itemStylists, name]);
+    }
+  };
+
+  // to add add-ons quantity
+  const updateAddOnQty = (addon: any, delta: number) => {
+    const existing = selectedAddOns.find((a) => a.id === addon.id);
+    const currentQty = existing ? existing.quantity : 0;
+    const newQty = currentQty + delta;
+
+    // search main-menu for a product with the exact same name (Ignoring uppercase and lowercase)
+    const linkedProduct = menuItems.find(
+      (m) => m.name.trim().toLowerCase() === addon.name.trim().toLowerCase(),
+    );
+
+    if (delta > 0 && linkedProduct && linkedProduct.is_stock_enabled === 1) {
+      const alreadyInCart = getCartQty(linkedProduct.name);
+
+      // Account for the main item being configured if it happens to be the EXACT same product
+      const currentConfigMainQty =
+        selectedItem?.name.trim().toLowerCase() ===
+        linkedProduct.name.trim().toLowerCase()
+          ? quantity
+          : 0;
+
+      if (
+        newQty + alreadyInCart + currentConfigMainQty >
+        linkedProduct.stock_quantity
+      ) {
+        alert(
+          `Stok tidak cukup! Anda sudah memiliki ${alreadyInCart} di keranjang. (Tersisa: ${
+            linkedProduct.stock_quantity - alreadyInCart - currentConfigMainQty
+          })`,
+        );
+        return;
+      }
+    }
+    if (newQty <= 0) {
+      setSelectedAddOns(selectedAddOns.filter((a) => a.id !== addon.id));
+    } else if (existing) {
+      setSelectedAddOns(
+        selectedAddOns.map((a) =>
+          a.id === addon.id ? { ...a, quantity: newQty } : a,
+        ),
+      );
+    } else {
+      setSelectedAddOns([...selectedAddOns, { ...addon, quantity: 1 }]);
     }
   };
 
@@ -152,12 +251,83 @@ export default function RegisterScreen() {
     }
   };
 
+  // scan the cart for reserved stock
+  const getCartQty = (productName: string) => {
+    if (!productName) return 0;
+    let total = 0;
+    cart.forEach((cartItem: any) => {
+      // Count if it's sitting in the cart as a main item
+      if (
+        cartItem.name.trim().toLowerCase() === productName.trim().toLowerCase()
+      ) {
+        total += cartItem.quantity;
+      }
+      // Count if it's sitting in the cart as an add-on attached to something else
+      if (cartItem.selectedAddOns) {
+        cartItem.selectedAddOns.forEach((addon: any) => {
+          if (
+            addon.name.trim().toLowerCase() === productName.trim().toLowerCase()
+          ) {
+            total += (addon.quantity || 1) * cartItem.quantity;
+          }
+        });
+      }
+    });
+    return total;
+  };
+
   const handleAddToCart = () => {
+    // for the main item ---
+    if (selectedItem?.is_stock_enabled === 1) {
+      const alreadyInCart = getCartQty(selectedItem.name);
+      if (quantity + alreadyInCart > selectedItem.stock_quantity) {
+        alert(
+          `Gagal menambah pesanan! Anda sudah memiliki ${alreadyInCart} ${selectedItem.name} di keranjang. (Sisa stok: ${
+            selectedItem.stock_quantity - alreadyInCart
+          })`,
+        );
+        return;
+      }
+    }
+
+    // for add-ons
+    for (const addon of selectedAddOns) {
+      const linkedProduct = menuItems.find(
+        (m) => m.name.trim().toLowerCase() === addon.name.trim().toLowerCase(),
+      );
+
+      if (linkedProduct && linkedProduct.is_stock_enabled === 1) {
+        const alreadyInCart = getCartQty(linkedProduct.name);
+
+        // Calculate total add-on quantity being added (addon qty * main item qty)
+        const addonQtyBeingAdded = (addon.quantity || 1) * quantity;
+
+        // If the add-on happens to be the exact same product as the main item, they share the pool
+        const isSameAsMain =
+          selectedItem?.name.trim().toLowerCase() ===
+          linkedProduct.name.trim().toLowerCase();
+        const totalBeingAdded = isSameAsMain
+          ? quantity + addonQtyBeingAdded
+          : addonQtyBeingAdded;
+
+        if (totalBeingAdded + alreadyInCart > linkedProduct.stock_quantity) {
+          alert(
+            `Gagal! Stok ${addon.name} tidak cukup untuk pesanan ini. (Sisa stok: ${
+              linkedProduct.stock_quantity - alreadyInCart
+            })`,
+          );
+          return;
+        }
+      }
+    }
+
     const customizedItem = {
       ...selectedItem,
       stylists: itemStylists, // array of names!
       discountPercent: Number(itemDiscount || 0),
       discountDesc: itemDiscountDesc,
+      customNote: itemNote,
+      customerNote: customerNote,
     };
 
     addToCart(customizedItem, selectedAddOns, quantity);
@@ -168,6 +338,45 @@ export default function RegisterScreen() {
     setItemStylists([]); // Reset array
     setItemDiscount("");
     setItemDiscountDesc("");
+    setItemNote("");
+    setCustomerNote("");
+  };
+
+  const handleQuickEditSave = () => {
+    if (!editItemName || !editItemPrice) {
+      return alert("Nama dan Harga tidak boleh kosong!");
+    }
+
+    try {
+      // Update the permanent database
+      db.runSync(
+        "UPDATE Services_Products SET name = ?, base_price = ? WHERE id = ?",
+        [editItemName, Number(editItemPrice), selectedItem.id],
+      );
+
+      // Update the live item in the side panel so checkout math uses the new price
+      const updatedItem = {
+        ...selectedItem,
+        name: editItemName,
+        price: Number(editItemPrice),
+      };
+      setSelectedItem(updatedItem);
+
+      // Update the global menu grid instantly without a database reload
+      setMenuItems((prev) =>
+        prev.map((item) =>
+          item.id === selectedItem.id
+            ? { ...item, name: editItemName, price: Number(editItemPrice) }
+            : item,
+        ),
+      );
+
+      // Close edit mode
+      setIsEditingItem(false);
+    } catch (error) {
+      console.error("Quick edit failed:", error);
+      alert("Gagal menyimpan perubahan menu.");
+    }
   };
 
   // Helper to generate a simple unique transaction code
@@ -198,6 +407,21 @@ export default function RegisterScreen() {
       const timestamp = new Date().toISOString();
       const cartJson = JSON.stringify(cart);
 
+      cart.forEach((cartItem: any) => {
+        if (cartItem.is_stock_enabled === 1) {
+          db.runSync(
+            "UPDATE Services_Products SET stock_quantity = stock_quantity - ? WHERE id = ?",
+            [cartItem.quantity, cartItem.id],
+          );
+        }
+        cartItem.selectedAddOns.forEach((addon: any) => {
+          db.runSync(
+            "UPDATE Services_Products SET stock_quantity = stock_quantity - ? WHERE lower(name) = lower(?) AND is_stock_enabled = 1",
+            [(addon.quantity || 1) * cartItem.quantity, addon.name],
+          );
+        });
+      });
+
       if (pendingTxId) {
         // Update existing pending order (keeps original queue_number and trx_code)
         db.runSync(
@@ -224,6 +448,18 @@ export default function RegisterScreen() {
       }
 
       alert("Order disimpan di keranjang! 🛒");
+      const refreshedServices = db.getAllSync(
+        "SELECT * FROM Services_Products ORDER BY name ASC",
+      );
+      const addOns = db.getAllSync("SELECT * FROM Add_Ons");
+      const formattedMenu = refreshedServices.map((service: any) => ({
+        ...service,
+        price: service.base_price,
+        addOns: addOns
+          .filter((a: any) => a.service_id === service.id)
+          .map((a: any) => ({ ...a, price: a.additional_price })),
+      }));
+      setMenuItems(formattedMenu);
       clearCart();
       setPendingTxId(null);
     } catch (e) {
@@ -285,13 +521,15 @@ export default function RegisterScreen() {
         currentCode = existing?.trx_code || generateTrxCode();
 
         db.runSync(
-          "UPDATE Transactions SET timestamp = ?, total_amount = ?, payment_method = ?, employee_id = ?, status = 'completed', cart_json = ? WHERE id = ?",
+          "UPDATE Transactions SET timestamp = ?, total_amount = ?, payment_method = ?, employee_id = ?, status = 'completed', cart_json = ?, amount_tendered = ?, change_amount = ? WHERE id = ?",
           [
             timestamp,
             cartTotal,
             paymentMethod,
             employeeId,
             cartJsonStr,
+            Number(amountTendered) || cartTotal, // default to pas if left empty
+            change,
             pendingTxId,
           ],
         );
@@ -299,8 +537,9 @@ export default function RegisterScreen() {
         currentQueue = getNextQueueNumber();
         currentCode = generateTrxCode();
 
+        // Add amount_tendered and change_amount columns
         const result = db.runSync(
-          "INSERT INTO Transactions (timestamp, total_amount, payment_method, employee_id, status, cart_json, queue_number, trx_code) VALUES (?, ?, ?, ?, 'completed', ?, ?, ?)",
+          "INSERT INTO Transactions (timestamp, total_amount, payment_method, employee_id, status, cart_json, queue_number, trx_code, amount_tendered, change_amount) VALUES (?, ?, ?, ?, 'completed', ?, ?, ?, ?, ?)",
           [
             timestamp,
             cartTotal,
@@ -309,6 +548,8 @@ export default function RegisterScreen() {
             cartJsonStr,
             currentQueue,
             currentCode,
+            Number(amountTendered) || cartTotal,
+            change,
           ],
         );
         targetId = result.lastInsertRowId;
@@ -316,7 +557,9 @@ export default function RegisterScreen() {
 
       cart.forEach((cartItem: any) => {
         const addOnsString = cartItem.selectedAddOns
-          .map((a: any) => a.name)
+          .map((a: any) =>
+            a.quantity > 1 ? `${a.quantity}x ${a.name}` : a.name,
+          )
           .join(", ");
         const stylistsString =
           cartItem.stylists && cartItem.stylists.length > 0
@@ -336,6 +579,20 @@ export default function RegisterScreen() {
             cartItem.itemTotal,
           ],
         );
+        if (cartItem.is_stock_enabled === 1) {
+          db.runSync(
+            "UPDATE Services_Products SET stock_quantity = stock_quantity - ? WHERE id = ?",
+            [cartItem.quantity, cartItem.id],
+          );
+        }
+
+        // deduct add-on stock by name
+        cartItem.selectedAddOns.forEach((addon: any) => {
+          db.runSync(
+            "UPDATE Services_Products SET stock_quantity = stock_quantity - ? WHERE lower(name) = lower(?) AND is_stock_enabled = 1",
+            [(addon.quantity || 1) * cartItem.quantity, addon.name],
+          );
+        });
       });
 
       if (shouldPrint) {
@@ -356,6 +613,20 @@ export default function RegisterScreen() {
       }
 
       alert(`Order ${currentCode} Selesai! ✅`);
+
+      const refreshedServices = db.getAllSync(
+        "SELECT * FROM Services_Products ORDER BY name ASC",
+      );
+      const addOns = db.getAllSync("SELECT * FROM Add_Ons");
+      const formattedMenu = refreshedServices.map((service: any) => ({
+        ...service,
+        price: service.base_price,
+        addOns: addOns
+          .filter((a: any) => a.service_id === service.id)
+          .map((a: any) => ({ ...a, price: a.additional_price })),
+      }));
+
+      setMenuItems(formattedMenu);
       clearCart();
       setShowCheckout(false);
       setPendingTxId(null);
@@ -363,6 +634,115 @@ export default function RegisterScreen() {
       setPaymentMethod("QRIS");
     } catch (error) {
       console.error("Error finalising order:", error);
+    }
+  };
+
+  // ADD-ONS EDITING LOGICS
+  const handleAddCustomRow = () => {
+    // Generate a temporary ID for the cart receipt
+    setCustomAddOns([
+      ...customAddOns,
+      { id: `custom-${Date.now()}`, name: "", price: 0, stock_quantity: "" },
+    ]);
+  };
+
+  const updateCustomAddOn = (index: number, field: string, value: string) => {
+    const updated = [...customAddOns];
+    updated[index] = { ...updated[index] };
+
+    if (field === "price") {
+      updated[index].price = Number(value) || 0;
+    } else if (field === "stock_quantity") {
+      updated[index].stock_quantity = value;
+    } else {
+      updated[index].name = value;
+    }
+    setCustomAddOns(updated);
+  };
+
+  const removeCustomAddOn = (index: number) => {
+    const updated = [...customAddOns];
+    const removedItem = updated[index];
+
+    // 1. Remove it from the custom list
+    updated.splice(index, 1);
+    setCustomAddOns(updated);
+
+    // 2. Uncheck it automatically if it was already selected
+    setSelectedAddOns(
+      selectedAddOns.filter((a: any) => a.id !== removedItem.id),
+    );
+  };
+
+  const handleSaveCustomAddOns = () => {
+    try {
+      // Wipe the old add-ons for this specific item from the database
+      db.runSync("DELETE FROM Add_Ons WHERE service_id = ?", [selectedItem.id]);
+
+      // Filter out any blank rows the user might have left empty
+      const validAddOns = customAddOns.filter(
+        (addon) => addon.name.trim() !== "",
+      );
+
+      // Insert the newly edited list into the permanent Add_Ons table
+      const formattedAddOns = validAddOns.map((addon) => {
+        const stockStr = addon.stock_quantity
+          ? String(addon.stock_quantity).trim()
+          : "";
+        const isStockEnabled = stockStr !== "" ? 1 : 0;
+        const stockQty = isStockEnabled ? Number(stockStr) : 0;
+
+        return {
+          ...addon,
+          price: Number(addon.price) || 0,
+          is_stock_enabled: isStockEnabled,
+          stock_quantity: stockQty,
+        };
+      });
+
+      // Insert the formatted list into the permanent Add_Ons table
+      formattedAddOns.forEach((addon) => {
+        // Inherit global stock if it exists
+        const existingGlobal: any = db.getFirstSync(
+          "SELECT is_stock_enabled, stock_quantity FROM Add_Ons WHERE name = ?",
+          [addon.name],
+        );
+
+        const finalIsStockEnabled = existingGlobal
+          ? existingGlobal.is_stock_enabled
+          : 0;
+        const finalStockQty = existingGlobal
+          ? existingGlobal.stock_quantity
+          : 0;
+
+        db.runSync(
+          "INSERT INTO Add_Ons (service_id, name, additional_price, is_stock_enabled, stock_quantity) VALUES (?, ?, ?, ?, ?)",
+          [
+            selectedItem.id,
+            addon.name,
+            addon.price,
+            finalIsStockEnabled,
+            finalStockQty,
+          ],
+        );
+      });
+
+      // Update the side panel and the global menu so the UI doesn't require a reload
+      setSelectedItem({ ...selectedItem, addOns: formattedAddOns });
+      setMenuItems((prev) =>
+        prev.map((item) =>
+          item.id === selectedItem.id
+            ? { ...item, addOns: formattedAddOns }
+            : item,
+        ),
+      );
+
+      // Clean up the UI state and close edit mode
+      setCustomAddOns(formattedAddOns);
+      setIsEditingAddOns(false);
+    } catch (error) {
+      console.error("Failed to save add-ons permanently:", error);
+      alert("Gagal menyimpan add-on permanen ke database.");
     }
   };
 
@@ -400,6 +780,26 @@ export default function RegisterScreen() {
         </ScrollView>
       </View>
 
+      {/* Search Bar Input */}
+      <View style={styles.searchContainer}>
+        <TextInput
+          style={styles.searchInput}
+          placeholder="Cari menu atau produk..."
+          placeholderTextColor="#8E8E93"
+          value={searchQuery}
+          onChangeText={setSearchQuery}
+          clearButtonMode="while-editing" // Adds a native "X" clear button on iOS
+        />
+        {searchQuery.length > 0 && (
+          <TouchableOpacity
+            onPress={() => setSearchQuery("")}
+            style={styles.clearSearchBtn}
+          >
+            <Text style={{ color: "#0A84FF", fontWeight: "bold" }}>Hapus</Text>
+          </TouchableOpacity>
+        )}
+      </View>
+
       {/* Item Grid */}
       <ScrollView contentContainerStyle={styles.grid}>
         {displayedItems.map((item) => (
@@ -409,14 +809,41 @@ export default function RegisterScreen() {
               setSelectedItem(item);
               setSelectedAddOns([]);
               setQuantity(1);
+              setIsEditingItem(false);
+              setEditItemName(item.name);
+              setEditItemPrice(item.price.toString());
+              setItemNote("");
+              setCustomAddOns(
+                item.addOns ? item.addOns.map((a: any) => ({ ...a })) : [],
+              );
+              setCustomerNote("");
             }}
             style={styles.itemCard}
           >
-            <View style={styles.itemImagePlaceholder} />
+            {item.image_uri ? (
+              <Image
+                source={{ uri: item.image_uri }}
+                style={styles.itemImagePlaceholder}
+              />
+            ) : (
+              <View style={styles.itemImagePlaceholder} />
+            )}
             <Text style={styles.itemName}>{item.name}</Text>
             <Text style={styles.itemPrice}>
               Rp {item.price.toLocaleString("id-ID")}
             </Text>
+            {!!item.is_stock_enabled && (
+              <Text
+                style={{
+                  color: item.stock_quantity > 0 ? "#8E8E93" : "#FF453A",
+                  fontSize: 12,
+                  marginTop: 4,
+                  fontWeight: item.stock_quantity <= 0 ? "bold" : "normal",
+                }}
+              >
+                Stok: {item.stock_quantity}
+              </Text>
+            )}
             <View style={styles.addButton}>
               <Text style={styles.addButtonText}>+</Text>
             </View>
@@ -480,77 +907,296 @@ export default function RegisterScreen() {
         onRequestClose={() => {
           setSelectedItem(null);
           setItemStylists([]);
+          setIsEditingAddOns(false);
         }}
       >
         <View style={styles.modalOverlay}>
           <TouchableOpacity
             style={styles.modalBgClose}
-            onPress={() => setSelectedItem(null)}
+            onPress={() => {
+              setSelectedItem(null);
+              setIsEditingAddOns(false);
+            }}
           />
 
-          <View style={styles.sidePanel}>
+          <KeyboardAvoidingView
+            behavior={Platform.OS === "ios" ? "padding" : "height"}
+            style={[
+              styles.sidePanel,
+              { paddingTop: insets.top, paddingBottom: insets.bottom },
+            ]}
+          >
             <View style={styles.sidePanelHeader}>
-              <View>
-                <Text style={styles.modalTitle}>{selectedItem?.name}</Text>
-                <Text style={styles.itemPrice}>
-                  Rp {selectedItem?.price.toLocaleString("id-ID")}
-                </Text>
+              <View style={{ flex: 1, paddingRight: 10 }}>
+                {isEditingItem ? (
+                  <View style={{ gap: 10 }}>
+                    <TextInput
+                      style={styles.quickEditInput}
+                      value={editItemName}
+                      onChangeText={setEditItemName}
+                      placeholder="Nama Menu"
+                      placeholderTextColor="#8E8E93"
+                    />
+                    <TextInput
+                      style={styles.quickEditInput}
+                      value={editItemPrice}
+                      onChangeText={setEditItemPrice}
+                      keyboardType="numeric"
+                      placeholder="Harga"
+                      placeholderTextColor="#8E8E93"
+                    />
+                  </View>
+                ) : (
+                  <View>
+                    <Text style={styles.modalTitle}>{selectedItem?.name}</Text>
+                    <Text style={styles.itemPrice}>
+                      Rp {selectedItem?.price.toLocaleString("id-ID")}
+                    </Text>
+                  </View>
+                )}
               </View>
-              <TouchableOpacity
-                onPress={() => {
-                  setSelectedItem(null);
-                  setItemStylists([]);
+
+              <View
+                style={{
+                  alignItems: "flex-end",
+                  justifyContent: "space-between",
                 }}
               >
-                <Text style={styles.closeBtn}>×</Text>
-              </TouchableOpacity>
+                <TouchableOpacity
+                  onPress={() => {
+                    setSelectedItem(null);
+                    setItemStylists([]);
+                    setIsEditingItem(false);
+                    setIsEditingAddOns(false);
+                  }}
+                >
+                  <Text style={styles.closeBtn}>×</Text>
+                </TouchableOpacity>
+
+                {isEditingItem ? (
+                  <TouchableOpacity
+                    onPress={handleQuickEditSave}
+                    style={styles.quickEditBtn}
+                  >
+                    <Text
+                      style={{
+                        color: "#0A84FF",
+                        fontWeight: "bold",
+                        fontSize: 12,
+                      }}
+                    >
+                      💾 Simpan
+                    </Text>
+                  </TouchableOpacity>
+                ) : (
+                  <TouchableOpacity
+                    onPress={() => setIsEditingItem(true)}
+                    style={styles.quickEditBtn}
+                  >
+                    <Text
+                      style={{
+                        color: "#0A84FF",
+                        fontWeight: "bold",
+                        fontSize: 12,
+                      }}
+                    >
+                      ✏️ Edit
+                    </Text>
+                  </TouchableOpacity>
+                )}
+              </View>
             </View>
 
             <ScrollView style={styles.sidePanelBody}>
+              {selectedItem?.image_uri && (
+                <Image
+                  source={{ uri: selectedItem.image_uri }}
+                  style={styles.sidePanelHeroImage}
+                />
+              )}
               <Text style={styles.descriptionBox}>
                 {selectedItem?.description}
               </Text>
+              <View style={styles.customAddonHeader}>
+                <Text style={styles.sectionTitle}>TAMBAHAN (ADD-ONS)</Text>
+                <TouchableOpacity
+                  onPress={() => {
+                    if (isEditingAddOns) {
+                      handleSaveCustomAddOns();
+                    } else {
+                      setIsEditingAddOns(true);
+                    }
+                  }}
+                  style={styles.quickEditBtn}
+                >
+                  <Text
+                    style={{
+                      color: "#0A84FF",
+                      fontWeight: "bold",
+                      fontSize: 12,
+                    }}
+                  >
+                    {isEditingAddOns ? "💾 Simpan" : "✏️ Edit"}
+                  </Text>
+                </TouchableOpacity>
+              </View>
 
-              {selectedItem?.addOns && (
-                <View>
-                  <Text style={styles.sectionTitle}>TAMBAHAN OPTIONAL</Text>
-                  {selectedItem.addOns.map((addon: any) => {
-                    const isSelected = selectedAddOns.find(
-                      (a) => a.id === addon.id,
-                    );
-                    return (
+              {isEditingAddOns ? (
+                /* --- EDIT MODE --- */
+                <View style={styles.customAddonListContainer}>
+                  {customAddOns.map((addon, idx) => (
+                    <View
+                      key={addon.id}
+                      style={styles.customAddonEditRowContainer}
+                    >
+                      <TextInput
+                        style={[styles.customAddonInputBase, { flex: 2 }]} // Expanded flex
+                        placeholder="Nama Tambahan"
+                        placeholderTextColor="#8E8E93"
+                        value={addon.name}
+                        onChangeText={(text) =>
+                          updateCustomAddOn(idx, "name", text)
+                        }
+                      />
+                      <TextInput
+                        style={[styles.customAddonInputBase, { flex: 1 }]} // Expanded flex
+                        placeholder="Harga"
+                        placeholderTextColor="#8E8E93"
+                        keyboardType="numeric"
+                        value={addon.price === 0 ? "" : addon.price.toString()}
+                        onChangeText={(text) =>
+                          updateCustomAddOn(idx, "price", text)
+                        }
+                      />
                       <TouchableOpacity
+                        onPress={() => removeCustomAddOn(idx)}
+                        style={styles.customAddonDeleteBtn}
+                      >
+                        <Text style={styles.customAddonDeleteText}>X</Text>
+                      </TouchableOpacity>
+                    </View>
+                  ))}
+
+                  <TouchableOpacity
+                    onPress={handleAddCustomRow}
+                    style={styles.customAddonAddRowBtn}
+                  >
+                    <Text style={styles.customAddonAddRowText}>
+                      + Tambah Baris Baru
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+              ) : (
+                /* --- SELECTION MODE --- */
+                <View style={styles.customAddonListContainer}>
+                  {customAddOns.length === 0 && (
+                    <Text style={styles.customAddonEmptyText}>
+                      Tidak ada tambahan.
+                    </Text>
+                  )}
+                  {customAddOns.map((addon) => {
+                    const selected = selectedAddOns.find(
+                      (a: any) => a.id === addon.id,
+                    );
+                    const qty = selected ? selected.quantity : 0;
+                    const linkedProduct = menuItems.find(
+                      (m) =>
+                        m.name.trim().toLowerCase() ===
+                        addon.name.trim().toLowerCase(),
+                    );
+                    const isLinkedStockEnabled = linkedProduct
+                      ? linkedProduct.is_stock_enabled === 1
+                      : false;
+                    const linkedStockQty = linkedProduct
+                      ? linkedProduct.stock_quantity
+                      : 0;
+
+                    const isSoldOut =
+                      isLinkedStockEnabled && linkedStockQty <= 0;
+
+                    return (
+                      <View
                         key={addon.id}
-                        onPress={() => toggleAddOn(addon)}
                         style={[
-                          styles.addonRow,
-                          isSelected
-                            ? styles.addonSelected
-                            : styles.addonUnselected,
+                          styles.customAddonSelectRow,
+                          qty > 0
+                            ? styles.customAddonSelectRowActive
+                            : styles.customAddonSelectRowInactive,
+                          isSoldOut ? styles.soldOutDim : null,
                         ]}
                       >
-                        <Text
-                          style={[
-                            styles.addonName,
-                            isSelected ? styles.textWhite : styles.textGray,
-                          ]}
-                        >
-                          {isSelected ? "✓ " : ""}
-                          {addon.name}
-                        </Text>
-                        <Text
-                          style={[
-                            styles.addonPrice,
-                            isSelected ? styles.itemPrice : styles.textWhite,
-                          ]}
-                        >
-                          +Rp {addon.price.toLocaleString("id-ID")}
-                        </Text>
-                      </TouchableOpacity>
+                        <View style={styles.customAddonInfo}>
+                          <Text
+                            style={[
+                              styles.customAddonSelectText,
+                              qty > 0 && styles.textBlue,
+                            ]}
+                          >
+                            {addon.name}{" "}
+                            {isLinkedStockEnabled
+                              ? isSoldOut
+                                ? "(HABIS)"
+                                : `(${linkedStockQty})`
+                              : ""}
+                          </Text>
+                          <Text
+                            style={[
+                              styles.customAddonSelectPrice,
+                              qty > 0 && styles.textBlue,
+                            ]}
+                          >
+                            + Rp {addon.price.toLocaleString("id-ID")}
+                          </Text>
+                        </View>
+
+                        <View style={styles.addonCounterContainer}>
+                          <TouchableOpacity
+                            onPress={() => updateAddOnQty(addon, -1)}
+                            style={[
+                              styles.counterBtn,
+                              qty > 0
+                                ? styles.counterBtnActive
+                                : styles.counterBtnInactive,
+                            ]}
+                          >
+                            <Text
+                              style={[
+                                styles.counterBtnText,
+                                qty > 0 ? styles.textBlue : styles.textWhite,
+                              ]}
+                            >
+                              -
+                            </Text>
+                          </TouchableOpacity>
+
+                          <Text style={styles.counterValueText}>{qty}</Text>
+
+                          <TouchableOpacity
+                            disabled={isSoldOut}
+                            onPress={() => updateAddOnQty(addon, 1)}
+                            style={[
+                              styles.counterBtn,
+                              isSoldOut
+                                ? styles.counterBtnInactive
+                                : styles.counterBtnActive,
+                            ]}
+                          >
+                            <Text
+                              style={[
+                                styles.counterBtnText,
+                                isSoldOut ? styles.textGray : styles.textBlue,
+                              ]}
+                            >
+                              +
+                            </Text>
+                          </TouchableOpacity>
+                        </View>
+                      </View>
                     );
                   })}
                 </View>
               )}
+
               {/* MULTIPLE STYLIST SELECTOR */}
               <View style={{ marginTop: 25 }}>
                 <Text style={styles.sectionTitle}>
@@ -623,6 +1269,42 @@ export default function RegisterScreen() {
                   onChangeText={setItemDiscountDesc}
                 />
               </View>
+
+              {/* CUSTOM NOTE INPUT */}
+              <View style={{ marginBottom: 30 }}>
+                <Text style={styles.sectionTitle}>CATATAN PESANAN OWNER</Text>
+                <TextInput
+                  style={{
+                    backgroundColor: "#121212",
+                    color: "#FFF",
+                    padding: 15,
+                    borderRadius: 8,
+                    borderWidth: 1,
+                    borderColor: "#2C2C2E",
+                  }}
+                  placeholder="..."
+                  placeholderTextColor="#8E8E93"
+                  value={itemNote}
+                  onChangeText={setItemNote}
+                />
+                <Text style={[styles.sectionTitle, { marginTop: 15 }]}>
+                  CATATAN PESANAN CUSTOMER
+                </Text>
+                <TextInput
+                  style={{
+                    backgroundColor: "#121212",
+                    color: "#FFF",
+                    padding: 15,
+                    borderRadius: 8,
+                    borderWidth: 1,
+                    borderColor: "#2C2C2E",
+                  }}
+                  placeholder="..."
+                  placeholderTextColor="#8E8E93"
+                  value={customerNote}
+                  onChangeText={setCustomerNote}
+                />
+              </View>
             </ScrollView>
 
             <View style={styles.sidePanelFooter}>
@@ -657,7 +1339,22 @@ export default function RegisterScreen() {
                 </Text>
 
                 <TouchableOpacity
-                  onPress={() => setQuantity(quantity + 1)}
+                  onPress={() => {
+                    if (selectedItem?.is_stock_enabled === 1) {
+                      const alreadyInCart = getCartQty(selectedItem.name);
+
+                      if (
+                        quantity + 1 >
+                        selectedItem.stock_quantity - alreadyInCart
+                      ) {
+                        alert(
+                          `Stok habis! Anda sudah memasukkan ${alreadyInCart} ke dalam keranjang`,
+                        );
+                        return;
+                      }
+                    }
+                    setQuantity(quantity + 1);
+                  }}
                   style={{
                     backgroundColor: "#2C2C2E",
                     width: 40,
@@ -680,7 +1377,7 @@ export default function RegisterScreen() {
                 </Text>
               </TouchableOpacity>
             </View>
-          </View>
+          </KeyboardAvoidingView>
         </View>
       </Modal>
 
@@ -691,122 +1388,229 @@ export default function RegisterScreen() {
         transparent={true}
         onRequestClose={() => setShowCheckout(false)}
       >
-        <View style={styles.modalOverlay}>
-          <View style={styles.checkoutModal}>
-            <View style={styles.checkoutHeader}>
-              <Text style={styles.modalTitle}>Tampilan Checkout</Text>
-              <TouchableOpacity onPress={() => setShowCheckout(false)}>
-                <Text style={styles.closeBtn}>×</Text>
-              </TouchableOpacity>
-            </View>
+        <KeyboardAvoidingView
+          style={{ flex: 1 }}
+          behavior={Platform.OS === "ios" ? "padding" : "height"}
+        >
+          <View style={styles.modalOverlay}>
+            <View style={[styles.checkoutModal, { paddingTop: insets.top }]}>
+              <View style={styles.checkoutHeader}>
+                <Text style={styles.modalTitle}>Tampilan Checkout</Text>
+                <TouchableOpacity onPress={() => setShowCheckout(false)}>
+                  <Text style={styles.closeBtn}>×</Text>
+                </TouchableOpacity>
+              </View>
 
-            <ScrollView style={styles.checkoutBody}>
-              {/* Receipt Preview */}
-              <View style={styles.receiptPaper}>
-                <Text style={styles.receiptTitle}>D'FFOND SALON</Text>
-                <Text style={styles.receiptCenter}>
-                  Jl. Dagopojok No.16, Kota Bandung
-                </Text>
+              <ScrollView style={styles.checkoutBody}>
+                {/* Receipt Preview */}
+                <View style={styles.receiptPaper}>
+                  <Text style={styles.receiptTitle}>D'FFOND SALON</Text>
+                  <Text style={styles.receiptCenter}>
+                    Jl. Dagopojok No.16, Kota Bandung
+                  </Text>
 
-                <Text style={styles.receiptDivider}>
-                  --------------------------------
-                </Text>
-                <Text style={styles.receiptLine}>
-                  Tanggal: {new Date().toLocaleDateString("en-GB")}
-                </Text>
-                <Text style={styles.receiptLine}>
-                  Waktu:{" "}
-                  {new Date().toLocaleTimeString([], {
-                    hour: "2-digit",
-                    minute: "2-digit",
-                  })}
-                </Text>
-                <Text style={styles.receiptLine}>Cashier: {cashier}</Text>
-                <Text style={styles.receiptDivider}>
-                  --------------------------------
-                </Text>
+                  <Text style={styles.receiptDivider}>
+                    --------------------------------
+                  </Text>
+                  <Text style={styles.receiptLine}>
+                    Tanggal: {new Date().toLocaleDateString("en-GB")}
+                  </Text>
+                  <Text style={styles.receiptLine}>
+                    Waktu:{" "}
+                    {new Date().toLocaleTimeString([], {
+                      hour: "2-digit",
+                      minute: "2-digit",
+                    })}
+                  </Text>
+                  <Text style={styles.receiptLine}>Cashier: {cashier}</Text>
+                  <Text style={styles.receiptDivider}>
+                    --------------------------------
+                  </Text>
 
-                {/* LOOP THROUGH ACTUAL CART ITEMS*/}
-                {cart.map((cartItem: any, index: number) => {
-                  const addOnsTotal =
-                    cartItem.selectedAddOns &&
-                    cartItem.selectedAddOns.length > 0
-                      ? cartItem.selectedAddOns.reduce(
-                          (sum: number, addon: any) => sum + addon.price,
-                          0,
-                        )
-                      : 0;
-                  const basePriceWithAddons = cartItem.price + addOnsTotal;
-                  const discountNominal = Math.round(
-                    basePriceWithAddons *
-                      cartItem.quantity *
-                      (cartItem.discountPercent / 100),
-                  );
+                  {/* LOOP THROUGH ACTUAL CART ITEMS*/}
+                  {cart.map((cartItem: any, index: number) => {
+                    const addOnsTotal =
+                      cartItem.selectedAddOns &&
+                      cartItem.selectedAddOns.length > 0
+                        ? cartItem.selectedAddOns.reduce(
+                            (sum: number, addon: any) => sum + addon.price,
+                            0,
+                          )
+                        : 0;
+                    const basePriceWithAddons = cartItem.price + addOnsTotal;
+                    const discountNominal = Math.round(
+                      basePriceWithAddons *
+                        cartItem.quantity *
+                        (cartItem.discountPercent / 100),
+                    );
 
-                  return (
-                    <View
-                      key={cartItem.cartId}
-                      style={{
-                        marginBottom: 12,
-                        paddingBottom: 8,
-                        borderBottomWidth: 1,
-                        borderBottomColor: "#F2F2F7",
-                      }}
-                    >
-                      {/* Item Name & Delete Button */}
+                    return (
                       <View
+                        key={cartItem.cartId}
                         style={{
-                          flexDirection: "row",
-                          justifyContent: "space-between",
-                          alignItems: "flex-start",
+                          marginBottom: 12,
+                          paddingBottom: 8,
+                          borderBottomWidth: 1,
+                          borderBottomColor: "#F2F2F7",
                         }}
                       >
-                        <Text
-                          style={[
-                            styles.receiptLine,
-                            { flex: 1, fontWeight: "bold" },
-                          ]}
+                        {/* Item Name & Delete Button */}
+                        <View
+                          style={{
+                            flexDirection: "row",
+                            justifyContent: "space-between",
+                            alignItems: "flex-start",
+                          }}
                         >
-                          {cartItem.quantity}x {cartItem.name}
-                        </Text>
-                        <TouchableOpacity
-                          onPress={() => removeFromCart(cartItem.cartId)}
-                          style={{ paddingLeft: 10 }}
-                        >
-                          <Text
-                            style={{
-                              color: "#FF453A",
-                              fontSize: 18,
-                              fontWeight: "bold",
-                              lineHeight: 18,
-                            }}
-                          >
-                            ×
-                          </Text>
-                        </TouchableOpacity>
-                      </View>
-
-                      {/* Display Multiple Stylists */}
-                      {cartItem.stylists && cartItem.stylists.length > 0 && (
-                        <View style={styles.receiptRow}>
                           <Text
                             style={[
-                              styles.receiptAddon,
-                              { fontStyle: "italic", paddingLeft: 0 },
+                              styles.receiptLine,
+                              { flex: 1, fontWeight: "bold" },
                             ]}
                           >
-                            {cartItem.stylists
-                              .map((s: string) => `@${s}`)
-                              .join(", ")}
+                            {cartItem.quantity}x {cartItem.name}
+                          </Text>
+                          <TouchableOpacity
+                            onPress={() => removeFromCart(cartItem.cartId)}
+                            style={{ paddingLeft: 10 }}
+                          >
+                            <Text
+                              style={{
+                                color: "#FF453A",
+                                fontSize: 18,
+                                fontWeight: "bold",
+                                lineHeight: 18,
+                              }}
+                            >
+                              ×
+                            </Text>
+                          </TouchableOpacity>
+                        </View>
+
+                        {/* QUANTITY & BASE TOTAL ROW */}
+                        <View
+                          style={{
+                            flexDirection: "row",
+                            justifyContent: "space-between",
+                            marginTop: 4,
+                          }}
+                        >
+                          <Text style={styles.receiptLine}>
+                            {cartItem.quantity}x Rp{" "}
+                            {cartItem.price.toLocaleString("id-ID")}
+                          </Text>
+                          <Text style={styles.receiptLine}>
+                            Rp{" "}
+                            {(
+                              cartItem.quantity * cartItem.price
+                            ).toLocaleString("id-ID")}
                           </Text>
                         </View>
-                      )}
 
-                      {/* Map Add-ons (Flex wrapping added to prevent overlap) */}
-                      {cartItem.selectedAddOns.map(
-                        (addon: any, idx: number) => (
+                        {/* Display Multiple Stylists */}
+                        {cartItem.stylists && cartItem.stylists.length > 0 && (
+                          <View style={styles.receiptRow}>
+                            <Text
+                              style={[
+                                styles.receiptAddon,
+                                { fontStyle: "italic", paddingLeft: 0 },
+                              ]}
+                            >
+                              {cartItem.stylists
+                                .map((s: string) => `@${s}`)
+                                .join(", ")}
+                            </Text>
+                          </View>
+                        )}
+
+                        {/* Map Add-ons */}
+                        {cartItem.selectedAddOns.map(
+                          (addon: any, idx: number) => {
+                            const totalAddonQty =
+                              (addon.quantity || 1) * cartItem.quantity;
+                            const totalAddonPrice = addon.price * totalAddonQty;
+
+                            if (totalAddonQty === 1) {
+                              return (
+                                <View
+                                  key={idx}
+                                  style={{
+                                    flexDirection: "row",
+                                    justifyContent: "space-between",
+                                    alignItems: "flex-start",
+                                    marginVertical: 2,
+                                  }}
+                                >
+                                  <Text
+                                    style={{
+                                      color: "#555",
+                                      fontSize: 12,
+                                      flex: 1,
+                                      flexShrink: 1,
+                                      paddingRight: 15,
+                                    }}
+                                  >
+                                    + {addon.name}
+                                  </Text>
+                                  <Text
+                                    style={{
+                                      color: "#555",
+                                      fontSize: 12,
+                                      textAlign: "right",
+                                    }}
+                                  >
+                                    Rp {totalAddonPrice.toLocaleString("id-ID")}
+                                  </Text>
+                                </View>
+                              );
+                            } else {
+                              return (
+                                <View key={idx} style={{ marginVertical: 2 }}>
+                                  <Text style={{ color: "#555", fontSize: 12 }}>
+                                    + {addon.name}
+                                  </Text>
+
+                                  <View
+                                    style={{
+                                      flexDirection: "row",
+                                      justifyContent: "space-between",
+                                      alignItems: "flex-start",
+                                      paddingLeft: 14,
+                                      marginTop: 2,
+                                    }}
+                                  >
+                                    <Text
+                                      style={{
+                                        color: "#555",
+                                        fontSize: 12,
+                                        flex: 1,
+                                        flexShrink: 1,
+                                        paddingRight: 15,
+                                      }}
+                                    >
+                                      ({totalAddonQty}x Rp{" "}
+                                      {addon.price.toLocaleString("id-ID")})
+                                    </Text>
+                                    <Text
+                                      style={{
+                                        color: "#555",
+                                        fontSize: 12,
+                                        textAlign: "right",
+                                      }}
+                                    >
+                                      Rp{" "}
+                                      {totalAddonPrice.toLocaleString("id-ID")}
+                                    </Text>
+                                  </View>
+                                </View>
+                              );
+                            }
+                          },
+                        )}
+
+                        {/* Display Discount Data & Subtracted Amount (Fixed Overlap Solution) */}
+                        {cartItem.discountPercent > 0 && (
                           <View
-                            key={idx}
                             style={{
                               flexDirection: "row",
                               justifyContent: "space-between",
@@ -816,211 +1620,184 @@ export default function RegisterScreen() {
                           >
                             <Text
                               style={{
-                                color: "#555",
+                                color: "#FF453A",
                                 fontSize: 12,
                                 flex: 1,
                                 flexShrink: 1,
                                 paddingRight: 15,
                               }}
                             >
-                              + {addon.name}
+                              Disc {cartItem.discountPercent}%{" "}
+                              {cartItem.discountDesc
+                                ? `(${cartItem.discountDesc})`
+                                : ""}
                             </Text>
                             <Text
                               style={{
-                                color: "#555",
+                                color: "#FF453A",
                                 fontSize: 12,
                                 textAlign: "right",
                               }}
                             >
-                              Rp {addon.price.toLocaleString("id-ID")}
+                              -Rp {discountNominal.toLocaleString("id-ID")}
                             </Text>
                           </View>
-                        ),
-                      )}
+                        )}
 
-                      {/* Display Discount Data & Subtracted Amount (Fixed Overlap Solution) */}
-                      {cartItem.discountPercent > 0 && (
+                        {/* Subtotal Positioned at Flex-End */}
                         <View
                           style={{
                             flexDirection: "row",
-                            justifyContent: "space-between",
-                            alignItems: "flex-start",
-                            marginVertical: 2,
+                            justifyContent: "flex-end",
+                            marginTop: 4,
                           }}
                         >
                           <Text
-                            style={{
-                              color: "#FF453A",
-                              fontSize: 12,
-                              flex: 1,
-                              flexShrink: 1,
-                              paddingRight: 15,
-                            }}
+                            style={[styles.receiptLine, { fontWeight: "bold" }]}
                           >
-                            Disc {cartItem.discountPercent}%{" "}
-                            {cartItem.discountDesc
-                              ? `(${cartItem.discountDesc})`
-                              : ""}
-                          </Text>
-                          <Text
-                            style={{
-                              color: "#FF453A",
-                              fontSize: 12,
-                              textAlign: "right",
-                            }}
-                          >
-                            -Rp {discountNominal.toLocaleString("id-ID")}
+                            Subtotal: Rp{" "}
+                            {cartItem.itemTotal.toLocaleString("id-ID")}
                           </Text>
                         </View>
-                      )}
-
-                      {/* Subtotal Positioned at Flex-End like RecapScreen */}
-                      <View
-                        style={{
-                          flexDirection: "row",
-                          justifyContent: "flex-end",
-                          marginTop: 4,
-                        }}
-                      >
-                        <Text
-                          style={[styles.receiptLine, { fontWeight: "bold" }]}
-                        >
-                          Subtotal: Rp{" "}
-                          {cartItem.itemTotal.toLocaleString("id-ID")}
-                        </Text>
+                        {/* DISPLAY CUSTOM NOTE AT THE VERY BOTTOM */}
+                        {cartItem.customNote ? (
+                          <View
+                            style={{
+                              marginTop: 4,
+                              paddingTop: 4,
+                              borderTopWidth: 1,
+                              borderTopColor: "#F2F2F7",
+                              borderStyle: "dashed",
+                            }}
+                          >
+                            <Text
+                              style={[
+                                styles.receiptLine,
+                                { fontStyle: "italic", color: "#555" },
+                              ]}
+                            >
+                              Catatan(Owner): {cartItem.customNote}
+                            </Text>
+                          </View>
+                        ) : null}
                       </View>
-                    </View>
-                  );
-                })}
+                    );
+                  })}
 
-                <Text style={styles.receiptDivider}>
-                  --------------------------------
-                </Text>
-
-                <View style={styles.receiptRow}>
-                  <Text style={styles.receiptBold}>TOTAL:</Text>
-                  <Text style={styles.receiptBold}>
-                    Rp {cartTotal.toLocaleString("id-ID")}
+                  <Text style={styles.receiptDivider}>
+                    --------------------------------
                   </Text>
+
+                  <View style={styles.receiptRow}>
+                    <Text style={styles.receiptBold}>TOTAL:</Text>
+                    <Text style={styles.receiptBold}>
+                      Rp {cartTotal.toLocaleString("id-ID")}
+                    </Text>
+                  </View>
+
+                  <Text style={styles.receiptDivider}>
+                    --------------------------------
+                  </Text>
+
+                  <View style={styles.receiptRow}>
+                    <Text style={styles.receiptLine}>PEMBAYARAN:</Text>
+                    <Text style={styles.receiptLine}>{paymentMethod}</Text>
+                  </View>
                 </View>
 
-                <Text style={styles.receiptDivider}>
-                  --------------------------------
-                </Text>
-
-                <View style={styles.receiptRow}>
-                  <Text style={styles.receiptLine}>PEMBAYARAN:</Text>
-                  <Text style={styles.receiptLine}>{paymentMethod}</Text>
-                </View>
-              </View>
-
-              {/* Payment Settings Container */}
-              <View style={styles.paymentContainer}>
-                {/* Payment Method Selector */}
-                <Text style={styles.sectionTitle}>METODE PEMBAYARAN</Text>
-                <View style={styles.paymentRow}>
-                  {/* QRIS Button */}
-                  <TouchableOpacity
-                    onPress={() => setPaymentMethod("QRIS")}
-                    style={[
-                      styles.paymentBtn,
-                      paymentMethod === "QRIS" ? styles.paymentBtnActive : {},
-                    ]}
-                  >
-                    <Text
-                      style={
-                        paymentMethod === "QRIS"
-                          ? styles.textWhiteBold
-                          : styles.textGray
-                      }
-                    >
-                      QRIS
-                    </Text>
-                  </TouchableOpacity>
-
-                  {/* Cash Button */}
-                  <TouchableOpacity
-                    onPress={() => setPaymentMethod("Cash")}
-                    style={[
-                      styles.paymentBtn,
-                      paymentMethod === "Cash" ? styles.paymentBtnActive : {},
-                    ]}
-                  >
-                    <Text
-                      style={
-                        paymentMethod === "Cash"
-                          ? styles.textWhiteBold
-                          : styles.textGray
-                      }
-                    >
-                      Cash
-                    </Text>
-                  </TouchableOpacity>
-                  {/* Transfer Button */}
-                  <TouchableOpacity
-                    onPress={() => setPaymentMethod("Transfer")}
-                    style={[
-                      styles.paymentBtn,
-                      paymentMethod === "Transfer"
-                        ? styles.paymentBtnActive
-                        : {},
-                    ]}
-                  >
-                    <Text
+                {/* Payment Settings Container */}
+                <View style={styles.paymentContainer}>
+                  {/* Payment Method Selector */}
+                  <Text style={styles.sectionTitle}>METODE PEMBAYARAN</Text>
+                  <View style={styles.paymentRow}>
+                    {/* QRIS Button */}
+                    <TouchableOpacity
+                      onPress={() => setPaymentMethod("QRIS")}
                       style={[
-                        paymentMethod === "Transfer"
-                          ? styles.textWhiteBold
-                          : styles.textGray,
+                        styles.paymentBtn,
+                        paymentMethod === "QRIS" ? styles.paymentBtnActive : {},
                       ]}
                     >
-                      Transfer
-                    </Text>
-                  </TouchableOpacity>
-                </View>
-
-                {/* Cash Input */}
-                <View style={styles.cashInputContainer}>
-                  <Text style={styles.sectionTitle}>JUMLAH DIBAYAR (Rp)</Text>
-                  <TextInput
-                    style={styles.cashInput}
-                    keyboardType="numeric"
-                    value={amountTendered}
-                    onChangeText={setAmountTendered}
-                    placeholder={cartTotal.toLocaleString("id-ID")}
-                    placeholderTextColor="#8E8E93"
-                  />
-
-                  {Number(amountTendered) > 0 &&
-                    Number(amountTendered) < cartTotal && (
                       <Text
-                        style={{
-                          color: "#FF453A",
-                          marginTop: 5,
-                          fontSize: 12,
-                        }}
+                        style={
+                          paymentMethod === "QRIS"
+                            ? styles.textWhiteBold
+                            : styles.textGray
+                        }
                       >
-                        Kurang Rp{" "}
-                        {(cartTotal - Number(amountTendered)).toLocaleString(
-                          "id-ID",
-                        )}
+                        QRIS
                       </Text>
-                    )}
+                    </TouchableOpacity>
 
-                  {Number(amountTendered) > cartTotal && (
-                    <Text
-                      style={{
-                        color: "#34C759",
-                        marginTop: 5,
-                        fontSize: 12,
-                        fontWeight: "bold",
-                      }}
+                    {/* Cash Button */}
+                    <TouchableOpacity
+                      onPress={() => setPaymentMethod("Cash")}
+                      style={[
+                        styles.paymentBtn,
+                        paymentMethod === "Cash" ? styles.paymentBtnActive : {},
+                      ]}
                     >
-                      Kembalian: Rp {change.toLocaleString("id-ID")}
-                    </Text>
-                  )}
+                      <Text
+                        style={
+                          paymentMethod === "Cash"
+                            ? styles.textWhiteBold
+                            : styles.textGray
+                        }
+                      >
+                        Cash
+                      </Text>
+                    </TouchableOpacity>
+                    {/* Transfer Button */}
+                    <TouchableOpacity
+                      onPress={() => setPaymentMethod("Transfer")}
+                      style={[
+                        styles.paymentBtn,
+                        paymentMethod === "Transfer"
+                          ? styles.paymentBtnActive
+                          : {},
+                      ]}
+                    >
+                      <Text
+                        style={[
+                          paymentMethod === "Transfer"
+                            ? styles.textWhiteBold
+                            : styles.textGray,
+                        ]}
+                      >
+                        Transfer
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
 
-                  {Number(amountTendered) > 0 &&
-                    Number(amountTendered) === cartTotal && (
+                  {/* Cash Input */}
+                  <View style={styles.cashInputContainer}>
+                    <Text style={styles.sectionTitle}>JUMLAH DIBAYAR (Rp)</Text>
+                    <TextInput
+                      style={styles.cashInput}
+                      keyboardType="numeric"
+                      value={amountTendered}
+                      onChangeText={setAmountTendered}
+                      placeholder={cartTotal.toLocaleString("id-ID")}
+                      placeholderTextColor="#8E8E93"
+                    />
+
+                    {Number(amountTendered) > 0 &&
+                      Number(amountTendered) < cartTotal && (
+                        <Text
+                          style={{
+                            color: "#FF453A",
+                            marginTop: 5,
+                            fontSize: 12,
+                          }}
+                        >
+                          Kurang Rp{" "}
+                          {(cartTotal - Number(amountTendered)).toLocaleString(
+                            "id-ID",
+                          )}
+                        </Text>
+                      )}
+
+                    {Number(amountTendered) > cartTotal && (
                       <Text
                         style={{
                           color: "#34C759",
@@ -1029,88 +1806,106 @@ export default function RegisterScreen() {
                           fontWeight: "bold",
                         }}
                       >
-                        Uang Pas
+                        Kembalian: Rp {change.toLocaleString("id-ID")}
                       </Text>
                     )}
-                </View>
 
-                {/* STYLIST SELECTION UI */}
-                <View style={{ marginTop: 25 }}>
-                  <Text style={styles.sectionTitle}>CASHIER</Text>
-                  <ScrollView
-                    horizontal
-                    showsHorizontalScrollIndicator={false}
-                    style={{ flexDirection: "row" }}
-                  >
-                    {staffList.map((employee) => (
-                      <TouchableOpacity
-                        key={employee.id}
-                        onPress={() => setCashier(employee.name)}
-                        style={[
-                          styles.paymentBtn,
-                          { marginRight: 10, paddingHorizontal: 25, flex: 0 },
-                          cashier === employee.name
-                            ? styles.paymentBtnActive
-                            : {},
-                        ]}
-                      >
+                    {Number(amountTendered) > 0 &&
+                      Number(amountTendered) === cartTotal && (
                         <Text
-                          style={
-                            cashier === employee.name
-                              ? styles.textWhiteBold
-                              : styles.textGray
-                          }
+                          style={{
+                            color: "#34C759",
+                            marginTop: 5,
+                            fontSize: 12,
+                            fontWeight: "bold",
+                          }}
                         >
-                          {employee.name}
+                          Uang Pas
                         </Text>
-                      </TouchableOpacity>
-                    ))}
-                  </ScrollView>
+                      )}
+                  </View>
+
+                  {/* STYLIST SELECTION UI */}
+                  <View style={{ marginTop: 25 }}>
+                    <Text style={styles.sectionTitle}>CASHIER</Text>
+                    <ScrollView
+                      horizontal
+                      showsHorizontalScrollIndicator={false}
+                      style={{ flexDirection: "row" }}
+                    >
+                      {staffList.map((employee) => (
+                        <TouchableOpacity
+                          key={employee.id}
+                          onPress={() => setCashier(employee.name)}
+                          style={[
+                            styles.paymentBtn,
+                            { marginRight: 10, paddingHorizontal: 25, flex: 0 },
+                            cashier === employee.name
+                              ? styles.paymentBtnActive
+                              : {},
+                          ]}
+                        >
+                          <Text
+                            style={
+                              cashier === employee.name
+                                ? styles.textWhiteBold
+                                : styles.textGray
+                            }
+                          >
+                            {employee.name}
+                          </Text>
+                        </TouchableOpacity>
+                      ))}
+                    </ScrollView>
+                  </View>
                 </View>
+              </ScrollView>
+
+              <View
+                style={[
+                  styles.checkoutFooter,
+                  { flexDirection: "row", gap: 10 },
+                ]}
+              >
+                <TouchableOpacity
+                  style={[
+                    styles.printBtn,
+                    { flex: 1, backgroundColor: "#0A84FF" },
+                    Number(amountTendered) > 0 &&
+                      Number(amountTendered) < cartTotal && {
+                        backgroundColor: "#2C2C2E",
+                      },
+                  ]}
+                  onPress={() => finalizeTransaction(true)} // Confirm & Print Flow
+                  disabled={
+                    Number(amountTendered) > 0 &&
+                    Number(amountTendered) < cartTotal
+                  }
+                >
+                  <Text style={styles.textWhiteBold}>🖨️ Selesai & Print</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={[
+                    styles.printBtn,
+                    { flex: 1 },
+                    paymentMethod === "Cash" &&
+                      Number(amountTendered) < cartTotal && {
+                        backgroundColor: "#2C2C2E",
+                      },
+                  ]}
+                  onPress={() => finalizeTransaction(false)} // Confirm Only Flow
+                  disabled={
+                    Number(amountTendered) > 0 &&
+                    Number(amountTendered) < cartTotal
+                  }
+                >
+                  <Text style={styles.textWhiteBold}>✅ Selesai</Text>
+                </TouchableOpacity>
               </View>
-            </ScrollView>
-
-            <View
-              style={[styles.checkoutFooter, { flexDirection: "row", gap: 10 }]}
-            >
-              <TouchableOpacity
-                style={[
-                  styles.printBtn,
-                  { flex: 1, backgroundColor: "#0A84FF" },
-                  Number(amountTendered) > 0 &&
-                    Number(amountTendered) < cartTotal && {
-                      backgroundColor: "#2C2C2E",
-                    },
-                ]}
-                onPress={() => finalizeTransaction(true)} // Confirm & Print Flow
-                disabled={
-                  Number(amountTendered) > 0 &&
-                  Number(amountTendered) < cartTotal
-                }
-              >
-                <Text style={styles.textWhiteBold}>🖨️ Selesai & Print</Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={[
-                  styles.printBtn,
-                  { flex: 1 },
-                  paymentMethod === "Cash" &&
-                    Number(amountTendered) < cartTotal && {
-                      backgroundColor: "#2C2C2E",
-                    },
-                ]}
-                onPress={() => finalizeTransaction(false)} // Confirm Only Flow
-                disabled={
-                  Number(amountTendered) > 0 &&
-                  Number(amountTendered) < cartTotal
-                }
-              >
-                <Text style={styles.textWhiteBold}>✅ Selesai</Text>
-              </TouchableOpacity>
             </View>
           </View>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
     </SafeAreaView>
   );
@@ -1200,7 +1995,7 @@ const styles = StyleSheet.create({
     position: "absolute",
     bottom: 10,
     right: 10,
-    backgroundColor: "#0A84FF",
+    backgroundColor: "#3de912d3",
     width: 30,
     height: 30,
     borderRadius: 15,
@@ -1445,5 +2240,187 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#2C2C2E",
     marginTop: 10,
+  },
+  searchContainer: {
+    flexDirection: "row",
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    backgroundColor: "#121212",
+    alignItems: "center",
+    gap: 10,
+  },
+  searchInput: {
+    flex: 1,
+    backgroundColor: "#1C1C1E",
+    color: "#FFF",
+    paddingVertical: 10,
+    paddingHorizontal: 15,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "#2C2C2E",
+    fontSize: 14,
+  },
+  clearSearchBtn: {
+    paddingHorizontal: 5,
+  },
+  quickEditInput: {
+    backgroundColor: "#121212",
+    color: "#FFF",
+    padding: 10,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "#0A84FF",
+    fontSize: 16,
+    fontWeight: "bold",
+  },
+  quickEditBtn: {
+    backgroundColor: "rgba(10,132,255,0.1)",
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: "#0A84FF",
+  },
+  quickSaveBtn: {
+    backgroundColor: "#34C759",
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 6,
+  },
+  // CUSTOM ADD-ON STYLES
+  customAddonHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 15,
+    marginTop: 10,
+  },
+  customAddonActionText: {
+    color: "#0A84FF",
+    fontSize: 12,
+    fontWeight: "bold",
+  },
+  customAddonListContainer: {
+    gap: 10,
+    marginBottom: 20,
+  },
+
+  /* EDIT MODE STYLES */
+  customAddonEditRowContainer: {
+    flexDirection: "row",
+    gap: 8,
+    alignItems: "center",
+    marginBottom: 10,
+  },
+  customAddonInputBase: {
+    backgroundColor: "#1C1C1E",
+    color: "#FFF",
+    padding: 12,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "#2C2C2E",
+  },
+  customAddonInputName: {
+    flex: 2,
+  },
+  customAddonInputPrice: {
+    flex: 1.5,
+  },
+  customAddonInputStock: {
+    flex: 1,
+  },
+  customAddonDeleteBtn: {
+    padding: 10,
+  },
+  customAddonDeleteText: {
+    color: "#FF453A",
+    fontWeight: "bold",
+    fontSize: 18,
+  },
+  customAddonAddRowBtn: {
+    marginTop: 5,
+    padding: 12,
+    backgroundColor: "rgba(10,132,255,0.2)",
+    borderRadius: 8,
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: "#0A84FF",
+  },
+  customAddonAddRowText: {
+    color: "#0A84FF",
+    fontWeight: "bold",
+  },
+  customAddonEmptyText: {
+    color: "#8E8E93",
+    fontStyle: "italic",
+    fontSize: 12,
+  },
+
+  /* SELECTION MODE STYLES */
+  customAddonSelectRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    padding: 15,
+    borderRadius: 8,
+    borderWidth: 1,
+  },
+  customAddonSelectRowActive: {
+    borderColor: "#0A84FF",
+    backgroundColor: "rgba(10,132,255,0.2)",
+  },
+  customAddonSelectRowInactive: {
+    borderColor: "#2C2C2E",
+    backgroundColor: "#1C1C1E",
+  },
+  customAddonInfo: {
+    flex: 1,
+  },
+  customAddonSelectText: {
+    color: "#FFF",
+    fontWeight: "bold",
+  },
+  customAddonSelectPrice: {
+    color: "#8E8E93",
+  },
+  soldOutDim: {
+    opacity: 0.4,
+  },
+  textBlue: {
+    color: "#0A84FF",
+  },
+  addonCounterContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 15,
+  },
+  counterBtn: {
+    width: 35,
+    height: 35,
+    borderRadius: 17.5,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  counterBtnActive: {
+    backgroundColor: "rgba(10,132,255,0.2)",
+  },
+  counterBtnInactive: {
+    backgroundColor: "#2C2C2E",
+  },
+  counterBtnText: {
+    fontSize: 20,
+    fontWeight: "bold",
+  },
+  counterValueText: {
+    color: "#FFF",
+    fontSize: 16,
+    fontWeight: "bold",
+  },
+
+  sidePanelHeroImage: {
+    width: "100%",
+    height: 200,
+    borderRadius: 12,
+    marginBottom: 15,
+    resizeMode: "cover",
   },
 });

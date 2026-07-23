@@ -1,5 +1,7 @@
 import React, { useCallback, useState } from "react";
 import {
+  FlatList,
+  KeyboardAvoidingView,
   Modal,
   Platform,
   ScrollView,
@@ -13,28 +15,55 @@ import {
 import { db } from "@/database/db";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import { useFocusEffect } from "expo-router";
-import { SafeAreaView } from "react-native-safe-area-context";
+import {
+  SafeAreaView,
+  useSafeAreaInsets,
+} from "react-native-safe-area-context";
 import { printReceiptRaw } from "../../utils/bluetooth";
 import { generateThermalReceiptString } from "../../utils/printer";
 
+// pass
+import { OWNER_PASSWORD } from "@/utils/pass";
+
+// icons
+import { MaterialCommunityIcons } from "@expo/vector-icons";
+
 export default function RecapScreen() {
-  // --- NEW DATE RANGE STATES ---
+  const insets = useSafeAreaInsets();
+  // DATE RANGE STATES
   const [startDate, setStartDate] = useState<Date>(new Date());
   const [endDate, setEndDate] = useState<Date>(new Date());
-  const [activePicker, setActivePicker] = useState<"start" | "end" | null>(
-    null,
-  );
+  const [activePicker, setActivePicker] = useState<
+    "start" | "end" | "expense" | null
+  >(null);
+  const [expenseDate, setExpenseDate] = useState<Date>(new Date());
+
+  // SORTING STATE
+  const [sortMode, setSortMode] = useState<"desc" | "asc">("desc");
 
   const [selectedTx, setSelectedTx] = useState<any>(null);
   const [ledgerData, setLedgerData] = useState<any[]>([]);
-  const [receiptItems, setReceiptItems] = useState<any[]>([]);
 
   const [staffList, setStaffList] = useState<any[]>([]);
   const [showExpenseModal, setShowExpenseModal] = useState(false);
   const [expenseDesc, setExpenseDesc] = useState("");
   const [expenseAmount, setExpenseAmount] = useState("");
-  const [expenseStaff, setExpenseStaff] = useState("");
+  const [expenseStaffs, setExpenseStaffs] = useState<string[]>([]);
+  const [expenseCategory, setExpenseCategory] = useState("Operasional");
+  const [salaryEffect, setSalaryEffect] = useState<"none" | "add" | "subtract">(
+    "none",
+  );
+  const defaultExpenseCategories = [
+    "Operasional",
+    "Kasbon",
+    "Uang Makan",
+    "Beli Bahan",
+  ];
 
+  // passwords
+  const [showPasswordModal, setShowPasswordModal] = useState(false);
+  const [deletePassword, setDeletePassword] = useState("");
+  const [isPasswordVisible, setIsPasswordVisible] = useState(false);
   // ==========================================
   // DATE RANGE NAVIGATION FUNCTIONS
   // ==========================================
@@ -56,6 +85,11 @@ export default function RecapScreen() {
         if (date < startDate) {
           setStartDate(date);
         }
+      } else if (activePicker === "expense") {
+        const newDate = new Date(date);
+        const now = new Date();
+        newDate.setHours(now.getHours(), now.getMinutes(), now.getSeconds());
+        setExpenseDate(newDate);
       }
     }
   };
@@ -68,28 +102,57 @@ export default function RecapScreen() {
     });
   };
 
-  // ==========================================
   // EXPENSE & TRANSACTION LOGIC
-  // ==========================================
   const handleSaveExpense = () => {
-    if (!expenseDesc || !expenseAmount || !expenseStaff)
-      return alert("Tolong isi seluruh deskripsi!");
+    if (!expenseDesc || !expenseAmount)
+      return alert("Tolong isi seluruh deskripsi dan jumlah pengeluaran!");
 
     try {
-      // Expenses are now logged at the exact current time they are entered
-      const timestamp = new Date();
-      const finalDescription = `${expenseDesc} (by ${expenseStaff})`;
+      const timestamp = expenseDate.toISOString();
+      const staffString =
+        expenseStaffs.length > 0 ? ` (by ${expenseStaffs.join(", ")})` : "";
+
+      // Inject category into the description for the Recap list
+      const finalDescription = `${expenseDesc}${staffString}`;
+      const amountNum = Number(expenseAmount);
 
       db.runSync(
-        "INSERT INTO Expenditures (timestamp, description, amount) VALUES (?, ?, ?)",
-        [timestamp.toISOString(), finalDescription, Number(expenseAmount)],
+        "INSERT INTO Expenditures (timestamp, description, amount, category) VALUES (?, ?, ?, ?)",
+        [timestamp, finalDescription, amountNum, expenseCategory],
       );
 
-      fetchDayData();
+      // Cross-link to Staff Bonuses if the owner applied a modifier
+      if (salaryEffect !== "none" && expenseStaffs.length > 0) {
+        // Apply the FULL amount to each selected staff member (No longer dividing)
+        const finalBonusAmount =
+          salaryEffect === "subtract" ? -amountNum : amountNum;
 
+        // Use the selected category as the "method" so manage.tsx can filter it
+        const methodToSave = expenseCategory;
+
+        expenseStaffs.forEach((staffName) => {
+          const staffObj = staffList.find((s) => s.name === staffName);
+          if (staffObj) {
+            db.runSync(
+              "INSERT INTO Staff_Bonuses (employee_id, method, timestamp, amount, description) VALUES (?, ?, ?, ?, ?)",
+              [
+                staffObj.id,
+                methodToSave,
+                timestamp,
+                finalBonusAmount,
+                `Description: ${expenseDesc}`,
+              ],
+            );
+          }
+        });
+      }
+
+      fetchDayData();
       setExpenseDesc("");
       setExpenseAmount("");
-      setExpenseStaff("");
+      setExpenseStaffs([]);
+      setExpenseCategory("Operasional");
+      setSalaryEffect("none");
       setShowExpenseModal(false);
     } catch (error) {
       console.error("Error saving expense:", error);
@@ -98,19 +161,6 @@ export default function RecapScreen() {
 
   const openTransactionDetails = (tx: any) => {
     setSelectedTx(tx);
-    if (tx.type === "sale") {
-      try {
-        const items = db.getAllSync(
-          "SELECT * FROM Transaction_Items WHERE transaction_id = ?",
-          [tx.dbId],
-        );
-        setReceiptItems(items);
-      } catch (error) {
-        console.error("Error fetching transaction items:", error);
-      }
-    } else {
-      setReceiptItems([]);
-    }
   };
 
   // Main data gathering isolated to a re-runnable function
@@ -155,7 +205,10 @@ export default function RecapScreen() {
             amount: tx.total_amount,
             paymentMethod: tx.payment_method,
             timestamp: tx.timestamp,
-            cart_json: tx.cart_json,
+
+            parsedCart: JSON.parse(tx.cart_json || "[]"),
+            amountTendered: tx.amount_tendered || tx.total_amount,
+            changeAmount: tx.change_amount || 0,
           };
         });
 
@@ -168,6 +221,7 @@ export default function RecapScreen() {
           const expDate = new Date(exp.timestamp);
           return {
             id: `exp-${exp.id}`,
+            dbId: exp.id,
             type: "expense",
             title: exp.description,
             dateStr: expDate.toLocaleDateString("id-ID", {
@@ -182,6 +236,7 @@ export default function RecapScreen() {
             amount: -exp.amount,
             details: exp.description,
             timestamp: exp.timestamp,
+            category: exp.category,
           };
         });
 
@@ -198,7 +253,14 @@ export default function RecapScreen() {
 
   useFocusEffect(
     useCallback(() => {
-      fetchDayData();
+      const handle = requestIdleCallback(
+        () => {
+          fetchDayData();
+        },
+        { timeout: 1000 },
+      );
+
+      return () => cancelIdleCallback(handle);
     }, [fetchDayData]),
   );
 
@@ -224,16 +286,97 @@ export default function RecapScreen() {
 
   const netEarning = totalEarnings - totalExpenses;
 
+  const sortedLedgerData = [...ledgerData].sort((a, b) => {
+    // 1Get the pure Date (Midnight) to group days together
+    const dateA = new Date(a.timestamp).setHours(0, 0, 0, 0);
+    const dateB = new Date(b.timestamp).setHours(0, 0, 0, 0);
+
+    // Primary Sort: By Date
+    if (dateA !== dateB) {
+      return sortMode === "desc" ? dateB - dateA : dateA - dateB;
+    }
+
+    // Secondary Sort: If they are on the SAME day, separate Sales and Expenses
+    if (a.type === "expense" && b.type === "sale") return 1; // Push expenses down
+    if (a.type === "sale" && b.type === "expense") return -1; // Keep sales up top
+
+    // Tertiary Sort: If both are Sales, sort by No. Urut
+    if (a.type === "sale" && b.type === "sale") {
+      return sortMode === "desc"
+        ? (b.queue_number || 0) - (a.queue_number || 0)
+        : (a.queue_number || 0) - (b.queue_number || 0);
+    }
+
+    // If both are Expenses, just sort them by exact time
+    return sortMode === "desc"
+      ? new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
+      : new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime();
+  });
+
+  const handleDeleteTransaction = () => {
+    if (!selectedTx) return;
+    setDeletePassword("");
+    setIsPasswordVisible(false);
+    setShowPasswordModal(true);
+  };
+
+  const confirmDelete = () => {
+    const ownerPassword = OWNER_PASSWORD || "admin123";
+    if (deletePassword !== ownerPassword) {
+      alert("Password salah! Hanya Owner yang dapat menghapus data.");
+      return;
+    }
+
+    try {
+      if (selectedTx.type === "sale") {
+        // revert stock before deleting
+        (selectedTx.parsedCart || []).forEach((item: any) => {
+          if (item.is_stock_enabled) {
+            db.runSync(
+              "UPDATE Services_Products SET stock_quantity = stock_quantity + ? WHERE id = ?",
+              [item.quantity, item.id],
+            );
+          }
+          (item.selectedAddOns || []).forEach((addon: any) => {
+            db.runSync(
+              "UPDATE Services_Products SET stock_quantity = stock_quantity + ? WHERE lower(name) = lower(?) AND is_stock_enabled = 1",
+              [(addon.quantity || 1) * item.quantity, addon.name],
+            );
+          });
+        });
+
+        // Delete associated items first to satisfy Foreign Key constraints
+        db.runSync("DELETE FROM Transaction_Items WHERE transaction_id = ?", [
+          selectedTx.dbId,
+        ]);
+        // Delete the main transaction
+        db.runSync("DELETE FROM Transactions WHERE id = ?", [selectedTx.dbId]);
+      } else if (selectedTx.type === "expense") {
+        // Expenses have no child tables, so just delete them directly
+        db.runSync("DELETE FROM Expenditures WHERE id = ?", [selectedTx.dbId]);
+      }
+
+      alert("Data berhasil dihapus!");
+      setShowPasswordModal(false);
+      setSelectedTx(null);
+      fetchDayData();
+    } catch (error) {
+      console.error("Error deleting record:", error);
+      alert("Gagal menghapus data.");
+    }
+  };
+
   const handleReprint = async () => {
     if (!selectedTx || selectedTx.type !== "sale") return;
 
-    if (!selectedTx.cart_json) {
+    if (!selectedTx.parsedCart || selectedTx.parsedCart.length === 0) {
       alert("Transaksi lama dengan data yang telah dihapus.");
       return;
     }
 
     try {
-      const cartItems = JSON.parse(selectedTx.cart_json);
+      const cartItems = selectedTx.parsedCart;
+
       const rawPrinterText = generateThermalReceiptString(
         selectedTx.trx_code,
         selectedTx.queue_number,
@@ -241,8 +384,9 @@ export default function RecapScreen() {
         selectedTx.amount,
         selectedTx.paymentMethod,
         selectedTx.stylist,
-        selectedTx.amount,
-        0,
+        selectedTx.amountTendered,
+        selectedTx.changeAmount,
+        selectedTx.timestamp,
       );
 
       const printed = await printReceiptRaw(rawPrinterText);
@@ -294,16 +438,25 @@ export default function RecapScreen() {
 
         <TouchableOpacity
           style={styles.addExpenseBtn}
-          onPress={() => setShowExpenseModal(true)}
+          onPress={() => {
+            setShowExpenseModal(true);
+            setExpenseDate(new Date());
+          }}
         >
-          <Text style={styles.textWhite}>+ Keluaran</Text>
+          <Text style={styles.textWhite}>+ Pengeluaran</Text>
         </TouchableOpacity>
       </View>
 
-      {/* NATIVE CALENDAR MODAL (Forces correct minimum/maximum parameters dynamically) */}
+      {/* NATIVE CALENDAR MODAL */}
       {activePicker && (
         <DateTimePicker
-          value={activePicker === "start" ? startDate : endDate}
+          value={
+            activePicker === "start"
+              ? startDate
+              : activePicker === "end"
+                ? endDate
+                : expenseDate
+          }
           mode="date"
           display="default"
           minimumDate={activePicker === "end" ? startDate : undefined}
@@ -329,49 +482,109 @@ export default function RecapScreen() {
         </View>
       )}
 
-      <ScrollView contentContainerStyle={styles.listContainer}>
-        <Text style={styles.sectionLabel}>BUKU KAS</Text>
+      <FlatList
+        contentContainerStyle={styles.listContainer}
+        data={sortedLedgerData}
+        keyExtractor={(tx) => tx.id.toString()}
+        initialNumToRender={15}
+        maxToRenderPerBatch={20}
+        windowSize={10}
+        ListHeaderComponent={
+          <>
+            <Text style={styles.sectionLabel}>BUKU KAS</Text>
 
-        {ledgerData.length === 0 ? (
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              style={{ marginBottom: 15, flexDirection: "row" }}
+            >
+              {[
+                { id: "desc", label: "↓ Terbaru" },
+                { id: "asc", label: "↑ Terlama" },
+              ].map((sort) => (
+                <TouchableOpacity
+                  key={sort.id}
+                  onPress={() => setSortMode(sort.id as any)}
+                  style={{
+                    paddingHorizontal: 12,
+                    paddingVertical: 6,
+                    borderRadius: 15,
+                    marginRight: 8,
+                    borderWidth: 1,
+                    borderColor: sortMode === sort.id ? "#0A84FF" : "#2C2C2E",
+                    backgroundColor:
+                      sortMode === sort.id ? "rgba(10,132,255,0.2)" : "#1C1C1E",
+                  }}
+                >
+                  <Text
+                    style={{
+                      color: sortMode === sort.id ? "#0A84FF" : "#8E8E93",
+                      fontSize: 12,
+                      fontWeight: "bold",
+                    }}
+                  >
+                    {sort.label}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          </>
+        }
+        ListEmptyComponent={
           <Text style={styles.textGrayCenter}>
             Tidak ada data transaksi pada rentang tanggal ini.
           </Text>
-        ) : (
-          ledgerData.map((tx) => (
-            <TouchableOpacity
-              key={tx.id}
-              onPress={() => openTransactionDetails(tx)}
-              style={styles.ledgerCard}
-            >
-              <View style={{ flex: 1, marginRight: 10 }}>
-                <Text style={styles.ledgerTitle}>
-                  <Text
-                    style={
-                      tx.type === "expense" ? styles.textRed : styles.textGreen
-                    }
-                  >
-                    {tx.type === "expense" ? "↓ " : "↑ "}
-                  </Text>
-                  {tx.title}
+        }
+        renderItem={({ item: tx }) => (
+          <TouchableOpacity
+            onPress={() => openTransactionDetails(tx)}
+            style={styles.ledgerCard}
+          >
+            <View style={{ flex: 1, marginRight: 10 }}>
+              <Text style={styles.ledgerTitle}>
+                <Text
+                  style={
+                    tx.type === "expense" ? styles.textRed : styles.textGreen
+                  }
+                >
+                  {tx.type === "expense" ? "↓ " : "↑ "}
                 </Text>
-                <Text style={styles.ledgerSubtitle}>
-                  {tx.dateStr} {tx.stylist ? `• Cashier: ${tx.stylist}` : ""}
-                </Text>
-              </View>
+                {tx.title}
 
-              <Text
-                style={[
-                  styles.ledgerAmount,
-                  tx.type === "expense" ? styles.textRed : styles.textGreen,
-                ]}
-              >
-                {tx.type === "expense" ? "- Rp " : "+ Rp "}
-                {Math.abs(tx.amount).toLocaleString("id-ID")}
+                {tx.type === "sale" && (
+                  <Text
+                    style={{
+                      color: "#8E8E93",
+                      fontSize: 14,
+                      fontWeight: "normal",
+                    }}
+                  >
+                    {"  "}•{" "}
+                    {tx.parsedCart?.reduce(
+                      (sum: number, item: any) => sum + (item.quantity || 1),
+                      0,
+                    )}{" "}
+                    items
+                  </Text>
+                )}
               </Text>
-            </TouchableOpacity>
-          ))
+              <Text style={styles.ledgerSubtitle}>
+                {tx.dateStr} {tx.stylist ? `• Kasir: ${tx.stylist}` : ""}
+              </Text>
+            </View>
+
+            <Text
+              style={[
+                styles.ledgerAmount,
+                tx.type === "expense" ? styles.textRed : styles.textGreen,
+              ]}
+            >
+              {tx.type === "expense" ? "- Rp " : "+ Rp "}
+              {Math.abs(tx.amount).toLocaleString("id-ID")}
+            </Text>
+          </TouchableOpacity>
         )}
-      </ScrollView>
+      />
 
       <View style={styles.bottomBar}>
         <View
@@ -397,10 +610,18 @@ export default function RecapScreen() {
             Pengeluaran: Rp {totalExpenses.toLocaleString("id-ID")}
           </Text>
         </View>
-        <View style={styles.netBox}>
+        <View
+          style={[
+            styles.netBox,
+            netEarning < 0 && { borderColor: "rgba(221, 57, 48, 0.83)" },
+          ]}
+        >
           <Text style={styles.netBoxLabel}>Total Penghasilan</Text>
-          <Text style={styles.netBoxValue}>
-            Rp {netEarning.toLocaleString("id-ID")}
+          <Text
+            style={[styles.netBoxValue, netEarning < 0 && { color: "#FF453A" }]}
+          >
+            {netEarning < 0 ? "- Rp " : "Rp "}
+            {Math.abs(netEarning).toLocaleString("id-ID")}
           </Text>
         </View>
       </View>
@@ -411,163 +632,366 @@ export default function RecapScreen() {
         transparent={true}
         onRequestClose={() => setSelectedTx(null)}
       >
-        <View style={styles.modalOverlay}>
-          <View style={styles.receiptPaper}>
-            <Text style={styles.receiptTitle}>D'FFOND SALON</Text>
-            <Text style={styles.receiptCenter}>
-              Jl. Dagopojok No.16, Kota Bandung
-            </Text>
-
-            <Text style={styles.receiptDivider}>
-              --------------------------------
-            </Text>
-            <Text style={styles.receiptLine}>
-              Tanggal:{" "}
-              {selectedTx
-                ? new Date(selectedTx.timestamp).toLocaleDateString("en-GB")
-                : ""}
-            </Text>
-            <Text style={styles.receiptLine}>Waktu: {selectedTx?.time}</Text>
-            {selectedTx?.type === "sale" && (
-              <Text style={styles.receiptLine}>
-                Cashier: {selectedTx?.stylist}
+        <View
+          style={[
+            styles.modalOverlay,
+            { paddingTop: insets.top, paddingBottom: insets.bottom },
+          ]}
+        >
+          <ScrollView
+            style={{ width: "100%", maxHeight: "80%" }}
+            contentContainerStyle={{
+              alignItems: "center",
+              paddingVertical: 10,
+            }}
+            showsVerticalScrollIndicator={true}
+          >
+            <View style={styles.receiptPaper}>
+              <Text style={styles.receiptTitle}>D'FFOND SALON</Text>
+              <Text style={styles.receiptCenter}>
+                Jl. Dagopojok No.16, Kota Bandung
               </Text>
-            )}
-            <Text style={styles.receiptDivider}>
-              --------------------------------
-            </Text>
 
-            {selectedTx?.type === "sale" ? (
-              <View>
-                {receiptItems.map((item: any) => (
-                  <View
-                    key={item.id}
-                    style={{
-                      marginBottom: 12,
-                      paddingBottom: 8,
-                      borderBottomWidth: 1,
-                      borderBottomColor: "#F2F2F7",
-                    }}
-                  >
-                    <View
-                      style={{
-                        flexDirection: "row",
-                        justifyContent: "space-between",
-                        alignItems: "flex-start",
-                      }}
-                    >
+              <Text style={styles.receiptDivider}>
+                --------------------------------
+              </Text>
+              <Text style={styles.receiptLine}>
+                Tanggal:{" "}
+                {selectedTx
+                  ? new Date(selectedTx.timestamp).toLocaleDateString("en-GB")
+                  : ""}
+              </Text>
+              <Text style={styles.receiptLine}>Waktu: {selectedTx?.time}</Text>
+              {selectedTx?.type === "sale" && (
+                <Text style={styles.receiptLine}>
+                  Cashier: {selectedTx?.stylist}
+                </Text>
+              )}
+              <Text style={styles.receiptDivider}>
+                --------------------------------
+              </Text>
+
+              {selectedTx?.type === "sale" ? (
+                <View>
+                  {/* USE THE FULL CART JSON INSTEAD OF THE FLATTENED TRANSACTION ITEMS */}
+                  {(selectedTx.parsedCart || []).map(
+                    (cartItem: any, index: number) => {
+                      const addOnsTotal =
+                        cartItem.selectedAddOns &&
+                        cartItem.selectedAddOns.length > 0
+                          ? cartItem.selectedAddOns.reduce(
+                              (sum: number, addon: any) => sum + addon.price,
+                              0,
+                            )
+                          : 0;
+                      const basePriceWithAddons = cartItem.price + addOnsTotal;
+                      const discountNominal = Math.round(
+                        basePriceWithAddons *
+                          cartItem.quantity *
+                          (cartItem.discountPercent / 100),
+                      );
+
+                      return (
+                        <View
+                          key={cartItem.cartId || index}
+                          style={{
+                            marginBottom: 12,
+                            paddingBottom: 8,
+                            borderBottomWidth: 1,
+                            borderBottomColor: "#F2F2F7",
+                          }}
+                        >
+                          {/* 1. JUST THE ITEM NAME (Removed quantity from here) */}
+                          <View
+                            style={{
+                              flexDirection: "row",
+                              justifyContent: "space-between",
+                              alignItems: "flex-start",
+                            }}
+                          >
+                            <Text
+                              style={[
+                                styles.receiptLine,
+                                { flex: 1, fontWeight: "bold" },
+                              ]}
+                            >
+                              {cartItem.name}
+                            </Text>
+                          </View>
+
+                          {/* QUANTITY & BASE TOTAL ROW */}
+                          <View
+                            style={{
+                              flexDirection: "row",
+                              justifyContent: "space-between",
+                              marginTop: 4,
+                            }}
+                          >
+                            <Text style={styles.receiptLine}>
+                              {cartItem.quantity}x Rp{" "}
+                              {cartItem.price.toLocaleString("id-ID")}
+                            </Text>
+                            <Text style={styles.receiptLine}>
+                              Rp{" "}
+                              {(
+                                cartItem.quantity * cartItem.price
+                              ).toLocaleString("id-ID")}
+                            </Text>
+                          </View>
+
+                          {/* Stylists */}
+                          {cartItem.stylists &&
+                            cartItem.stylists.length > 0 && (
+                              <View style={styles.receiptRowWrap}>
+                                <Text
+                                  style={[
+                                    styles.receiptTextLeftWrap,
+                                    { fontStyle: "italic", paddingLeft: 0 },
+                                  ]}
+                                >
+                                  {cartItem.stylists
+                                    .map((s: string) => `@${s}`)
+                                    .join(", ")}
+                                </Text>
+                              </View>
+                            )}
+
+                          {/* Add-ons List */}
+                          {cartItem.selectedAddOns.map(
+                            (addon: any, idx: number) => {
+                              const totalAddonQty =
+                                (addon.quantity || 1) * cartItem.quantity;
+                              const totalAddonPrice =
+                                addon.price * totalAddonQty;
+
+                              if (totalAddonQty === 1) {
+                                return (
+                                  <View
+                                    key={idx}
+                                    style={{
+                                      flexDirection: "row",
+                                      justifyContent: "space-between",
+                                      alignItems: "flex-start",
+                                      marginVertical: 2,
+                                    }}
+                                  >
+                                    <Text
+                                      style={{
+                                        color: "#555",
+                                        fontSize: 12,
+                                        flex: 1,
+                                        flexShrink: 1,
+                                        paddingRight: 15,
+                                      }}
+                                    >
+                                      + {addon.name}
+                                    </Text>
+                                    <Text
+                                      style={{
+                                        color: "#555",
+                                        fontSize: 12,
+                                        textAlign: "right",
+                                      }}
+                                    >
+                                      Rp{" "}
+                                      {totalAddonPrice.toLocaleString("id-ID")}
+                                    </Text>
+                                  </View>
+                                );
+                              } else {
+                                return (
+                                  <View key={idx} style={{ marginVertical: 2 }}>
+                                    <Text
+                                      style={{ color: "#555", fontSize: 12 }}
+                                    >
+                                      + {addon.name}
+                                    </Text>
+
+                                    <View
+                                      style={{
+                                        flexDirection: "row",
+                                        justifyContent: "space-between",
+                                        alignItems: "flex-start",
+                                        paddingLeft: 14,
+                                        marginTop: 2,
+                                      }}
+                                    >
+                                      <Text
+                                        style={{
+                                          color: "#555",
+                                          fontSize: 12,
+                                          flex: 1,
+                                          flexShrink: 1,
+                                          paddingRight: 15,
+                                        }}
+                                      >
+                                        ({totalAddonQty}x Rp{" "}
+                                        {addon.price.toLocaleString("id-ID")})
+                                      </Text>
+                                      <Text
+                                        style={{
+                                          color: "#555",
+                                          fontSize: 12,
+                                          textAlign: "right",
+                                        }}
+                                      >
+                                        Rp{" "}
+                                        {totalAddonPrice.toLocaleString(
+                                          "id-ID",
+                                        )}
+                                      </Text>
+                                    </View>
+                                  </View>
+                                );
+                              }
+                            },
+                          )}
+
+                          {/* Discount Info */}
+                          {cartItem.discountPercent > 0 && (
+                            <View style={styles.receiptRowWrap}>
+                              <Text
+                                style={[
+                                  styles.receiptDiscountLeftWrap,
+                                  { paddingLeft: 10 },
+                                ]}
+                              >
+                                Disc {cartItem.discountPercent}%{" "}
+                                {cartItem.discountDesc
+                                  ? `(${cartItem.discountDesc})`
+                                  : ""}
+                              </Text>
+                              <Text style={styles.receiptDiscountRight}>
+                                -Rp {discountNominal.toLocaleString("id-ID")}
+                              </Text>
+                            </View>
+                          )}
+
+                          {/* SUBTOTAL ROW */}
+                          <View
+                            style={{
+                              flexDirection: "row",
+                              justifyContent: "flex-end",
+                              marginTop: 2,
+                            }}
+                          >
+                            <Text
+                              style={[
+                                styles.receiptLine,
+                                { fontWeight: "bold" },
+                              ]}
+                            >
+                              Subtotal: Rp{" "}
+                              {cartItem.itemTotal.toLocaleString("id-ID")}
+                            </Text>
+                          </View>
+                          {/* DISPLAY CUSTOM NOTE IN RECAP */}
+                          {cartItem.customNote ? (
+                            <View
+                              style={{
+                                marginTop: 4,
+                                paddingTop: 4,
+                                borderTopWidth: 1,
+                                borderTopColor: "#F2F2F7",
+                                borderStyle: "dashed",
+                              }}
+                            >
+                              <Text
+                                style={[
+                                  styles.receiptLine,
+                                  { fontStyle: "italic", color: "#555" },
+                                ]}
+                              >
+                                Catatan: {cartItem.customNote}
+                              </Text>
+                            </View>
+                          ) : null}
+                        </View>
+                      );
+                    },
+                  )}
+
+                  <Text style={styles.receiptDivider}>
+                    --------------------------------
+                  </Text>
+
+                  {/* Payment Method Details */}
+                  <View style={styles.receiptRowWrap}>
+                    <Text style={styles.receiptLine}>PEMBAYARAN:</Text>
+                    <Text style={styles.receiptLine}>
+                      {selectedTx?.paymentMethod}
+                    </Text>
+                  </View>
+
+                  {/* 3. TOTAL CHANGE FOR CUSTOMER (IF CASH) */}
+
+                  <View>
+                    <View style={[styles.receiptRowWrap, { marginTop: 4 }]}>
+                      <Text style={styles.receiptLine}>UANG TUNAI:</Text>
+                      <Text style={styles.receiptLine}>
+                        Rp {selectedTx?.amountTendered.toLocaleString("id-ID")}
+                      </Text>
+                    </View>
+                    <View style={[styles.receiptRowWrap, { marginTop: 4 }]}>
                       <Text
                         style={[
                           styles.receiptLine,
-                          { flex: 1, fontWeight: "bold" },
+                          { fontWeight: "bold", color: "#cf2d18" },
                         ]}
                       >
-                        {item.item_name}
+                        KEMBALIAN:
                       </Text>
-                    </View>
-
-                    {item.stylists && item.stylists.length > 0 && (
-                      <View style={styles.receiptRowWrap}>
-                        <Text
-                          style={[
-                            styles.receiptTextLeftWrap,
-                            { fontStyle: "italic", paddingLeft: 0 },
-                          ]}
-                        >
-                          {item.stylists
-                            .split(",")
-                            .map((s: string) => `@${s.trim()}`)
-                            .join(", ")}
-                        </Text>
-                      </View>
-                    )}
-
-                    {item.add_ons_list ? (
-                      <View style={styles.receiptRowWrap}>
-                        <Text
-                          style={[
-                            styles.receiptTextLeftWrap,
-                            { paddingLeft: 10 },
-                          ]}
-                        >
-                          + {item.add_ons_list}
-                        </Text>
-                      </View>
-                    ) : null}
-
-                    {item.discount_percent > 0 && (
-                      <View style={styles.receiptRowWrap}>
-                        <Text
-                          style={[
-                            styles.receiptDiscountLeftWrap,
-                            { paddingLeft: 10 },
-                          ]}
-                        >
-                          Disc {item.discount_percent}%{" "}
-                          {item.discount_desc ? `(${item.discount_desc})` : ""}
-                        </Text>
-                      </View>
-                    )}
-
-                    <View
-                      style={{
-                        flexDirection: "row",
-                        justifyContent: "flex-end",
-                        marginTop: 4,
-                      }}
-                    >
                       <Text
-                        style={[styles.receiptLine, { fontWeight: "bold" }]}
+                        style={[
+                          styles.receiptLine,
+                          { fontWeight: "bold", color: "#cf2d18" },
+                        ]}
                       >
-                        Subtotal: Rp {item.final_price.toLocaleString("id-ID")}
+                        Rp {selectedTx?.changeAmount.toLocaleString("id-ID")}
                       </Text>
                     </View>
                   </View>
-                ))}
-
-                <Text style={styles.receiptDivider}>
-                  --------------------------------
-                </Text>
-                <View style={styles.receiptRowWrap}>
-                  <Text
-                    style={{ color: "#000", fontSize: 14, fontWeight: "bold" }}
-                  >
-                    TOTAL:
+                  <Text style={styles.receiptDivider}>
+                    --------------------------------
                   </Text>
-                  <Text
-                    style={{ color: "#000", fontSize: 14, fontWeight: "bold" }}
-                  >
-                    Rp {selectedTx?.amount.toLocaleString("id-ID")}
+                  {/* Grand Total Row */}
+                  <View style={styles.receiptRowWrap}>
+                    <Text
+                      style={{
+                        color: "#000",
+                        fontSize: 14,
+                        fontWeight: "bold",
+                      }}
+                    >
+                      TOTAL:
+                    </Text>
+                    <Text
+                      style={{
+                        color: "#000",
+                        fontSize: 14,
+                        fontWeight: "bold",
+                      }}
+                    >
+                      Rp {selectedTx?.amount.toLocaleString("id-ID")}
+                    </Text>
+                  </View>
+                </View>
+              ) : (
+                <View>
+                  <Text style={styles.receiptBold}>PENGELUARAN</Text>
+                  <Text style={styles.receiptLine}>{selectedTx?.details}</Text>
+                  <Text style={styles.receiptBold}>
+                    TOTAL: - Rp{" "}
+                    {Math.abs(selectedTx?.amount || 0).toLocaleString("id-ID")}
                   </Text>
                 </View>
-                <View
-                  style={{
-                    flexDirection: "row",
-                    justifyContent: "space-between",
-                    marginTop: 5,
-                  }}
-                >
-                  <Text style={styles.receiptLine}>PEMBAYARAN:</Text>
-                  <Text style={styles.receiptLine}>
-                    {selectedTx?.paymentMethod}
-                  </Text>
-                </View>
-              </View>
-            ) : (
-              <View>
-                <Text style={styles.receiptBold}>PENGELUARAN</Text>
-                <Text style={styles.receiptLine}>{selectedTx?.details}</Text>
-                <Text style={styles.receiptBold}>
-                  TOTAL: - Rp{" "}
-                  {Math.abs(selectedTx?.amount || 0).toLocaleString("id-ID")}
-                </Text>
-              </View>
-            )}
+              )}
 
-            <Text style={styles.receiptDivider}>
-              --------------------------------
-            </Text>
-          </View>
+              <Text style={styles.receiptDivider}>
+                --------------------------------
+              </Text>
+            </View>
+          </ScrollView>
 
           <View style={styles.modalActions}>
             <TouchableOpacity
@@ -585,161 +1009,305 @@ export default function RecapScreen() {
                 <Text style={styles.textWhiteBold}>🖨️ Reprint</Text>
               </TouchableOpacity>
             )}
+            <TouchableOpacity
+              style={styles.deleteBtn}
+              onPress={handleDeleteTransaction}
+            >
+              <Text style={styles.textWhiteBold}>🗑️ Hapus</Text>
+            </TouchableOpacity>
           </View>
         </View>
       </Modal>
 
+      {/* EXPENSE MODAL */}
       <Modal
         visible={showExpenseModal}
         animationType="fade"
         transparent={true}
         onRequestClose={() => setShowExpenseModal(false)}
       >
-        <View style={styles.modalOverlay}>
+        <KeyboardAvoidingView
+          behavior={Platform.OS === "ios" ? "padding" : "height"}
+          style={{ flex: 1 }}
+        >
           <View
             style={{
-              backgroundColor: "#1C1C1E",
-              padding: 20,
-              borderRadius: 15,
-              width: "90%",
-              maxWidth: 400,
-              alignSelf: "center",
+              flex: 1,
+              backgroundColor: "rgba(0,0,0,0.8)",
+              justifyContent: "center",
+              paddingHorizontal: 20,
+              paddingTop: insets.top || 20,
+              paddingBottom: (insets.bottom || 20) + 20, // Extra padding to clear Android buttons
             }}
           >
-            <Text
-              style={{
-                color: "#FFF",
-                fontSize: 20,
-                fontWeight: "bold",
-                marginBottom: 20,
-              }}
-            >
-              Tambah Pengeluaran
-            </Text>
+            <View style={styles.expenseModalBox}>
+              <Text style={styles.expenseModalTitle}>Tambah Pengeluaran</Text>
 
-            <Text
-              style={{
-                color: "#8E8E93",
-                fontSize: 12,
-                fontWeight: "bold",
-                marginBottom: 10,
-              }}
-            >
-              NAMA
-            </Text>
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              style={{ flexDirection: "row", marginBottom: 20 }}
-            >
-              {staffList.map((employee) => (
+              {/* --- SCROLLABLE INPUTS AREA --- */}
+              <ScrollView
+                style={{ marginBottom: 20 }}
+                showsVerticalScrollIndicator={false}
+              >
+                <Text style={styles.inputLabel}>TANGGAL</Text>
                 <TouchableOpacity
-                  key={employee.id}
-                  onPress={() => setExpenseStaff(employee.name)}
-                  style={{
-                    padding: 10,
-                    paddingHorizontal: 20,
-                    borderRadius: 10,
-                    borderWidth: 2,
-                    borderColor:
-                      expenseStaff === employee.name ? "#0A84FF" : "#2C2C2E",
-                    backgroundColor:
-                      expenseStaff === employee.name
-                        ? "rgba(10,132,255,0.2)"
-                        : "#1C1C1E",
-                    marginRight: 10,
-                  }}
+                  style={styles.datePickerInput}
+                  onPress={() => setActivePicker("expense")}
                 >
-                  <Text
-                    style={
-                      expenseStaff === employee.name
-                        ? styles.textWhiteBold
-                        : styles.textGray
-                    }
-                  >
-                    {employee.name}
+                  <Text style={{ color: "#FFF", fontSize: 16 }}>
+                    {formatDateLabel(expenseDate)}
                   </Text>
+                  <MaterialCommunityIcons
+                    name="calendar"
+                    size={20}
+                    color="white"
+                  />
                 </TouchableOpacity>
-              ))}
-            </ScrollView>
 
-            <Text
-              style={{
-                color: "#8E8E93",
-                fontSize: 12,
-                fontWeight: "bold",
-                marginBottom: 10,
-              }}
-            >
-              DESKRIPSI
+                <Text style={styles.inputLabel}>NAMA STAFF</Text>
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  style={{ flexDirection: "row", marginBottom: 20 }}
+                >
+                  {staffList.map((employee) => {
+                    const isSelected = expenseStaffs.includes(employee.name);
+                    return (
+                      <TouchableOpacity
+                        key={employee.id}
+                        onPress={() => {
+                          if (isSelected) {
+                            setExpenseStaffs(
+                              expenseStaffs.filter(
+                                (name) => name !== employee.name,
+                              ),
+                            );
+                          } else {
+                            setExpenseStaffs([...expenseStaffs, employee.name]);
+                          }
+                        }}
+                        style={[
+                          styles.pillBtn,
+                          isSelected && styles.pillBtnActive,
+                        ]}
+                      >
+                        <Text
+                          style={
+                            isSelected ? styles.textWhiteBold : styles.textGray
+                          }
+                        >
+                          {employee.name}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </ScrollView>
+
+                <Text style={styles.inputLabel}>KATEGORI</Text>
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  style={{ flexDirection: "row", marginBottom: 10 }}
+                >
+                  {defaultExpenseCategories.map((cat) => (
+                    <TouchableOpacity
+                      key={cat}
+                      onPress={() => setExpenseCategory(cat)}
+                      style={[
+                        styles.pillBtn,
+                        expenseCategory === cat && styles.pillBtnActive,
+                      ]}
+                    >
+                      <Text
+                        style={
+                          expenseCategory === cat
+                            ? styles.textWhiteBold
+                            : styles.textGray
+                        }
+                      >
+                        {cat}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </ScrollView>
+                <TextInput
+                  style={styles.textInputBox}
+                  placeholder="Atau ketik kategori lain..."
+                  placeholderTextColor="#8E8E93"
+                  value={expenseCategory}
+                  onChangeText={setExpenseCategory}
+                />
+
+                <Text style={styles.inputLabel}>DESKRIPSI</Text>
+                <TextInput
+                  style={styles.textInputBox}
+                  placeholder="e.g., Beli Kopi..."
+                  placeholderTextColor="#8E8E93"
+                  value={expenseDesc}
+                  onChangeText={setExpenseDesc}
+                />
+
+                <Text style={styles.inputLabel}>JUMLAH (Rp)</Text>
+                <TextInput
+                  style={styles.textInputBox}
+                  placeholder="0"
+                  placeholderTextColor="#8E8E93"
+                  keyboardType="numeric"
+                  value={expenseAmount}
+                  onChangeText={setExpenseAmount}
+                />
+
+                <Text style={styles.inputLabel}>
+                  PENGARUH KE GAJI STAFF (Opsional)
+                </Text>
+                <View style={styles.toggleRow}>
+                  <TouchableOpacity
+                    onPress={() => setSalaryEffect("none")}
+                    style={[
+                      styles.toggleBtn,
+                      {
+                        borderColor:
+                          salaryEffect === "none" ? "#0A84FF" : "#2C2C2E",
+                        backgroundColor:
+                          salaryEffect === "none"
+                            ? "rgba(10,132,255,0.2)"
+                            : "#1C1C1E",
+                      },
+                    ]}
+                  >
+                    <Text
+                      style={
+                        salaryEffect === "none"
+                          ? styles.textWhiteBold
+                          : styles.textGray
+                      }
+                    >
+                      Tidak Ada
+                    </Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    onPress={() => setSalaryEffect("subtract")}
+                    style={[
+                      styles.toggleBtn,
+                      {
+                        borderColor:
+                          salaryEffect === "subtract" ? "#FF453A" : "#2C2C2E",
+                        backgroundColor:
+                          salaryEffect === "subtract"
+                            ? "rgba(255,69,58,0.2)"
+                            : "#1C1C1E",
+                      },
+                    ]}
+                  >
+                    <Text
+                      style={
+                        salaryEffect === "subtract"
+                          ? { color: "#FF453A", fontWeight: "bold" }
+                          : styles.textGray
+                      }
+                    >
+                      - Potong
+                    </Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    onPress={() => setSalaryEffect("add")}
+                    style={[
+                      styles.toggleBtn,
+                      {
+                        borderColor:
+                          salaryEffect === "add" ? "#34C759" : "#2C2C2E",
+                        backgroundColor:
+                          salaryEffect === "add"
+                            ? "rgba(52,199,89,0.2)"
+                            : "#1C1C1E",
+                      },
+                    ]}
+                  >
+                    <Text
+                      style={
+                        salaryEffect === "add"
+                          ? { color: "#34C759", fontWeight: "bold" }
+                          : styles.textGray
+                      }
+                    >
+                      + Tambah
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+              </ScrollView>
+
+              {/* --- PINNED BOTTOM BUTTONS --- */}
+              <View style={styles.actionRow}>
+                <TouchableOpacity
+                  style={styles.actionBtnCancel}
+                  onPress={() => setShowExpenseModal(false)}
+                >
+                  <Text style={styles.textWhiteBold}>Batal</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.actionBtnSave}
+                  onPress={handleSaveExpense}
+                >
+                  <Text style={styles.textWhiteBold}>Simpan</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
+
+      {/* PASSWORD MODAL FOR DELETION */}
+      <Modal
+        visible={showPasswordModal}
+        animationType="fade"
+        transparent={true}
+        onRequestClose={() => setShowPasswordModal(false)}
+      >
+        <View
+          style={[
+            styles.modalOverlay,
+            { paddingTop: insets.top, paddingBottom: insets.bottom },
+          ]}
+        >
+          <View style={styles.passwordModalContainer}>
+            <Text style={styles.passwordModalTitle}>Izin Owner</Text>
+            <Text style={styles.passwordModalSubtitle}>
+              Masukkan password untuk menghapus data ini.
             </Text>
-            <TextInput
-              style={{
-                backgroundColor: "#121212",
-                color: "#FFF",
-                padding: 15,
-                borderRadius: 8,
-                marginBottom: 15,
-                borderWidth: 1,
-                borderColor: "#2C2C2E",
-              }}
-              placeholder="e.g., Beli Kopi..."
-              placeholderTextColor="#8E8E93"
-              value={expenseDesc}
-              onChangeText={setExpenseDesc}
-            />
 
-            <Text
-              style={{
-                color: "#8E8E93",
-                fontSize: 12,
-                fontWeight: "bold",
-                marginBottom: 10,
-              }}
-            >
-              JUMLAH (Rp)
-            </Text>
-            <TextInput
-              style={{
-                backgroundColor: "#121212",
-                color: "#FFF",
-                padding: 15,
-                borderRadius: 8,
-                marginBottom: 25,
-                borderWidth: 1,
-                borderColor: "#2C2C2E",
-              }}
-              placeholder="0"
-              placeholderTextColor="#8E8E93"
-              keyboardType="numeric"
-              value={expenseAmount}
-              onChangeText={setExpenseAmount}
-            />
-
-            <View style={{ flexDirection: "row", gap: 10 }}>
+            <View style={styles.passwordInputContainer}>
+              <TextInput
+                style={styles.passwordInputInner}
+                placeholder="Password..."
+                placeholderTextColor="#8E8E93"
+                secureTextEntry={!isPasswordVisible}
+                value={deletePassword}
+                onChangeText={setDeletePassword}
+                autoFocus={true}
+              />
               <TouchableOpacity
-                style={{
-                  flex: 1,
-                  padding: 15,
-                  borderRadius: 8,
-                  backgroundColor: "#2C2C2E",
-                  alignItems: "center",
-                }}
-                onPress={() => setShowExpenseModal(false)}
+                onPress={() => setIsPasswordVisible(!isPasswordVisible)}
+                style={{ padding: 10 }}
+              >
+                <MaterialCommunityIcons
+                  name={isPasswordVisible ? "eye" : "eye-off"}
+                  size={20}
+                  color="#8E8E93"
+                />
+              </TouchableOpacity>
+            </View>
+
+            <View style={styles.passwordBtnRow}>
+              <TouchableOpacity
+                style={styles.passwordCancelBtn}
+                onPress={() => setShowPasswordModal(false)}
               >
                 <Text style={styles.textWhiteBold}>Batal</Text>
               </TouchableOpacity>
               <TouchableOpacity
-                style={{
-                  flex: 1,
-                  padding: 15,
-                  borderRadius: 8,
-                  backgroundColor: "#37bb0e",
-                  alignItems: "center",
-                }}
-                onPress={handleSaveExpense}
+                style={styles.passwordDeleteBtn}
+                onPress={confirmDelete}
               >
-                <Text style={styles.textWhiteBold}>Simpan</Text>
+                <Text style={styles.textWhiteBold}>Hapus Data</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -752,6 +1320,7 @@ export default function RecapScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#000000" },
   header: {
+    flexWrap: "wrap",
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "flex-end", // Aligns the button cleanly with the bottom of the date boxes
@@ -808,6 +1377,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     borderRadius: 8,
     alignSelf: "flex-end", // Safely locks button to the lower right corner
+    flexShrink: 0,
   },
   listContainer: { padding: 15, gap: 10, paddingBottom: 120 },
   sectionLabel: {
@@ -857,8 +1427,8 @@ const styles = StyleSheet.create({
     borderColor: "rgba(52, 199, 89, 0.3)",
   },
   netBoxLabel: { color: "#FFF", fontSize: 18, fontWeight: "bold" },
-  netBoxValue: { color: "#34C759", fontSize: 24, fontWeight: "bold" },
-  textWhite: { color: "#FFF" },
+  netBoxValue: { color: "#34C759", fontSize: 20, fontWeight: "bold" },
+  textWhite: { color: "#FFF", fontSize: 12 },
   textWhiteBold: { color: "#FFF", fontWeight: "bold", fontSize: 16 },
   textGray: { color: "#8E8E93" },
   textGreen: { color: "#34C759" },
@@ -930,19 +1500,184 @@ const styles = StyleSheet.create({
   modalActions: {
     flexDirection: "row",
     justifyContent: "center",
+    width: "100%",
+    paddingHorizontal: 20,
     gap: 15,
     marginTop: 30,
   },
   closeBtn: {
     backgroundColor: "#2C2C2E",
     paddingVertical: 12,
-    paddingHorizontal: 30,
+    paddingHorizontal: 20,
     borderRadius: 30,
   },
   reprintBtn: {
     backgroundColor: "#34C759",
     paddingVertical: 12,
-    paddingHorizontal: 30,
+    paddingHorizontal: 20,
     borderRadius: 30,
+  },
+  deleteBtn: {
+    backgroundColor: "#FF453A",
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    borderRadius: 30,
+  },
+  passwordModalContainer: {
+    backgroundColor: "#1C1C1E",
+    padding: 20,
+    borderRadius: 15,
+    width: "90%",
+    maxWidth: 400,
+    alignSelf: "center",
+  },
+  passwordModalTitle: {
+    color: "#FFF",
+    fontSize: 20,
+    fontWeight: "bold",
+    marginBottom: 10,
+  },
+  passwordModalSubtitle: {
+    color: "#8E8E93",
+    fontSize: 14,
+    marginBottom: 20,
+  },
+  passwordInput: {
+    backgroundColor: "#121212",
+    color: "#FFF",
+    padding: 15,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "#FF453A",
+    marginBottom: 25,
+  },
+  passwordBtnRow: {
+    flexDirection: "row",
+    gap: 10,
+  },
+  passwordCancelBtn: {
+    flex: 1,
+    padding: 15,
+    borderRadius: 8,
+    backgroundColor: "#2C2C2E",
+    alignItems: "center",
+  },
+  passwordDeleteBtn: {
+    flex: 1,
+    padding: 15,
+    borderRadius: 8,
+    backgroundColor: "#FF453A",
+    alignItems: "center",
+  },
+  passwordInputContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#121212",
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "#FF453A",
+    marginBottom: 25,
+    paddingHorizontal: 15,
+    height: 55,
+  },
+  passwordInputInner: {
+    flex: 1,
+    color: "#FFF",
+    height: "100%",
+    fontSize: 16,
+  },
+  sidePanel: {
+    width: "80%",
+    maxWidth: 400,
+    backgroundColor: "#1C1C1E",
+    height: "100%",
+    borderLeftWidth: 1,
+    borderColor: "#2C2C2E",
+  },
+
+  // --- EXPENSE MODAL STYLES ---
+  expenseModalBox: {
+    backgroundColor: "#1C1C1E",
+    padding: 20,
+    borderRadius: 15,
+    width: "100%",
+    maxWidth: 400,
+    alignSelf: "center",
+    maxHeight: "90%",
+  },
+  expenseModalTitle: {
+    color: "#FFF",
+    fontSize: 20,
+    fontWeight: "bold",
+    marginBottom: 20,
+  },
+  inputLabel: {
+    color: "#8E8E93",
+    fontSize: 12,
+    fontWeight: "bold",
+    marginBottom: 10,
+  },
+  textInputBox: {
+    backgroundColor: "#121212",
+    color: "#FFF",
+    padding: 15,
+    borderRadius: 8,
+    marginBottom: 15,
+    borderWidth: 1,
+    borderColor: "#2C2C2E",
+  },
+  datePickerInput: {
+    backgroundColor: "#121212",
+    padding: 15,
+    borderRadius: 8,
+    marginBottom: 15,
+    borderWidth: 1,
+    borderColor: "#2C2C2E",
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
+  pillBtn: {
+    padding: 10,
+    paddingHorizontal: 15,
+    borderRadius: 10,
+    borderWidth: 2,
+    marginRight: 10,
+    borderColor: "#2C2C2E",
+    backgroundColor: "#1C1C1E",
+  },
+  pillBtnActive: {
+    borderColor: "#0A84FF",
+    backgroundColor: "rgba(10,132,255,0.2)",
+  },
+  toggleRow: {
+    flexDirection: "row",
+    gap: 10,
+    marginBottom: 15,
+  },
+  toggleBtn: {
+    flex: 1,
+    padding: 12,
+    borderRadius: 8,
+    borderWidth: 2,
+    alignItems: "center",
+  },
+  actionRow: {
+    flexDirection: "row",
+    gap: 10,
+  },
+  actionBtnCancel: {
+    flex: 1,
+    padding: 15,
+    borderRadius: 8,
+    backgroundColor: "#2C2C2E",
+    alignItems: "center",
+  },
+  actionBtnSave: {
+    flex: 1,
+    padding: 15,
+    borderRadius: 8,
+    backgroundColor: "#37bb0e",
+    alignItems: "center",
   },
 });

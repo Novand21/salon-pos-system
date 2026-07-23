@@ -1,6 +1,9 @@
+import { db } from "@/database/db";
+import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { Tabs } from "expo-router";
 import { StatusBar } from "expo-status-bar";
-import { Platform, Text, View } from "react-native";
+import React, { useEffect } from "react";
+import { Platform, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 // NAVIGATION BAR LAYOUT PURPOSE BUT NOT USED FOR NOW
@@ -9,12 +12,26 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 export default function TabLayout() {
   const insets = useSafeAreaInsets();
-  // useEffect(() => {
-  //   if (Platform.OS === "android") {
-  //     NavigationBar.setBackgroundColorAsync("#000000");
-  //     NavigationBar.setButtonStyleAsync("light");
-  //   }
-  // }, []);
+
+  // recap data will be deleted if older than 2 years
+  useEffect(() => {
+    try {
+      // Delete main transactions and expenses older than 2 years
+      db.runSync(
+        "DELETE FROM Transactions WHERE timestamp <= datetime('now', '-2 years')",
+      );
+      db.runSync(
+        "DELETE FROM Expenditures WHERE timestamp <= datetime('now', '-2 years')",
+      );
+      db.runSync(
+        "DELETE FROM Staff_Bonuses WHERE timestamp <= datetime('now', '-2 years')",
+      );
+
+      console.log("Database auto-cleanup completed.");
+    } catch (e) {
+      console.error("Auto-clean failed:", e);
+    }
+  }, []);
   return (
     <View style={{ flex: 1, paddingBottom: insets.bottom }}>
       <StatusBar style="light" backgroundColor="#000000" />
@@ -37,11 +54,12 @@ export default function TabLayout() {
           options={{
             title: "Kasir",
             tabBarIcon: ({ color }) => (
-              <Text
-                style={{ fontSize: 22, opacity: color === "#0A84FF" ? 1 : 0.5 }}
-              >
-                🛒
-              </Text>
+              <MaterialCommunityIcons
+                name="cash-register"
+                style={{ opacity: color === "#0A84FF" ? 1 : 0.5 }}
+                size={24}
+                color="white"
+              />
             ),
           }}
         />
@@ -50,11 +68,12 @@ export default function TabLayout() {
           options={{
             title: "Riwayat",
             tabBarIcon: ({ color }) => (
-              <Text
-                style={{ fontSize: 22, opacity: color === "#0A84FF" ? 1 : 0.5 }}
-              >
-                🧾
-              </Text>
+              <MaterialCommunityIcons
+                name="receipt-clock"
+                style={{ opacity: color === "#0A84FF" ? 1 : 0.5 }}
+                size={24}
+                color="white"
+              />
             ),
           }}
         />
@@ -63,11 +82,12 @@ export default function TabLayout() {
           options={{
             title: "Recap",
             tabBarIcon: ({ color }) => (
-              <Text
-                style={{ fontSize: 22, opacity: color === "#0A84FF" ? 1 : 0.5 }}
-              >
-                📊
-              </Text>
+              <MaterialCommunityIcons
+                name="chart-bar"
+                style={{ opacity: color === "#0A84FF" ? 1 : 0.5 }}
+                size={24}
+                color="white"
+              />
             ),
           }}
         />
@@ -76,11 +96,12 @@ export default function TabLayout() {
           options={{
             title: "Manajemen",
             tabBarIcon: ({ color }) => (
-              <Text
-                style={{ fontSize: 22, opacity: color === "#0A84FF" ? 1 : 0.5 }}
-              >
-                📋
-              </Text>
+              <MaterialCommunityIcons
+                name="clipboard-list"
+                style={{ opacity: color === "#0A84FF" ? 1 : 0.5 }}
+                size={24}
+                color="white"
+              />
             ),
           }}
         />
@@ -89,12 +110,12 @@ export default function TabLayout() {
           options={{
             title: "Pengaturan",
             tabBarIcon: ({ color }) => (
-              // Using a slider icon for Settings since Manage already uses a gear
-              <Text
-                style={{ fontSize: 22, opacity: color === "#0A84FF" ? 1 : 0.5 }}
-              >
-                ⚙️
-              </Text>
+              <MaterialCommunityIcons
+                name="cog"
+                style={{ opacity: color === "#0A84FF" ? 1 : 0.5 }}
+                size={24}
+                color="white"
+              />
             ),
           }}
         />
