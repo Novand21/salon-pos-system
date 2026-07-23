@@ -99,6 +99,16 @@ export const initDB = () => {
               open_time TEXT DEFAULT '09:00',
               close_time TEXT DEFAULT '20:00'
             );
+
+            -- TABLE 9: Staff Bonuses
+            CREATE TABLE IF NOT EXISTS Staff_Bonuses (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                employee_id INTEGER,
+                timestamp TEXT NOT NULL,
+                amount INTEGER NOT NULL,
+                description TEXT,
+                FOREIGN KEY(employee_id) REFERENCES Employees(id) ON DELETE CASCADE
+            );
             `);
     // Check the current version of the installed database
     const result: any = db.getFirstSync("PRAGMA user_version");
@@ -190,6 +200,45 @@ export const initDB = () => {
       db.execSync("PRAGMA user_version = 5;");
       currentVersion = 5;
       console.log("Database migrated to version 5 successfully");
+    }
+    // VERSION 6: ADD ON DELETE CASCADE TO TRANSACTION ITEMS FIX and ADDING base_salary to Employees
+    if (currentVersion === 5) {
+      console.log(
+        "Migrating database to version 9: Adding ON DELETE CASCADE to Transaction_Items",
+      );
+      try {
+        db.execSync(`
+          PRAGMA foreign_keys = OFF;
+          
+          CREATE TABLE IF NOT EXISTS Transaction_Items_new (
+              id INTEGER PRIMARY KEY AUTOINCREMENT,
+              transaction_id INTEGER NOT NULL,
+              item_name TEXT NOT NULL,
+              add_ons_list TEXT,
+              stylists TEXT,
+              discount_percent INTEGER,
+              discount_desc TEXT,
+              final_price INTEGER NOT NULL,
+              FOREIGN KEY(transaction_id) REFERENCES Transactions(id) ON DELETE CASCADE
+          );
+          
+          INSERT INTO Transaction_Items_new SELECT * FROM Transaction_Items;
+          DROP TABLE Transaction_Items;
+          ALTER TABLE Transaction_Items_new RENAME TO Transaction_Items;
+          PRAGMA foreign_keys = ON;
+        `);
+        db.execSync(
+          `ALTER TABLE Employees ADD COLUMN base_salary INTEGER DEFAULT 0;`,
+        );
+      } catch (e) {
+        console.error(
+          "Failed to migrate Transaction_Items and add base_salary:",
+          e,
+        );
+      }
+      db.execSync("PRAGMA user_version = 6;");
+      currentVersion = 6;
+      console.log("Database migrated to version 6 successfully");
     }
   } catch (e) {
     console.error("Error initializing database:", e);

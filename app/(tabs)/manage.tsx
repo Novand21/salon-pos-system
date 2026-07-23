@@ -643,6 +643,8 @@ export default function ManageScreen() {
             paymentMethod: tx.payment_method,
             amountTendered: tx.amount_tendered || tx.total_amount,
             changeAmount: tx.change_amount || 0,
+            stylist:
+              staffList.find((s) => s.id === tx.employee_id)?.name || "Unknown",
           });
         }
       });
@@ -704,7 +706,7 @@ export default function ManageScreen() {
     } catch (e) {
       console.error("Error loading payroll tx:", e);
     }
-  }, [payrollStartDate, payrollEndDate, selectedPayrollStaff]);
+  }, [payrollStartDate, payrollEndDate, selectedPayrollStaff, staffList]);
 
   React.useEffect(() => {
     loadPayrollData();
@@ -2852,22 +2854,34 @@ export default function ManageScreen() {
 
               <View style={{ flexDirection: "row", gap: 10 }}>
                 <TouchableOpacity
-                  style={[styles.closeBtnPill, { flex: 1, borderRadius: 8 }]}
-                  onPress={() => setShowBonusModal(false)}
-                >
-                  <Text style={styles.textWhiteBold}>Batal</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
                   style={[
                     styles.closeBtnPill,
                     { flex: 1, borderRadius: 8, backgroundColor: "#0A84FF" },
                   ]}
                   onPress={() => {
-                    alert(
-                      `Bonus Rp ${customBonusAmount} siap ditambahkan ke total gaji!`,
-                    );
-                    setShowBonusModal(false);
-                    setCustomBonusAmount("");
+                    const amount = Number(customBonusAmount);
+                    if (!customBonusAmount || isNaN(amount)) {
+                      return alert("Masukkan nominal yang valid!");
+                    }
+
+                    try {
+                      const timestamp = new Date().toISOString();
+                      const desc = `Bonus/Potongan Staff (Periode: ${payrollStartDate.toLocaleDateString("id-ID")} - ${payrollEndDate.toLocaleDateString("id-ID")})`;
+
+                      db.runSync(
+                        "INSERT INTO Staff_Bonuses (employee_id, timestamp, amount, description) VALUES (?, ?, ?, ?)",
+                        [selectedPayrollStaff.id, timestamp, amount, desc],
+                      );
+
+                      alert(
+                        `Data Rp ${amount.toLocaleString("id-ID")} berhasil disimpan!`,
+                      );
+                      setShowBonusModal(false);
+                      setCustomBonusAmount("");
+                    } catch (e) {
+                      console.error("Error saving bonus:", e);
+                      alert("Gagal menyimpan data ke database.");
+                    }
                   }}
                 >
                   <Text style={styles.textWhiteBold}>Simpan</Text>

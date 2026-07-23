@@ -23,10 +23,8 @@ export default function TabLayout() {
       db.runSync(
         "DELETE FROM Expenditures WHERE timestamp <= datetime('now', '-2 years')",
       );
-
-      // Clean up any orphaned child items
       db.runSync(
-        "DELETE FROM Transaction_Items WHERE transaction_id NOT IN (SELECT id FROM Transactions)",
+        "DELETE FROM Staff_Bonuses WHERE timestamp <= datetime('now', '-2 years')",
       );
 
       console.log("Database auto-cleanup completed.");
