@@ -60,7 +60,6 @@ export default function RecapScreen() {
     "Operasional",
     "Kasbon",
     "Uang Makan",
-    "Beli Bahan",
     "Penjualan",
   ];
 
@@ -148,7 +147,7 @@ export default function RecapScreen() {
                 methodToSave,
                 timestamp,
                 finalBonusAmount,
-                `Description: ${expenseDesc}`,
+                `Deskripsi: ${expenseDesc}`,
               ],
             );
           }

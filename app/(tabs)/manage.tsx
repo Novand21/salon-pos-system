@@ -126,7 +126,7 @@ export default function ManageScreen() {
   const [linkedExpensesTotal, setLinkedExpensesTotal] = useState(0);
 
   const [payrollSubTab, setPayrollSubTab] = useState<
-    "Bonus" | "Lainnya" | "Penjualan"
+    "Bonus" | "Penjualan" | "Kasbon" | "Uang Makan" | "Lainnya"
   >("Bonus");
   const [staffOtherTransactions, setStaffOtherTransactions] = useState<any[]>(
     [],
@@ -883,7 +883,7 @@ export default function ManageScreen() {
 
   React.useEffect(() => {
     loadPayrollData();
-  }, [loadPayrollData]);
+  }, [loadPayrollData, staffDashboardTab]);
 
   const sortedPayrollTransactions = [...payrollTransactions].sort((a, b) => {
     return payrollSortMode === "desc"
@@ -1827,107 +1827,54 @@ export default function ManageScreen() {
                           </TouchableOpacity>
                         </View>
 
-                        <View
-                          style={{
-                            flexDirection: "row",
-                            gap: 8,
-                            paddingTop: 15,
-                            justifyContent: "flex-start",
-                          }}
-                        >
-                          <TouchableOpacity
-                            style={{
-                              paddingVertical: 6,
-                              paddingHorizontal: 12,
-                              alignItems: "center",
-                              borderRadius: 12,
-                              backgroundColor:
-                                payrollSubTab === "Bonus"
-                                  ? "#0A84FF"
-                                  : "#1C1C1E",
-                              borderWidth: 1,
-                              borderColor:
-                                payrollSubTab === "Bonus"
-                                  ? "#0A84FF"
-                                  : "#2C2C2E",
-                            }}
-                            onPress={() => setPayrollSubTab("Bonus")}
+                        {/* SUB-TABS */}
+                        <View style={{ paddingTop: 15 }}>
+                          <ScrollView
+                            horizontal
+                            showsHorizontalScrollIndicator={false}
+                            contentContainerStyle={{ gap: 8, paddingRight: 20 }}
                           >
-                            <Text
-                              style={{
-                                color:
-                                  payrollSubTab === "Bonus"
-                                    ? "#FFF"
-                                    : "#8E8E93",
-                                fontSize: 11,
-                                fontWeight: "bold",
-                              }}
-                            >
-                              Riwayat Pekerjaan
-                            </Text>
-                          </TouchableOpacity>
-                          <TouchableOpacity
-                            style={{
-                              paddingVertical: 6,
-                              paddingHorizontal: 12,
-                              alignItems: "center",
-                              borderRadius: 12,
-                              backgroundColor:
-                                payrollSubTab === "Penjualan"
-                                  ? "#0A84FF"
-                                  : "#1C1C1E",
-                              borderWidth: 1,
-                              borderColor:
-                                payrollSubTab === "Penjualan"
-                                  ? "#0A84FF"
-                                  : "#2C2C2E",
-                            }}
-                            onPress={() => setPayrollSubTab("Penjualan")}
-                          >
-                            <Text
-                              style={{
-                                color:
-                                  payrollSubTab === "Penjualan"
-                                    ? "#FFF"
-                                    : "#8E8E93",
-                                fontSize: 11,
-                                fontWeight: "bold",
-                              }}
-                            >
-                              Penjualan
-                            </Text>
-                          </TouchableOpacity>
-                          <TouchableOpacity
-                            style={{
-                              paddingVertical: 6,
-                              paddingHorizontal: 12,
-                              alignItems: "center",
-                              borderRadius: 12,
-                              backgroundColor:
-                                payrollSubTab === "Lainnya"
-                                  ? "#0A84FF"
-                                  : "#1C1C1E",
-                              borderWidth: 1,
-                              borderColor:
-                                payrollSubTab === "Lainnya"
-                                  ? "#0A84FF"
-                                  : "#2C2C2E",
-                            }}
-                            onPress={() => setPayrollSubTab("Lainnya")}
-                          >
-                            <Text
-                              style={{
-                                color:
-                                  payrollSubTab === "Lainnya"
-                                    ? "#FFF"
-                                    : "#8E8E93",
-                                fontSize: 11,
-                                fontWeight: "bold",
-                              }}
-                            >
-                              Lain-Lain
-                            </Text>
-                          </TouchableOpacity>
+                            {[
+                              "Bonus",
+                              "Penjualan",
+                              "Kasbon",
+                              "Uang Makan",
+                              "Lainnya",
+                            ].map((tab) => (
+                              <TouchableOpacity
+                                key={tab}
+                                style={{
+                                  paddingVertical: 6,
+                                  paddingHorizontal: 12,
+                                  alignItems: "center",
+                                  borderRadius: 12,
+                                  backgroundColor:
+                                    payrollSubTab === tab
+                                      ? "#0A84FF"
+                                      : "#1C1C1E",
+                                  borderWidth: 1,
+                                  borderColor:
+                                    payrollSubTab === tab
+                                      ? "#0A84FF"
+                                      : "#2C2C2E",
+                                }}
+                                onPress={() => setPayrollSubTab(tab as any)}
+                              >
+                                <Text
+                                  style={{
+                                    color:
+                                      payrollSubTab === tab
+                                        ? "#FFF"
+                                        : "#8E8E93",
+                                    fontSize: 11,
+                                    fontWeight: "bold",
+                                  }}
+                                >
+                                  {tab === "Bonus" ? "Riwayat Pekerjaan" : tab}
+                                </Text>
+                              </TouchableOpacity>
+                            ))}
+                          </ScrollView>
                         </View>
                       </View>
 
@@ -1962,7 +1909,7 @@ export default function ManageScreen() {
                                   marginBottom: 10,
                                 }}
                               >
-                                RIWAYAT PEKERJAAN
+                                Bonus
                               </Text>
                               <ScrollView
                                 horizontal
@@ -2190,7 +2137,7 @@ export default function ManageScreen() {
                                   marginBottom: 10,
                                 }}
                               >
-                                RIWAYAT PENJUALAN / KOMISI
+                                RIWAYAT PENJUALAN
                               </Text>
                               <ScrollView
                                 horizontal
@@ -2287,12 +2234,245 @@ export default function ManageScreen() {
                         />
                       )}
 
+                      {/* --- TAB KASBON --- */}
+                      {payrollSubTab === "Kasbon" && (
+                        <FlatList
+                          contentContainerStyle={styles.listContainer}
+                          data={sortedOtherTransactions.filter(
+                            (tx) => tx.title === "Kasbon",
+                          )}
+                          keyExtractor={(tx) => tx.id}
+                          ListHeaderComponent={
+                            <View style={{ marginBottom: 15 }}>
+                              <Text
+                                style={{
+                                  color: "#8E8E93",
+                                  fontSize: 12,
+                                  fontWeight: "bold",
+                                  marginBottom: 10,
+                                }}
+                              >
+                                RIWAYAT KASBON
+                              </Text>
+                              <ScrollView
+                                horizontal
+                                showsHorizontalScrollIndicator={false}
+                                style={{ flexDirection: "row" }}
+                              >
+                                {[
+                                  { id: "desc", label: "↓ Terbaru" },
+                                  { id: "asc", label: "↑ Terlama" },
+                                ].map((sort) => (
+                                  <TouchableOpacity
+                                    key={sort.id}
+                                    onPress={() =>
+                                      setPayrollSortMode(sort.id as any)
+                                    }
+                                    style={{
+                                      paddingHorizontal: 12,
+                                      paddingVertical: 6,
+                                      borderRadius: 15,
+                                      marginRight: 8,
+                                      borderWidth: 1,
+                                      borderColor:
+                                        payrollSortMode === sort.id
+                                          ? "#0A84FF"
+                                          : "#2C2C2E",
+                                      backgroundColor:
+                                        payrollSortMode === sort.id
+                                          ? "rgba(10,132,255,0.2)"
+                                          : "#1C1C1E",
+                                    }}
+                                  >
+                                    <Text
+                                      style={{
+                                        color:
+                                          payrollSortMode === sort.id
+                                            ? "#0A84FF"
+                                            : "#8E8E93",
+                                        fontSize: 12,
+                                        fontWeight: "bold",
+                                      }}
+                                    >
+                                      {sort.label}
+                                    </Text>
+                                  </TouchableOpacity>
+                                ))}
+                              </ScrollView>
+                            </View>
+                          }
+                          ListEmptyComponent={
+                            <Text
+                              style={{
+                                color: "#8E8E93",
+                                textAlign: "center",
+                                marginTop: 20,
+                              }}
+                            >
+                              Belum ada data Kasbon.
+                            </Text>
+                          }
+                          renderItem={({ item: tx }) => (
+                            <TouchableOpacity
+                              onPress={() => setSelectedTx(tx)}
+                              style={styles.listItem}
+                            >
+                              <View style={{ flex: 1, marginRight: 10 }}>
+                                <Text style={styles.itemTitle}>{tx.title}</Text>
+                                <Text style={styles.itemSubtitle}>
+                                  {tx.dateStr} • {tx.time}
+                                </Text>
+                                {tx.details ? (
+                                  <Text
+                                    style={{
+                                      color: "#8E8E93",
+                                      fontSize: 12,
+                                      marginTop: 4,
+                                    }}
+                                  >
+                                    {tx.details}
+                                  </Text>
+                                ) : null}
+                              </View>
+                              <Text
+                                style={{
+                                  color: tx.amount < 0 ? "#FF453A" : "#34C759",
+                                  fontWeight: "bold",
+                                  fontSize: 14,
+                                }}
+                              >
+                                {tx.amount < 0 ? "-" : "+"} Rp{" "}
+                                {Math.abs(tx.amount).toLocaleString("id-ID")}
+                              </Text>
+                            </TouchableOpacity>
+                          )}
+                        />
+                      )}
+
+                      {/* --- TAB UANG MAKAN --- */}
+                      {payrollSubTab === "Uang Makan" && (
+                        <FlatList
+                          contentContainerStyle={styles.listContainer}
+                          data={sortedOtherTransactions.filter(
+                            (tx) => tx.title === "Uang Makan",
+                          )}
+                          keyExtractor={(tx) => tx.id}
+                          ListHeaderComponent={
+                            <View style={{ marginBottom: 15 }}>
+                              <Text
+                                style={{
+                                  color: "#8E8E93",
+                                  fontSize: 12,
+                                  fontWeight: "bold",
+                                  marginBottom: 10,
+                                }}
+                              >
+                                RIWAYAT UANG MAKAN
+                              </Text>
+                              <ScrollView
+                                horizontal
+                                showsHorizontalScrollIndicator={false}
+                                style={{ flexDirection: "row" }}
+                              >
+                                {[
+                                  { id: "desc", label: "↓ Terbaru" },
+                                  { id: "asc", label: "↑ Terlama" },
+                                ].map((sort) => (
+                                  <TouchableOpacity
+                                    key={sort.id}
+                                    onPress={() =>
+                                      setPayrollSortMode(sort.id as any)
+                                    }
+                                    style={{
+                                      paddingHorizontal: 12,
+                                      paddingVertical: 6,
+                                      borderRadius: 15,
+                                      marginRight: 8,
+                                      borderWidth: 1,
+                                      borderColor:
+                                        payrollSortMode === sort.id
+                                          ? "#0A84FF"
+                                          : "#2C2C2E",
+                                      backgroundColor:
+                                        payrollSortMode === sort.id
+                                          ? "rgba(10,132,255,0.2)"
+                                          : "#1C1C1E",
+                                    }}
+                                  >
+                                    <Text
+                                      style={{
+                                        color:
+                                          payrollSortMode === sort.id
+                                            ? "#0A84FF"
+                                            : "#8E8E93",
+                                        fontSize: 12,
+                                        fontWeight: "bold",
+                                      }}
+                                    >
+                                      {sort.label}
+                                    </Text>
+                                  </TouchableOpacity>
+                                ))}
+                              </ScrollView>
+                            </View>
+                          }
+                          ListEmptyComponent={
+                            <Text
+                              style={{
+                                color: "#8E8E93",
+                                textAlign: "center",
+                                marginTop: 20,
+                              }}
+                            >
+                              Belum ada data Uang Makan.
+                            </Text>
+                          }
+                          renderItem={({ item: tx }) => (
+                            <TouchableOpacity
+                              onPress={() => setSelectedTx(tx)}
+                              style={styles.listItem}
+                            >
+                              <View style={{ flex: 1, marginRight: 10 }}>
+                                <Text style={styles.itemTitle}>{tx.title}</Text>
+                                <Text style={styles.itemSubtitle}>
+                                  {tx.dateStr} • {tx.time}
+                                </Text>
+                                {tx.details ? (
+                                  <Text
+                                    style={{
+                                      color: "#8E8E93",
+                                      fontSize: 12,
+                                      marginTop: 4,
+                                    }}
+                                  >
+                                    {tx.details}
+                                  </Text>
+                                ) : null}
+                              </View>
+                              <Text
+                                style={{
+                                  color: tx.amount < 0 ? "#FF453A" : "#34C759",
+                                  fontWeight: "bold",
+                                  fontSize: 14,
+                                }}
+                              >
+                                {tx.amount < 0 ? "-" : "+"} Rp{" "}
+                                {Math.abs(tx.amount).toLocaleString("id-ID")}
+                              </Text>
+                            </TouchableOpacity>
+                          )}
+                        />
+                      )}
+
                       {/* TAB LAIN-LAIN */}
                       {payrollSubTab === "Lainnya" && (
                         <FlatList
                           contentContainerStyle={styles.listContainer}
                           data={sortedOtherTransactions.filter(
-                            (tx) => tx.title !== "Penjualan",
+                            (tx) =>
+                              tx.title !== "Penjualan" &&
+                              tx.title !== "Kasbon" &&
+                              tx.title !== "Uang Makan",
                           )}
                           keyExtractor={(tx) => tx.id}
                           ListHeaderComponent={
@@ -2902,42 +3082,81 @@ export default function ManageScreen() {
                 >
                   KATEGORI
                 </Text>
+
+                {/* Move TextInput ABOVE the list for better flow */}
+                <TextInput
+                  style={{
+                    backgroundColor: "#121212",
+                    color: "#FFF",
+                    padding: 15,
+                    borderRadius: 8,
+                    marginBottom: 10,
+                    borderWidth: 1,
+                    borderColor: "#2C2C2E",
+                  }}
+                  placeholder="Ketik kategori baru atau pilih di bawah..."
+                  placeholderTextColor="#8E8E93"
+                  value={newItemCategory}
+                  onChangeText={setNewItemCategory}
+                />
+
+                {/* NEW Vertical Category Box */}
                 {categories.length > 0 && (
-                  <ScrollView
-                    horizontal
-                    showsHorizontalScrollIndicator={false}
-                    style={{ flexDirection: "row", marginBottom: 10 }}
+                  <View
+                    style={{
+                      backgroundColor: "#121212",
+                      borderWidth: 1,
+                      borderColor: "#2C2C2E",
+                      borderRadius: 8,
+                      marginBottom: 15,
+                      maxHeight: 150,
+                      overflow: "hidden",
+                    }}
                   >
-                    {categories.map((cat) => (
-                      <TouchableOpacity
-                        key={cat}
-                        onPress={() => setNewItemCategory(cat)}
-                        style={{
-                          padding: 10,
-                          paddingHorizontal: 15,
-                          borderRadius: 10,
-                          borderWidth: 2,
-                          borderColor:
-                            newItemCategory === cat ? "#0A84FF" : "#2C2C2E",
-                          backgroundColor:
-                            newItemCategory === cat
-                              ? "rgba(10,132,255,0.2)"
-                              : "#1C1C1E",
-                          marginRight: 10,
-                        }}
-                      >
-                        <Text
-                          style={
-                            newItemCategory === cat
-                              ? styles.textWhiteBold
-                              : styles.textGray
-                          }
-                        >
-                          {cat}
-                        </Text>
-                      </TouchableOpacity>
-                    ))}
-                  </ScrollView>
+                    <ScrollView
+                      showsVerticalScrollIndicator={true}
+                      nestedScrollEnabled={true}
+                    >
+                      {categories.map((cat, index) => {
+                        const isSelected = newItemCategory === cat;
+                        return (
+                          <TouchableOpacity
+                            key={cat}
+                            onPress={() => setNewItemCategory(cat)}
+                            style={{
+                              padding: 15,
+                              borderBottomWidth:
+                                index === categories.length - 1 ? 0 : 1,
+                              borderBottomColor: "#2C2C2E",
+                              backgroundColor: isSelected
+                                ? "rgba(10,132,255,0.15)"
+                                : "transparent",
+                              flexDirection: "row",
+                              justifyContent: "space-between",
+                              alignItems: "center",
+                            }}
+                          >
+                            <Text
+                              style={{
+                                color: isSelected ? "#0A84FF" : "#FFF",
+                                fontWeight: isSelected ? "bold" : "normal",
+                                fontSize: 14,
+                              }}
+                            >
+                              {cat}
+                            </Text>
+                            {isSelected && (
+                              <MaterialCommunityIcons
+                                name="check"
+                                size={18}
+                                color="#0A84FF"
+                              />
+                            )}
+                          </TouchableOpacity>
+                        );
+                      })}
+                    </ScrollView>
+                  </View>
                 )}
                 <TextInput
                   style={{
