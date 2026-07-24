@@ -141,25 +141,28 @@ export default function ManageScreen() {
   const togglePayrollBar = (expand: boolean) => {
     setIsPayrollExpanded(expand);
     Animated.timing(payrollDetailsHeight, {
-      toValue: expand ? 190 : 0, // 160px is the exact height needed to fit the 5 detail rows
+      toValue: expand ? 200 : 0,
       duration: 300, // 300ms is a pretty smooth
       useNativeDriver: false,
     }).start();
   };
 
-  const payrollPanResponder = useRef(
-    PanResponder.create({
-      onMoveShouldSetPanResponder: (_, gestureState) =>
-        Math.abs(gestureState.dy) > 10,
-      onPanResponderRelease: (_, gestureState) => {
-        if (gestureState.dy > 20) {
-          togglePayrollBar(false); // Swipe Down -> Collapse
-        } else if (gestureState.dy < -20) {
-          togglePayrollBar(true); // Swipe Up -> Expand
-        }
-      },
-    }),
-  ).current;
+  const payrollPanResponder = React.useMemo(
+    () =>
+      PanResponder.create({
+        onStartShouldSetPanResponder: () => false, // Let TouchableOpacity handle normal taps
+        onMoveShouldSetPanResponder: (_, gestureState) =>
+          Math.abs(gestureState.dy) > 5, // Instantly capture the gesture if the user swipes
+        onPanResponderRelease: (_, gestureState) => {
+          if (gestureState.dy > 15) {
+            togglePayrollBar(false); // Swipe Down -> Collapse
+          } else if (gestureState.dy < -15) {
+            togglePayrollBar(true); // Swipe Up -> Expand
+          }
+        },
+      }),
+    [isPayrollExpanded],
+  );
 
   const handleAttDateChange = (event: any, date?: Date) => {
     if (Platform.OS === "android") setActiveAttPicker(null);
@@ -2247,25 +2250,28 @@ export default function ManageScreen() {
                         ]}
                         {...payrollPanResponder.panHandlers}
                       >
-                        {/* DRAG HANDLE */}
-                        <View
+                        {/* DRAG HANDLE*/}
+                        <TouchableOpacity
+                          activeOpacity={0.8}
+                          onPress={() => togglePayrollBar(!isPayrollExpanded)}
                           style={{
                             alignItems: "center",
                             paddingBottom: 15,
+                            paddingTop: 5,
                             backgroundColor: "transparent",
                           }}
                         >
                           <View
                             style={{
-                              width: 40,
-                              height: 5,
+                              width: 50,
+                              height: 6,
                               backgroundColor: "#2C2C2E",
                               borderRadius: 3,
                             }}
                           />
-                        </View>
+                        </TouchableOpacity>
 
-                        {/* COLLAPSIBLE DETAILS (ANIMATED) */}
+                        {/* COLLAPSIBLE DETAILS */}
                         <Animated.View
                           style={{
                             height: payrollDetailsHeight,
@@ -2300,7 +2306,7 @@ export default function ManageScreen() {
                             </View>
                             <View style={styles.payrollRow}>
                               <Text style={[styles.textGray, { fontSize: 12 }]}>
-                                Total Lembur:
+                                Total Ekstra / Telat:
                               </Text>
                               <Text
                                 style={{
@@ -2330,7 +2336,6 @@ export default function ManageScreen() {
                                 {Math.abs(totalKasbon).toLocaleString("id-ID")}
                               </Text>
                             </View>
-
                             <View style={styles.payrollRow}>
                               <Text style={[styles.textGray, { fontSize: 12 }]}>
                                 Total Uang Makan:
@@ -2348,10 +2353,6 @@ export default function ManageScreen() {
                                 )}
                               </Text>
                             </View>
-
-                            <View
-                              style={[styles.payrollRow, { marginBottom: 0 }]}
-                            ></View>
                             <View
                               style={[styles.payrollRow, { marginBottom: 0 }]}
                             >
@@ -2375,6 +2376,8 @@ export default function ManageScreen() {
                             </View>
                           </View>
                         </Animated.View>
+
+                        {/* ALWAYS VISIBLE TOTAL ROW */}
                         <TouchableOpacity
                           activeOpacity={0.8}
                           onPress={() => togglePayrollBar(!isPayrollExpanded)}

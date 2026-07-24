@@ -577,7 +577,7 @@ export default function RecapScreen() {
               <Text style={styles.ledgerSubtitle}>
                 {tx.type === "expense"
                   ? `${tx.dateStr} • Pukul ${tx.time}`
-                  : `${tx.dateStr} • ${tx.time} ${tx.stylist ? `• Kasir: ${tx.stylist}` : ""}`}
+                  : `${tx.dateStr} • Kasir: ${tx.stylist}`}
               </Text>
             </View>
 
@@ -1299,56 +1299,56 @@ export default function RecapScreen() {
         transparent={true}
         onRequestClose={() => setShowPasswordModal(false)}
       >
-        <View
-          style={[
-            styles.modalOverlay,
-            { paddingTop: insets.top, paddingBottom: insets.bottom },
-          ]}
-        >
-          <View style={styles.passwordModalContainer}>
-            <Text style={styles.passwordModalTitle}>Izin Owner</Text>
-            <Text style={styles.passwordModalSubtitle}>
-              Masukkan password untuk menghapus data ini.
-            </Text>
+        <SafeAreaView style={styles.modalOverlay}>
+          <KeyboardAvoidingView
+            behavior={Platform.OS === "ios" ? "padding" : "height"}
+            style={{ flex: 1, justifyContent: "center" }}
+          >
+            <View style={styles.passwordModalContainer}>
+              <Text style={styles.passwordModalTitle}>Izin Owner</Text>
+              <Text style={styles.passwordModalSubtitle}>
+                Masukkan password untuk menghapus data ini.
+              </Text>
 
-            <View style={styles.passwordInputContainer}>
-              <TextInput
-                style={styles.passwordInputInner}
-                placeholder="Password..."
-                placeholderTextColor="#8E8E93"
-                secureTextEntry={!isPasswordVisible}
-                value={deletePassword}
-                onChangeText={setDeletePassword}
-                autoFocus={true}
-              />
-              <TouchableOpacity
-                onPress={() => setIsPasswordVisible(!isPasswordVisible)}
-                style={{ padding: 10 }}
-              >
-                <MaterialCommunityIcons
-                  name={isPasswordVisible ? "eye" : "eye-off"}
-                  size={20}
-                  color="#8E8E93"
+              <View style={styles.passwordInputContainer}>
+                <TextInput
+                  style={styles.passwordInputInner}
+                  placeholder="Password..."
+                  placeholderTextColor="#8E8E93"
+                  secureTextEntry={!isPasswordVisible}
+                  value={deletePassword}
+                  onChangeText={setDeletePassword}
+                  autoFocus={true}
                 />
-              </TouchableOpacity>
-            </View>
+                <TouchableOpacity
+                  onPress={() => setIsPasswordVisible(!isPasswordVisible)}
+                  style={{ padding: 10 }}
+                >
+                  <MaterialCommunityIcons
+                    name={isPasswordVisible ? "eye" : "eye-off"}
+                    size={20}
+                    color="#8E8E93"
+                  />
+                </TouchableOpacity>
+              </View>
 
-            <View style={styles.passwordBtnRow}>
-              <TouchableOpacity
-                style={styles.passwordCancelBtn}
-                onPress={() => setShowPasswordModal(false)}
-              >
-                <Text style={styles.textWhiteBold}>Batal</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={styles.passwordDeleteBtn}
-                onPress={confirmDelete}
-              >
-                <Text style={styles.textWhiteBold}>Hapus Data</Text>
-              </TouchableOpacity>
+              <View style={styles.passwordBtnRow}>
+                <TouchableOpacity
+                  style={styles.passwordCancelBtn}
+                  onPress={() => setShowPasswordModal(false)}
+                >
+                  <Text style={styles.textWhiteBold}>Batal</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.passwordDeleteBtn}
+                  onPress={confirmDelete}
+                >
+                  <Text style={styles.textWhiteBold}>Hapus Data</Text>
+                </TouchableOpacity>
+              </View>
             </View>
-          </View>
-        </View>
+          </KeyboardAvoidingView>
+        </SafeAreaView>
       </Modal>
     </SafeAreaView>
   );
