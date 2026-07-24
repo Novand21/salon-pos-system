@@ -219,17 +219,23 @@ export default function RecapScreen() {
         )
         .map((exp: any) => {
           const expDate = new Date(exp.timestamp);
+
+          const staffMatch = exp.description.match(/\(by .+\)/);
+          const staffString = staffMatch ? ` ${staffMatch[0]}` : "";
+
           return {
             id: `exp-${exp.id}`,
             dbId: exp.id,
             type: "expense",
-            title: exp.description,
+
+            title: `${exp.category || "Operasional"}${staffString}`,
             dateStr: expDate.toLocaleDateString("id-ID", {
               day: "numeric",
               month: "short",
               year: "numeric",
             }),
-            time: expDate.toLocaleTimeString([], {
+
+            time: expDate.toLocaleTimeString("en-GB", {
               hour: "2-digit",
               minute: "2-digit",
             }),
@@ -569,7 +575,9 @@ export default function RecapScreen() {
                 )}
               </Text>
               <Text style={styles.ledgerSubtitle}>
-                {tx.dateStr} {tx.stylist ? `• Kasir: ${tx.stylist}` : ""}
+                {tx.type === "expense"
+                  ? `${tx.dateStr} • Pukul ${tx.time}`
+                  : `${tx.dateStr} • ${tx.time} ${tx.stylist ? `• Kasir: ${tx.stylist}` : ""}`}
               </Text>
             </View>
 
@@ -977,13 +985,42 @@ export default function RecapScreen() {
                   </View>
                 </View>
               ) : (
-                <View>
-                  <Text style={styles.receiptBold}>PENGELUARAN</Text>
-                  <Text style={styles.receiptLine}>{selectedTx?.details}</Text>
+                <View style={{ paddingVertical: 10 }}>
                   <Text style={styles.receiptBold}>
-                    TOTAL: - Rp{" "}
-                    {Math.abs(selectedTx?.amount || 0).toLocaleString("id-ID")}
+                    {selectedTx?.category?.toUpperCase() || "PENGELUARAN"}
                   </Text>
+                  <Text
+                    style={[
+                      styles.receiptLine,
+                      { textAlign: "center", marginBottom: 15 },
+                    ]}
+                  >
+                    {selectedTx?.details}
+                  </Text>
+
+                  <View style={styles.receiptRowWrap}>
+                    <Text
+                      style={{
+                        color: "#000",
+                        fontSize: 14,
+                        fontWeight: "bold",
+                      }}
+                    >
+                      TOTAL:
+                    </Text>
+                    <Text
+                      style={{
+                        color: "#000",
+                        fontSize: 14,
+                        fontWeight: "bold",
+                      }}
+                    >
+                      - Rp{" "}
+                      {Math.abs(selectedTx?.amount || 0).toLocaleString(
+                        "id-ID",
+                      )}
+                    </Text>
+                  </View>
                 </View>
               )}
 

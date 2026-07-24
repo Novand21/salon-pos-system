@@ -122,6 +122,7 @@ export default function ManageScreen() {
   const [baseSalary, setBaseSalary] = useState(0);
 
   const [totalKasbon, setTotalKasbon] = useState(0);
+  const [totalUangMakan, setTotalUangMakan] = useState(0);
   const [linkedExpensesTotal, setLinkedExpensesTotal] = useState(0);
 
   const [payrollSubTab, setPayrollSubTab] = useState<"Bonus" | "Lainnya">(
@@ -140,7 +141,7 @@ export default function ManageScreen() {
   const togglePayrollBar = (expand: boolean) => {
     setIsPayrollExpanded(expand);
     Animated.timing(payrollDetailsHeight, {
-      toValue: expand ? 160 : 0, // 160px is the exact height needed to fit the 5 detail rows
+      toValue: expand ? 190 : 0, // 160px is the exact height needed to fit the 5 detail rows
       duration: 300, // 300ms is a pretty smooth
       useNativeDriver: false,
     }).start();
@@ -805,9 +806,20 @@ export default function ManageScreen() {
       );
       setTotalKasbon(dbKasbon?.total || 0);
 
-      // Fetch LINKED RECAP EXPENSES (Uang Makan, Beli Bahan, etc.)
+      // Fetch UANG MAKAN
+      const dbUangMakan: any = db.getFirstSync(
+        "SELECT SUM(amount) as total FROM Staff_Bonuses WHERE employee_id = ? AND transaction_id IS NULL AND method = 'Uang Makan' AND timestamp >= ? AND timestamp <= ?",
+        [
+          selectedPayrollStaff.id,
+          startOfDay.toISOString(),
+          endOfDay.toISOString(),
+        ],
+      );
+      setTotalUangMakan(dbUangMakan?.total || 0);
+
+      // Fetch LINKED RECAP EXPENSES
       const dbLinkedExpenses: any = db.getFirstSync(
-        "SELECT SUM(amount) as total FROM Staff_Bonuses WHERE employee_id = ? AND transaction_id IS NULL AND method IS NOT NULL AND method != 'Kasbon' AND timestamp >= ? AND timestamp <= ?",
+        "SELECT SUM(amount) as total FROM Staff_Bonuses WHERE employee_id = ? AND transaction_id IS NULL AND method IS NOT NULL AND method != 'Kasbon' AND method != 'Uang Makan' AND timestamp >= ? AND timestamp <= ?",
         [
           selectedPayrollStaff.id,
           startOfDay.toISOString(),
@@ -909,7 +921,8 @@ export default function ManageScreen() {
     menuBonusesTotal +
     manualBonuses -
     totalKasbon +
-    linkedExpensesTotal;
+    linkedExpensesTotal +
+    totalUangMakan;
 
   return (
     <SafeAreaView style={styles.container} edges={["top", "left", "right"]}>
@@ -2287,7 +2300,7 @@ export default function ManageScreen() {
                             </View>
                             <View style={styles.payrollRow}>
                               <Text style={[styles.textGray, { fontSize: 12 }]}>
-                                Total Ekstra / Telat:
+                                Total Lembur:
                               </Text>
                               <Text
                                 style={{
@@ -2317,6 +2330,28 @@ export default function ManageScreen() {
                                 {Math.abs(totalKasbon).toLocaleString("id-ID")}
                               </Text>
                             </View>
+
+                            <View style={styles.payrollRow}>
+                              <Text style={[styles.textGray, { fontSize: 12 }]}>
+                                Total Uang Makan:
+                              </Text>
+                              <Text
+                                style={{
+                                  color:
+                                    totalUangMakan < 0 ? "#FF453A" : "#34C759",
+                                  fontSize: 12,
+                                }}
+                              >
+                                {totalUangMakan < 0 ? "- " : "+ "}Rp{" "}
+                                {Math.abs(totalUangMakan).toLocaleString(
+                                  "id-ID",
+                                )}
+                              </Text>
+                            </View>
+
+                            <View
+                              style={[styles.payrollRow, { marginBottom: 0 }]}
+                            ></View>
                             <View
                               style={[styles.payrollRow, { marginBottom: 0 }]}
                             >
