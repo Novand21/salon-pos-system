@@ -50,6 +50,9 @@ export default function RecapScreen() {
   const [expenseAmount, setExpenseAmount] = useState("");
   const [expenseStaffs, setExpenseStaffs] = useState<string[]>([]);
   const [expenseCategory, setExpenseCategory] = useState("Operasional");
+  const [ownerEffect, setOwnerEffect] = useState<"none" | "subtract">(
+    "subtract",
+  );
   const [salaryEffect, setSalaryEffect] = useState<"none" | "add" | "subtract">(
     "none",
   );
@@ -58,12 +61,14 @@ export default function RecapScreen() {
     "Kasbon",
     "Uang Makan",
     "Beli Bahan",
+    "Penjualan",
   ];
 
   // passwords
   const [showPasswordModal, setShowPasswordModal] = useState(false);
   const [deletePassword, setDeletePassword] = useState("");
   const [isPasswordVisible, setIsPasswordVisible] = useState(false);
+
   // ==========================================
   // DATE RANGE NAVIGATION FUNCTIONS
   // ==========================================
@@ -116,9 +121,12 @@ export default function RecapScreen() {
       const finalDescription = `${expenseDesc}${staffString}`;
       const amountNum = Number(expenseAmount);
 
+      const finalCategory =
+        ownerEffect === "none" ? `${expenseCategory}__IGNORE` : expenseCategory;
+
       db.runSync(
         "INSERT INTO Expenditures (timestamp, description, amount, category) VALUES (?, ?, ?, ?)",
-        [timestamp, finalDescription, amountNum, expenseCategory],
+        [timestamp, finalDescription, amountNum, finalCategory],
       );
 
       // Cross-link to Staff Bonuses if the owner applied a modifier
@@ -153,6 +161,7 @@ export default function RecapScreen() {
       setExpenseStaffs([]);
       setExpenseCategory("Operasional");
       setSalaryEffect("none");
+      setOwnerEffect("subtract");
       setShowExpenseModal(false);
     } catch (error) {
       console.error("Error saving expense:", error);
@@ -223,26 +232,31 @@ export default function RecapScreen() {
           const staffMatch = exp.description.match(/\(by .+\)/);
           const staffString = staffMatch ? ` ${staffMatch[0]}` : "";
 
+          const isIgnored = exp.category && exp.category.endsWith("__IGNORE");
+          const cleanCategory = isIgnored
+            ? exp.category.replace("__IGNORE", "")
+            : exp.category || "Operasional";
+
           return {
             id: `exp-${exp.id}`,
             dbId: exp.id,
             type: "expense",
-
-            title: `${exp.category || "Operasional"}${staffString}`,
+            title: `${cleanCategory}${staffString}`,
             dateStr: expDate.toLocaleDateString("id-ID", {
               day: "numeric",
               month: "short",
               year: "numeric",
             }),
-
             time: expDate.toLocaleTimeString("en-GB", {
               hour: "2-digit",
               minute: "2-digit",
             }),
-            amount: -exp.amount,
+            amount: isIgnored ? 0 : -exp.amount,
+            displayAmount: exp.amount,
+            isIgnored: isIgnored,
             details: exp.description,
             timestamp: exp.timestamp,
-            category: exp.category,
+            category: cleanCategory,
           };
         });
 
@@ -350,7 +364,10 @@ export default function RecapScreen() {
             );
           });
         });
-
+        // Delete associated items from Staff Bonuses
+        db.runSync("DELETE FROM Staff_Bonuses WHERE transaction_id = ?", [
+          selectedTx.dbId,
+        ]);
         // Delete associated items first to satisfy Foreign Key constraints
         db.runSync("DELETE FROM Transaction_Items WHERE transaction_id = ?", [
           selectedTx.dbId,
@@ -358,6 +375,10 @@ export default function RecapScreen() {
         // Delete the main transaction
         db.runSync("DELETE FROM Transactions WHERE id = ?", [selectedTx.dbId]);
       } else if (selectedTx.type === "expense") {
+        // Delete associated items from Staff Bonuses
+        db.runSync("DELETE FROM Staff_Bonuses WHERE timestamp = ?", [
+          selectedTx.timestamp,
+        ]);
         // Expenses have no child tables, so just delete them directly
         db.runSync("DELETE FROM Expenditures WHERE id = ?", [selectedTx.dbId]);
       }
@@ -449,7 +470,7 @@ export default function RecapScreen() {
             setExpenseDate(new Date());
           }}
         >
-          <Text style={styles.textWhite}>+ Pengeluaran</Text>
+          <Text style={styles.textWhite}>Kelola</Text>
         </TouchableOpacity>
       </View>
 
@@ -550,7 +571,11 @@ export default function RecapScreen() {
               <Text style={styles.ledgerTitle}>
                 <Text
                   style={
-                    tx.type === "expense" ? styles.textRed : styles.textGreen
+                    tx.isIgnored
+                      ? { color: "#8E8E93" }
+                      : tx.type === "expense"
+                        ? styles.textRed
+                        : styles.textGreen
                   }
                 >
                   {tx.type === "expense" ? "↓ " : "↑ "}
@@ -577,18 +602,24 @@ export default function RecapScreen() {
               <Text style={styles.ledgerSubtitle}>
                 {tx.type === "expense"
                   ? `${tx.dateStr} • Pukul ${tx.time}`
-                  : `${tx.dateStr} • Kasir: ${tx.stylist}`}
+                  : `${tx.dateStr} • ${tx.time} ${tx.stylist ? `• Kasir: ${tx.stylist}` : ""}`}
               </Text>
             </View>
 
             <Text
               style={[
                 styles.ledgerAmount,
-                tx.type === "expense" ? styles.textRed : styles.textGreen,
+                tx.isIgnored
+                  ? { color: "#8E8E93" }
+                  : tx.type === "expense"
+                    ? styles.textRed
+                    : styles.textGreen,
               ]}
             >
               {tx.type === "expense" ? "- Rp " : "+ Rp "}
-              {Math.abs(tx.amount).toLocaleString("id-ID")}
+              {tx.isIgnored
+                ? tx.displayAmount.toLocaleString("id-ID")
+                : Math.abs(tx.amount).toLocaleString("id-ID")}
             </Text>
           </TouchableOpacity>
         )}
@@ -1010,20 +1041,33 @@ export default function RecapScreen() {
                     </Text>
                     <Text
                       style={{
-                        color: "#000",
+                        color: selectedTx?.isIgnored ? "#8E8E93" : "#000",
                         fontSize: 14,
                         fontWeight: "bold",
                       }}
                     >
                       - Rp{" "}
-                      {Math.abs(selectedTx?.amount || 0).toLocaleString(
-                        "id-ID",
-                      )}
+                      {(selectedTx?.isIgnored
+                        ? selectedTx?.displayAmount
+                        : Math.abs(selectedTx?.amount || 0)
+                      ).toLocaleString("id-ID")}
                     </Text>
                   </View>
+                  {selectedTx?.isIgnored && (
+                    <Text
+                      style={{
+                        color: "#8E8E93",
+                        fontSize: 12,
+                        textAlign: "right",
+                        marginTop: 5,
+                        fontStyle: "italic",
+                      }}
+                    >
+                      (Tidak Memotong Saldo Owner)
+                    </Text>
+                  )}
                 </View>
               )}
-
               <Text style={styles.receiptDivider}>
                 --------------------------------
               </Text>
@@ -1192,6 +1236,58 @@ export default function RecapScreen() {
                   value={expenseAmount}
                   onChangeText={setExpenseAmount}
                 />
+
+                <Text style={styles.inputLabel}>PENGARUH KE OWNER</Text>
+                <View style={styles.toggleRow}>
+                  <TouchableOpacity
+                    onPress={() => setOwnerEffect("none")}
+                    style={[
+                      styles.toggleBtn,
+                      {
+                        borderColor:
+                          ownerEffect === "none" ? "#8E8E93" : "#2C2C2E",
+                        backgroundColor:
+                          ownerEffect === "none"
+                            ? "rgba(142,142,147,0.2)"
+                            : "#1C1C1E",
+                      },
+                    ]}
+                  >
+                    <Text
+                      style={
+                        ownerEffect === "none"
+                          ? styles.textWhiteBold
+                          : styles.textGray
+                      }
+                    >
+                      Tidak ada
+                    </Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    onPress={() => setOwnerEffect("subtract")}
+                    style={[
+                      styles.toggleBtn,
+                      {
+                        borderColor:
+                          ownerEffect === "subtract" ? "#FF453A" : "#2C2C2E",
+                        backgroundColor:
+                          ownerEffect === "subtract"
+                            ? "rgba(255,69,58,0.2)"
+                            : "#1C1C1E",
+                      },
+                    ]}
+                  >
+                    <Text
+                      style={
+                        ownerEffect === "subtract"
+                          ? { color: "#FF453A", fontWeight: "bold" }
+                          : styles.textGray
+                      }
+                    >
+                      - Potong
+                    </Text>
+                  </TouchableOpacity>
+                </View>
 
                 <Text style={styles.inputLabel}>
                   PENGARUH KE GAJI STAFF (Opsional)

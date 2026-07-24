@@ -30,7 +30,6 @@ import { db } from "../../database/db";
 
 export default function ManageScreen() {
   const insets = useSafeAreaInsets();
-  const [activeTab, setActiveTab] = useState<"Menu" | "Staff">("Menu");
 
   // Database States
   const [menuItems, setMenuItems] = useState<any[]>([]);
@@ -123,11 +122,12 @@ export default function ManageScreen() {
 
   const [totalKasbon, setTotalKasbon] = useState(0);
   const [totalUangMakan, setTotalUangMakan] = useState(0);
+  const [totalPenjualan, setTotalPenjualan] = useState(0);
   const [linkedExpensesTotal, setLinkedExpensesTotal] = useState(0);
 
-  const [payrollSubTab, setPayrollSubTab] = useState<"Bonus" | "Lainnya">(
-    "Bonus",
-  );
+  const [payrollSubTab, setPayrollSubTab] = useState<
+    "Bonus" | "Lainnya" | "Penjualan"
+  >("Bonus");
   const [staffOtherTransactions, setStaffOtherTransactions] = useState<any[]>(
     [],
   );
@@ -820,9 +820,19 @@ export default function ManageScreen() {
       );
       setTotalUangMakan(dbUangMakan?.total || 0);
 
+      const dbPenjualan: any = db.getFirstSync(
+        "SELECT SUM(amount) as total FROM Staff_Bonuses WHERE employee_id = ? AND transaction_id IS NULL AND method = 'Penjualan' AND timestamp >= ? AND timestamp <= ?",
+        [
+          selectedPayrollStaff.id,
+          startOfDay.toISOString(),
+          endOfDay.toISOString(),
+        ],
+      );
+      setTotalPenjualan(dbPenjualan?.total || 0);
+
       // Fetch LINKED RECAP EXPENSES
       const dbLinkedExpenses: any = db.getFirstSync(
-        "SELECT SUM(amount) as total FROM Staff_Bonuses WHERE employee_id = ? AND transaction_id IS NULL AND method IS NOT NULL AND method != 'Kasbon' AND method != 'Uang Makan' AND timestamp >= ? AND timestamp <= ?",
+        "SELECT SUM(amount) as total FROM Staff_Bonuses WHERE employee_id = ? AND transaction_id IS NULL AND method IS NOT NULL AND method != 'Kasbon' AND method != 'Uang Makan' AND method != 'Penjualan' AND timestamp >= ? AND timestamp <= ?",
         [
           selectedPayrollStaff.id,
           startOfDay.toISOString(),
@@ -922,10 +932,11 @@ export default function ManageScreen() {
   const grandTotalGaji =
     baseSalary +
     menuBonusesTotal +
-    manualBonuses -
+    manualBonuses +
     totalKasbon +
     linkedExpensesTotal +
-    totalUangMakan;
+    totalUangMakan +
+    totalPenjualan;
 
   return (
     <SafeAreaView style={styles.container} edges={["top", "left", "right"]}>
@@ -1862,6 +1873,37 @@ export default function ManageScreen() {
                               alignItems: "center",
                               borderRadius: 12,
                               backgroundColor:
+                                payrollSubTab === "Penjualan"
+                                  ? "#0A84FF"
+                                  : "#1C1C1E",
+                              borderWidth: 1,
+                              borderColor:
+                                payrollSubTab === "Penjualan"
+                                  ? "#0A84FF"
+                                  : "#2C2C2E",
+                            }}
+                            onPress={() => setPayrollSubTab("Penjualan")}
+                          >
+                            <Text
+                              style={{
+                                color:
+                                  payrollSubTab === "Penjualan"
+                                    ? "#FFF"
+                                    : "#8E8E93",
+                                fontSize: 11,
+                                fontWeight: "bold",
+                              }}
+                            >
+                              Penjualan
+                            </Text>
+                          </TouchableOpacity>
+                          <TouchableOpacity
+                            style={{
+                              paddingVertical: 6,
+                              paddingHorizontal: 12,
+                              alignItems: "center",
+                              borderRadius: 12,
+                              backgroundColor:
                                 payrollSubTab === "Lainnya"
                                   ? "#0A84FF"
                                   : "#1C1C1E",
@@ -1904,7 +1946,8 @@ export default function ManageScreen() {
                       )}
 
                       {/* Filtered Transactions List */}
-                      {payrollSubTab === "Bonus" ? (
+                      {/* TAB RIWAYAT PEKERJAAN (BONUS) */}
+                      {payrollSubTab === "Bonus" && (
                         <FlatList
                           contentContainerStyle={styles.listContainer}
                           data={sortedPayrollTransactions}
@@ -1981,7 +2024,6 @@ export default function ManageScreen() {
                           }
                           renderItem={({ item: tx }) => (
                             <View style={styles.listItem}>
-                              {/* ... (Keep all your existing complex item rendering logic here exactly as it is) ... */}
                               <View style={{ flex: 1 }}>
                                 <TouchableOpacity
                                   onPress={() => setSelectedTx(tx)}
@@ -2128,10 +2170,130 @@ export default function ManageScreen() {
                             </View>
                           )}
                         />
-                      ) : (
+                      )}
+
+                      {/* TAB PENJUALAN */}
+                      {payrollSubTab === "Penjualan" && (
                         <FlatList
                           contentContainerStyle={styles.listContainer}
-                          data={sortedOtherTransactions}
+                          data={sortedOtherTransactions.filter(
+                            (tx) => tx.title === "Penjualan",
+                          )}
+                          keyExtractor={(tx) => tx.id}
+                          ListHeaderComponent={
+                            <View style={{ marginBottom: 15 }}>
+                              <Text
+                                style={{
+                                  color: "#8E8E93",
+                                  fontSize: 12,
+                                  fontWeight: "bold",
+                                  marginBottom: 10,
+                                }}
+                              >
+                                RIWAYAT PENJUALAN / KOMISI
+                              </Text>
+                              <ScrollView
+                                horizontal
+                                showsHorizontalScrollIndicator={false}
+                                style={{ flexDirection: "row" }}
+                              >
+                                {[
+                                  { id: "desc", label: "↓ Terbaru" },
+                                  { id: "asc", label: "↑ Terlama" },
+                                ].map((sort) => (
+                                  <TouchableOpacity
+                                    key={sort.id}
+                                    onPress={() =>
+                                      setPayrollSortMode(sort.id as any)
+                                    }
+                                    style={{
+                                      paddingHorizontal: 12,
+                                      paddingVertical: 6,
+                                      borderRadius: 15,
+                                      marginRight: 8,
+                                      borderWidth: 1,
+                                      borderColor:
+                                        payrollSortMode === sort.id
+                                          ? "#0A84FF"
+                                          : "#2C2C2E",
+                                      backgroundColor:
+                                        payrollSortMode === sort.id
+                                          ? "rgba(10,132,255,0.2)"
+                                          : "#1C1C1E",
+                                    }}
+                                  >
+                                    <Text
+                                      style={{
+                                        color:
+                                          payrollSortMode === sort.id
+                                            ? "#0A84FF"
+                                            : "#8E8E93",
+                                        fontSize: 12,
+                                        fontWeight: "bold",
+                                      }}
+                                    >
+                                      {sort.label}
+                                    </Text>
+                                  </TouchableOpacity>
+                                ))}
+                              </ScrollView>
+                            </View>
+                          }
+                          ListEmptyComponent={
+                            <Text
+                              style={{
+                                color: "#8E8E93",
+                                textAlign: "center",
+                                marginTop: 20,
+                              }}
+                            >
+                              Belum ada data penjualan.
+                            </Text>
+                          }
+                          renderItem={({ item: tx }) => (
+                            <TouchableOpacity
+                              onPress={() => setSelectedTx(tx)}
+                              style={styles.listItem}
+                            >
+                              <View style={{ flex: 1, marginRight: 10 }}>
+                                <Text style={styles.itemTitle}>{tx.title}</Text>
+                                <Text style={styles.itemSubtitle}>
+                                  {tx.dateStr} • {tx.time}
+                                </Text>
+                                {tx.details ? (
+                                  <Text
+                                    style={{
+                                      color: "#8E8E93",
+                                      fontSize: 12,
+                                      marginTop: 4,
+                                    }}
+                                  >
+                                    {tx.details}
+                                  </Text>
+                                ) : null}
+                              </View>
+                              <Text
+                                style={{
+                                  color: tx.amount < 0 ? "#FF453A" : "#34C759",
+                                  fontWeight: "bold",
+                                  fontSize: 14,
+                                }}
+                              >
+                                {tx.amount < 0 ? "-" : "+"} Rp{" "}
+                                {Math.abs(tx.amount).toLocaleString("id-ID")}
+                              </Text>
+                            </TouchableOpacity>
+                          )}
+                        />
+                      )}
+
+                      {/* TAB LAIN-LAIN */}
+                      {payrollSubTab === "Lainnya" && (
+                        <FlatList
+                          contentContainerStyle={styles.listContainer}
+                          data={sortedOtherTransactions.filter(
+                            (tx) => tx.title !== "Penjualan",
+                          )}
                           keyExtractor={(tx) => tx.id}
                           ListHeaderComponent={
                             <View style={{ marginBottom: 15 }}>
@@ -2349,6 +2511,23 @@ export default function ManageScreen() {
                               >
                                 {totalUangMakan < 0 ? "- " : "+ "}Rp{" "}
                                 {Math.abs(totalUangMakan).toLocaleString(
+                                  "id-ID",
+                                )}
+                              </Text>
+                            </View>
+                            <View style={styles.payrollRow}>
+                              <Text style={[styles.textGray, { fontSize: 12 }]}>
+                                Total Penjualan:
+                              </Text>
+                              <Text
+                                style={{
+                                  color:
+                                    totalPenjualan < 0 ? "#FF453A" : "#34C759",
+                                  fontSize: 12,
+                                }}
+                              >
+                                {totalPenjualan < 0 ? "- " : "+ "}Rp{" "}
+                                {Math.abs(totalPenjualan).toLocaleString(
                                   "id-ID",
                                 )}
                               </Text>
