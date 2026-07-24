@@ -25,6 +25,8 @@ import {
 import { db } from "@/database/db";
 import { useCart } from "../../context/CartContext";
 
+import { MaterialCommunityIcons } from "@expo/vector-icons";
+
 export default function RegisterScreen() {
   const {
     cart,
@@ -47,6 +49,7 @@ export default function RegisterScreen() {
   const [selectedItem, setSelectedItem] = useState<any>(null);
   const [selectedAddOns, setSelectedAddOns] = useState<any[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
+  const [showCategoryModal, setShowCategoryModal] = useState(false);
 
   // States for Checkout Modal
   const [quantity, setQuantity] = useState(1);
@@ -750,7 +753,24 @@ export default function RegisterScreen() {
     <SafeAreaView style={styles.container} edges={["top", "left", "right"]}>
       {/* Top Category Filter */}
       <View style={styles.header}>
-        <Text style={styles.headerTitle}>Menu Order</Text>
+        <View
+          style={{
+            flexDirection: "row",
+            alignItems: "center",
+            marginBottom: 15,
+          }}
+        >
+          <TouchableOpacity
+            onPress={() => setShowCategoryModal(true)}
+            style={{ marginRight: 15 }}
+          >
+            <MaterialCommunityIcons name="menu" size={28} color="#FFF" />
+          </TouchableOpacity>
+          <Text style={[styles.headerTitle, { marginBottom: 0 }]}>
+            Menu Order
+          </Text>
+        </View>
+
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
@@ -1906,6 +1926,72 @@ export default function RegisterScreen() {
             </View>
           </View>
         </KeyboardAvoidingView>
+      </Modal>
+
+      {/* --- CATEGORY MODAL --- */}
+      <Modal
+        visible={showCategoryModal}
+        animationType="fade"
+        transparent={true}
+        onRequestClose={() => setShowCategoryModal(false)}
+      >
+        <TouchableOpacity
+          style={styles.modalOverlay}
+          activeOpacity={1}
+          onPress={() => setShowCategoryModal(false)}
+        >
+          <View
+            style={{
+              backgroundColor: "#1C1C1E",
+              width: 250,
+              maxHeight: "70%",
+              borderRadius: 12,
+              padding: 20,
+              alignSelf: "flex-start",
+              marginTop: (insets.top || 20) + 60,
+              marginLeft: 20,
+              borderWidth: 1,
+              borderColor: "#2C2C2E",
+            }}
+          >
+            <Text
+              style={{
+                color: "#8E8E93",
+                fontWeight: "bold",
+                marginBottom: 15,
+                fontSize: 12,
+              }}
+            >
+              KATEGORI MENU
+            </Text>
+            <ScrollView showsVerticalScrollIndicator={false}>
+              {categories.map((cat) => (
+                <TouchableOpacity
+                  key={cat}
+                  onPress={() => {
+                    setActiveCategory(cat);
+                    setShowCategoryModal(false);
+                  }}
+                  style={{
+                    paddingVertical: 12,
+                    borderBottomWidth: 1,
+                    borderBottomColor: "#2C2C2E",
+                  }}
+                >
+                  <Text
+                    style={{
+                      color: activeCategory === cat ? "#0A84FF" : "#FFF",
+                      fontWeight: activeCategory === cat ? "bold" : "normal",
+                      fontSize: 16,
+                    }}
+                  >
+                    {cat}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          </View>
+        </TouchableOpacity>
       </Modal>
     </SafeAreaView>
   );
