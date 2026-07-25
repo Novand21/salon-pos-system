@@ -289,6 +289,14 @@ export default function ManageScreen() {
           [employeeId, dateStr],
         );
 
+        if (!status) {
+          if (existing) {
+            db.runSync("DELETE FROM Attendance WHERE id = ?", [existing.id]);
+          }
+          loadAttendance();
+          return;
+        }
+
         const finalStartTime = status === "Hadir" ? startTime : "-";
         const finalEndTime = status === "Hadir" ? endTime : "-";
 
@@ -1549,10 +1557,17 @@ export default function ManageScreen() {
                                     <TouchableOpacity
                                       key={st}
                                       onPress={() => {
+                                        const isAlreadySelected =
+                                          row.status === st;
+                                        const newStatus = isAlreadySelected
+                                          ? ""
+                                          : st;
+
                                         let timeToSave = row.startTime;
                                         let endTimeToSave = row.endTime || "-";
+
                                         if (
-                                          st === "Hadir" &&
+                                          newStatus === "Hadir" &&
                                           (timeToSave === "-" || !timeToSave)
                                         ) {
                                           timeToSave =
@@ -1572,7 +1587,7 @@ export default function ManageScreen() {
                                             item.date === row.date
                                               ? {
                                                   ...item,
-                                                  status: st,
+                                                  status: newStatus,
                                                   startTime: timeToSave,
                                                   endTime: endTimeToSave,
                                                 }
@@ -1583,7 +1598,7 @@ export default function ManageScreen() {
                                         markAttendance(
                                           row.staffId,
                                           row.date,
-                                          st,
+                                          newStatus,
                                           timeToSave,
                                           endTimeToSave,
                                           row.description || "",
@@ -3848,7 +3863,6 @@ export default function ManageScreen() {
               {/* DYNAMIC RECEIPT TOGGLE */}
               {selectedTx?.type !== "expense" ? (
                 <View>
-                  {/* ORIGINAL 'RIWAYAT PEKERJAAN' RENDERER */}
                   {selectedTx?.parsedCart?.map(
                     (cartItem: any, index: number) => {
                       const addOnsTotal =
@@ -4486,6 +4500,109 @@ export default function ManageScreen() {
           <SafeAreaView style={styles.payrollModalOverlay}>
             <View style={styles.bonusModalContainer}>
               <Text style={styles.bonusModalTitle}>Atur Gaji Dasar</Text>
+
+              {(() => {
+                if (!selectedPayrollStaff) return null;
+
+                // Create date boundaries for comparison
+                const startOfDay = new Date(payrollStartDate);
+                startOfDay.setHours(0, 0, 0, 0);
+                const endOfDay = new Date(payrollEndDate);
+                endOfDay.setHours(23, 59, 59, 999);
+
+                // Filter the global attendanceData for this specific staff and date range
+                const staffAtt = attendanceData.filter((att) => {
+                  if (att.staffId !== selectedPayrollStaff.id) return false;
+
+                  const attDate = new Date(att.date);
+                  attDate.setHours(12, 0, 0, 0);
+                  return attDate >= startOfDay && attDate <= endOfDay;
+                });
+
+                let countHadir = 0;
+                let countIzin = 0;
+                let countSakit = 0;
+
+                staffAtt.forEach((rec) => {
+                  if (rec.status === "Hadir") countHadir++;
+                  if (rec.status === "Izin") countIzin++;
+                  if (rec.status === "Sakit") countSakit++;
+                });
+
+                return (
+                  <View
+                    style={{
+                      backgroundColor: "#121212",
+                      padding: 15,
+                      borderRadius: 8,
+                      borderWidth: 1,
+                      borderColor: "#2C2C2E",
+                      marginBottom: 20,
+                    }}
+                  >
+                    <Text
+                      style={{
+                        color: "#8E8E93",
+                        fontSize: 11,
+                        fontWeight: "bold",
+                        marginBottom: 10,
+                        textAlign: "center",
+                      }}
+                    >
+                      RINGKASAN ABSENSI
+                    </Text>
+                    <View
+                      style={{
+                        flexDirection: "row",
+                        justifyContent: "space-between",
+                      }}
+                    >
+                      <View style={{ alignItems: "center" }}>
+                        <Text
+                          style={{
+                            color: "#34C759",
+                            fontSize: 18,
+                            fontWeight: "bold",
+                          }}
+                        >
+                          {countHadir}
+                        </Text>
+                        <Text style={{ color: "#8E8E93", fontSize: 11 }}>
+                          Hadir
+                        </Text>
+                      </View>
+                      <View style={{ alignItems: "center" }}>
+                        <Text
+                          style={{
+                            color: "#FF9F0A",
+                            fontSize: 18,
+                            fontWeight: "bold",
+                          }}
+                        >
+                          {countIzin}
+                        </Text>
+                        <Text style={{ color: "#8E8E93", fontSize: 11 }}>
+                          Izin
+                        </Text>
+                      </View>
+                      <View style={{ alignItems: "center" }}>
+                        <Text
+                          style={{
+                            color: "#FF453A",
+                            fontSize: 18,
+                            fontWeight: "bold",
+                          }}
+                        >
+                          {countSakit}
+                        </Text>
+                        <Text style={{ color: "#8E8E93", fontSize: 11 }}>
+                          Sakit
+                        </Text>
+                      </View>
+                    </View>
+                  </View>
+                );
+              })()}
               <Text style={styles.bonusInputLabel}>GAJI POKOK STAFF (Rp)</Text>
               <TextInput
                 style={styles.bonusInput}
