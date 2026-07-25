@@ -28,6 +28,10 @@ import {
 } from "react-native-safe-area-context";
 import { db } from "../../database/db";
 
+// for printing uses
+import { printReceiptRaw } from "@/utils/bluetooth";
+import { generateSalarySlipString } from "@/utils/printer_slip";
+
 export default function ManageScreen() {
   const insets = useSafeAreaInsets();
 
@@ -68,6 +72,9 @@ export default function ManageScreen() {
   const [isStockEnabled, setIsStockEnabled] = useState(false);
   const [stockQuantity, setStockQuantity] = useState("");
   const [itemAddOns, setItemAddOns] = useState<any[]>([]);
+  const [newItemCategoryType, setNewItemCategoryType] = useState<
+    "Bonus" | "Penjualan"
+  >("Bonus");
 
   // staff menagement states
   const [showAddStaffModal, setShowAddStaffModal] = useState(false);
@@ -84,7 +91,8 @@ export default function ManageScreen() {
   const [payrollSortMode, setPayrollSortMode] = useState<"desc" | "asc">(
     "desc",
   );
-  const [payrollTransactions, setPayrollTransactions] = useState<any[]>([]);
+  const [bonusTransactions, setBonusTransactions] = useState<any[]>([]);
+  const [penjualanTransactions, setPenjualanTransactions] = useState<any[]>([]);
   const [selectedTx, setSelectedTx] = useState<any>(null);
   const [attendanceStats, setAttendanceStats] = useState({
     extraMins: 0,
@@ -372,6 +380,7 @@ export default function ManageScreen() {
     setStockQuantity(item.stock_quantity ? item.stock_quantity.toString() : "");
     setShowAddMenuModal(true);
     setNewItemImage(item.image_uri || null);
+    setNewItemCategoryType(item.category_type || "Bonus");
     // fetch from addons table
     const existingAddOns = db.getAllSync(
       "SELECT * FROM Add_Ons WHERE service_id = ?",
@@ -397,7 +406,7 @@ export default function ManageScreen() {
       // editing item
       if (editingItemId) {
         db.runSync(
-          "UPDATE Services_Products SET name = ?, category = ?, base_price = ?, description = ?, is_stock_enabled = ?, stock_quantity = ?, image_uri = ? WHERE id = ?",
+          "UPDATE Services_Products SET name = ?, category = ?, base_price = ?, description = ?, is_stock_enabled = ?, stock_quantity = ?, image_uri = ?, category_type = ? WHERE id = ?",
           [
             newItemName,
             newItemCategory,
@@ -406,6 +415,7 @@ export default function ManageScreen() {
             isStockEnabled ? 1 : 0,
             Number(stockQuantity) || 0,
             newItemImage,
+            newItemCategoryType,
             editingItemId,
           ],
         );
@@ -443,7 +453,7 @@ export default function ManageScreen() {
       } else {
         // INSERT BRAND NEW ITEM
         const result = db.runSync(
-          "INSERT INTO Services_Products (name, category, base_price, description, is_stock_enabled, stock_quantity, image_uri) VALUES (?, ?, ?, ?, ?, ?, ?)",
+          "INSERT INTO Services_Products (name, category, base_price, description, is_stock_enabled, stock_quantity, image_uri, category_type) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
           [
             newItemName,
             newItemCategory,
@@ -452,6 +462,7 @@ export default function ManageScreen() {
             isStockEnabled ? 1 : 0,
             Number(stockQuantity) || 0,
             newItemImage,
+            newItemCategoryType,
           ],
         );
 
@@ -669,10 +680,12 @@ export default function ManageScreen() {
 
       const staffTxs: any[] = [];
 
+      const bTxs: any[] = [];
+      const pTxs: any[] = [];
+      const cartItemTypeMap: { [key: string]: string } = {};
+
       rawTx.forEach((tx: any) => {
         const cart = JSON.parse(tx.cart_json || "[]");
-
-        // Filter the cart to find only items this specific staff member worked on
         const staffItems = cart.filter(
           (item: any) =>
             item.stylists && item.stylists.includes(selectedPayrollStaff.name),
@@ -680,7 +693,7 @@ export default function ManageScreen() {
 
         if (staffItems.length > 0) {
           const txDate = new Date(tx.timestamp);
-          staffTxs.push({
+          const baseTx = {
             id: tx.id,
             queue_number: tx.queue_number,
             trx_code: tx.trx_code,
@@ -695,7 +708,6 @@ export default function ManageScreen() {
               minute: "2-digit",
               hour12: false,
             }),
-            staffItems: staffItems,
             parsedCart: cart,
             amount: tx.total_amount,
             paymentMethod: tx.payment_method,
@@ -703,11 +715,32 @@ export default function ManageScreen() {
             changeAmount: tx.change_amount || 0,
             stylist:
               staffList.find((s) => s.id === tx.employee_id)?.name || "Unknown",
+          };
+
+          const bonusItems: any[] = [];
+          const penjualanItems: any[] = [];
+
+          staffItems.forEach((item: any, idx: number) => {
+            const cId = item.cartId || idx;
+            const key = `${tx.id}-${cId}`;
+            const type =
+              item.category_type === "Penjualan" ? "Penjualan" : "Bonus";
+            cartItemTypeMap[key] = type;
+
+            if (type === "Penjualan")
+              penjualanItems.push({ ...item, cartId: cId });
+            else bonusItems.push({ ...item, cartId: cId });
           });
+
+          if (bonusItems.length > 0)
+            bTxs.push({ ...baseTx, staffItems: bonusItems });
+          if (penjualanItems.length > 0)
+            pTxs.push({ ...baseTx, staffItems: penjualanItems });
         }
       });
 
-      setPayrollTransactions(staffTxs);
+      setBonusTransactions(bTxs);
+      setPenjualanTransactions(pTxs);
 
       // --- ATTENDANCE EARLY/LATE CALCULATION ---
       const formatDate = (d: Date) => {
@@ -777,11 +810,18 @@ export default function ManageScreen() {
 
       const loadedBonuses: any = {};
       let sumMenu = 0;
+      let sumPenj = 0;
+
       dbMenuBonuses.forEach((b: any) => {
         const itemKey = `${b.transaction_id}-${b.cart_id}`;
-        // Store method/value for UI rendering
         loadedBonuses[itemKey] = { method: b.method, value: b.value };
-        sumMenu += b.amount;
+
+        const type = cartItemTypeMap[itemKey] || "Bonus";
+        if (type === "Penjualan") {
+          sumPenj += b.amount;
+        } else {
+          sumMenu += b.amount;
+        }
       });
       setMenuBonuses(loadedBonuses);
       setMenuBonusesTotal(sumMenu);
@@ -820,6 +860,8 @@ export default function ManageScreen() {
       );
       setTotalUangMakan(dbUangMakan?.total || 0);
 
+      // fetch TOTAL PENJUALAN
+
       const dbPenjualan: any = db.getFirstSync(
         "SELECT SUM(amount) as total FROM Staff_Bonuses WHERE employee_id = ? AND transaction_id IS NULL AND method = 'Penjualan' AND timestamp >= ? AND timestamp <= ?",
         [
@@ -828,7 +870,7 @@ export default function ManageScreen() {
           endOfDay.toISOString(),
         ],
       );
-      setTotalPenjualan(dbPenjualan?.total || 0);
+      setTotalPenjualan(sumPenj + (dbPenjualan?.total || 0));
 
       // Fetch LINKED RECAP EXPENSES
       const dbLinkedExpenses: any = db.getFirstSync(
@@ -885,11 +927,19 @@ export default function ManageScreen() {
     loadPayrollData();
   }, [loadPayrollData, staffDashboardTab]);
 
-  const sortedPayrollTransactions = [...payrollTransactions].sort((a, b) => {
+  const sortedBonusTransactions = [...bonusTransactions].sort((a, b) => {
     return payrollSortMode === "desc"
       ? new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
       : new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime();
   });
+
+  const sortedPenjualanTransactions = [...penjualanTransactions].sort(
+    (a, b) => {
+      return payrollSortMode === "desc"
+        ? new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
+        : new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime();
+    },
+  );
 
   const sortedOtherTransactions = [...staffOtherTransactions].sort((a, b) => {
     return payrollSortMode === "desc"
@@ -927,6 +977,41 @@ export default function ManageScreen() {
       return () => cancelIdleCallback(handle);
     }, []),
   );
+
+  // PRINT SALARY SLIP HANDLER
+  const handlePrintSalarySlip = () => {
+    if (!selectedPayrollStaff) return;
+
+    Alert.alert(
+      "Konfirmasi Cetak",
+      `Apakah Anda yakin ingin mencetak slip gaji untuk ${selectedPayrollStaff.name}?`,
+      [
+        { text: "Batal", style: "cancel" },
+        {
+          text: "Cetak",
+          onPress: async () => {
+            const slipString = generateSalarySlipString(
+              selectedPayrollStaff.name,
+              baseSalary,
+              menuBonusesTotal,
+              totalUangMakan,
+              manualBonuses, // Ekstra / Telat total
+              totalPenjualan,
+              totalKasbon,
+              payrollStartDate,
+              payrollEndDate,
+            );
+            const printed = await printReceiptRaw(slipString);
+            if (!printed) {
+              alert(
+                "Gagal mencetak! Pastikan printer bluetooth aktif dan terhubung.",
+              );
+            }
+          },
+        },
+      ],
+    );
+  };
 
   // GRAND TOTAL CALCULATION
   const grandTotalGaji =
@@ -982,6 +1067,7 @@ export default function ManageScreen() {
                 setIsStockEnabled(false);
                 setStockQuantity("");
                 setNewItemImage(null);
+                setNewItemCategoryType("Bonus");
               }}
             >
               <Text style={styles.textWhiteBold}>+ Tambah Menu Baru</Text>
@@ -1870,7 +1956,7 @@ export default function ManageScreen() {
                                     fontWeight: "bold",
                                   }}
                                 >
-                                  {tab === "Bonus" ? "Riwayat Pekerjaan" : tab}
+                                  {tab === "Bonus" ? "Bonus" : tab}
                                 </Text>
                               </TouchableOpacity>
                             ))}
@@ -1897,7 +1983,7 @@ export default function ManageScreen() {
                       {payrollSubTab === "Bonus" && (
                         <FlatList
                           contentContainerStyle={styles.listContainer}
-                          data={sortedPayrollTransactions}
+                          data={sortedBonusTransactions}
                           keyExtractor={(tx) => `ptrx-${tx.id}`}
                           ListHeaderComponent={
                             <View style={{ marginBottom: 15 }}>
@@ -2123,10 +2209,8 @@ export default function ManageScreen() {
                       {payrollSubTab === "Penjualan" && (
                         <FlatList
                           contentContainerStyle={styles.listContainer}
-                          data={sortedOtherTransactions.filter(
-                            (tx) => tx.title === "Penjualan",
-                          )}
-                          keyExtractor={(tx) => tx.id}
+                          data={sortedPenjualanTransactions}
+                          keyExtractor={(tx) => `ptrx-${tx.id}`}
                           ListHeaderComponent={
                             <View style={{ marginBottom: 15 }}>
                               <Text
@@ -2137,7 +2221,7 @@ export default function ManageScreen() {
                                   marginBottom: 10,
                                 }}
                               >
-                                RIWAYAT PENJUALAN
+                                Penjualan (Produk)
                               </Text>
                               <ScrollView
                                 horizontal
@@ -2194,42 +2278,155 @@ export default function ManageScreen() {
                                 marginTop: 20,
                               }}
                             >
-                              Belum ada data penjualan.
+                              Belum ada penjualan produk di rentang tanggal ini.
                             </Text>
                           }
                           renderItem={({ item: tx }) => (
-                            <TouchableOpacity
-                              onPress={() => setSelectedTx(tx)}
-                              style={styles.listItem}
-                            >
-                              <View style={{ flex: 1, marginRight: 10 }}>
-                                <Text style={styles.itemTitle}>{tx.title}</Text>
-                                <Text style={styles.itemSubtitle}>
-                                  {tx.dateStr} • {tx.time}
-                                </Text>
-                                {tx.details ? (
-                                  <Text
-                                    style={{
-                                      color: "#8E8E93",
-                                      fontSize: 12,
-                                      marginTop: 4,
-                                    }}
-                                  >
-                                    {tx.details}
+                            <View style={styles.listItem}>
+                              <View style={{ flex: 1 }}>
+                                <TouchableOpacity
+                                  onPress={() => setSelectedTx(tx)}
+                                >
+                                  <Text style={styles.itemTitle}>
+                                    {tx.trx_code}
                                   </Text>
-                                ) : null}
+                                  <Text style={styles.itemSubtitle}>
+                                    {tx.dateStr} • Pukul {tx.time}
+                                  </Text>
+                                </TouchableOpacity>
+
+                                <View
+                                  style={{
+                                    marginTop: 10,
+                                    paddingLeft: 10,
+                                    borderLeftWidth: 2,
+                                    borderColor: "#2C2C2E",
+                                    gap: 5,
+                                  }}
+                                >
+                                  {tx.staffItems.map(
+                                    (cartItem: any, idx: number) => {
+                                      const addOnsTotal =
+                                        cartItem.selectedAddOns?.reduce(
+                                          (sum: number, addon: any) =>
+                                            sum + addon.price,
+                                          0,
+                                        ) || 0;
+                                      const base = cartItem.price + addOnsTotal;
+                                      const discount = Math.round(
+                                        base *
+                                          cartItem.quantity *
+                                          ((cartItem.discountPercent || 0) /
+                                            100),
+                                      );
+                                      const finalValue =
+                                        base * cartItem.quantity - discount;
+                                      const itemKey = `${tx.id}-${cartItem.cartId || idx}`;
+                                      const itemBonusConfig =
+                                        menuBonuses[itemKey];
+                                      let calculatedBonus = 0;
+                                      if (
+                                        itemBonusConfig &&
+                                        itemBonusConfig.value
+                                      ) {
+                                        const val =
+                                          Number(itemBonusConfig.value) || 0;
+                                        calculatedBonus =
+                                          itemBonusConfig.method === "percent"
+                                            ? Math.round(
+                                                finalValue * (val / 100),
+                                              )
+                                            : val;
+                                      }
+                                      return (
+                                        <View
+                                          key={idx}
+                                          style={styles.itemBonusRowContainer}
+                                        >
+                                          <View style={{ flex: 1 }}>
+                                            <Text
+                                              style={{
+                                                color: "#FFF",
+                                                fontSize: 13,
+                                              }}
+                                            >
+                                              {cartItem.quantity}x{" "}
+                                              {cartItem.name}
+                                            </Text>
+                                            <Text
+                                              style={{
+                                                color: "#34C759",
+                                                fontSize: 12,
+                                                fontWeight: "bold",
+                                                marginTop: 2,
+                                              }}
+                                            >
+                                              Nilai Menu: Rp{" "}
+                                              {finalValue.toLocaleString(
+                                                "id-ID",
+                                              )}
+                                            </Text>
+                                            {calculatedBonus > 0 && (
+                                              <Text
+                                                style={{
+                                                  color: "#FF9F0A",
+                                                  fontSize: 12,
+                                                  fontWeight: "bold",
+                                                  marginTop: 2,
+                                                }}
+                                              >
+                                                Komisi Penjualan: Rp{" "}
+                                                {calculatedBonus.toLocaleString(
+                                                  "id-ID",
+                                                )}
+                                                {itemBonusConfig.method ===
+                                                "percent"
+                                                  ? ` (${itemBonusConfig.value}%)`
+                                                  : ""}
+                                              </Text>
+                                            )}
+                                          </View>
+                                          <TouchableOpacity
+                                            style={[
+                                              styles.addBonusItemBtn,
+                                              calculatedBonus > 0 &&
+                                                styles.addBonusItemBtnActive,
+                                            ]}
+                                            onPress={() => {
+                                              setSelectedBonusItem({
+                                                key: itemKey,
+                                                name: cartItem.name,
+                                                quantity: cartItem.quantity,
+                                                finalValue: finalValue,
+                                                txId: tx.id,
+                                                cartId: (
+                                                  cartItem.cartId || idx
+                                                ).toString(),
+                                              });
+                                              setBonusMethod(
+                                                itemBonusConfig?.method ||
+                                                  "percent",
+                                              );
+                                              setBonusValueInput(
+                                                itemBonusConfig?.value || "",
+                                              );
+                                            }}
+                                          >
+                                            <Text
+                                              style={styles.addBonusItemBtnText}
+                                            >
+                                              {calculatedBonus > 0
+                                                ? "Edit Bonus"
+                                                : "+ Bonus"}
+                                            </Text>
+                                          </TouchableOpacity>
+                                        </View>
+                                      );
+                                    },
+                                  )}
+                                </View>
                               </View>
-                              <Text
-                                style={{
-                                  color: tx.amount < 0 ? "#FF453A" : "#34C759",
-                                  fontWeight: "bold",
-                                  fontSize: 14,
-                                }}
-                              >
-                                {tx.amount < 0 ? "-" : "+"} Rp{" "}
-                                {Math.abs(tx.amount).toLocaleString("id-ID")}
-                              </Text>
-                            </TouchableOpacity>
+                            </View>
                           )}
                         />
                       )}
@@ -2470,7 +2667,6 @@ export default function ManageScreen() {
                           contentContainerStyle={styles.listContainer}
                           data={sortedOtherTransactions.filter(
                             (tx) =>
-                              tx.title !== "Penjualan" &&
                               tx.title !== "Kasbon" &&
                               tx.title !== "Uang Makan",
                           )}
@@ -2485,7 +2681,7 @@ export default function ManageScreen() {
                                   marginBottom: 10,
                                 }}
                               >
-                                PENGELUARAN & LAINNYA
+                                LAINNYA
                               </Text>
                               <ScrollView
                                 horizontal
@@ -2765,6 +2961,29 @@ export default function ManageScreen() {
                             Rp {grandTotalGaji.toLocaleString("id-ID")}
                           </Text>
                         </TouchableOpacity>
+                        <TouchableOpacity
+                          style={{
+                            backgroundColor: "rgba(10, 132, 255, 0.15)",
+                            paddingVertical: 8,
+                            paddingHorizontal: 8,
+                            borderRadius: 8,
+                            alignSelf: "flex-end",
+                            marginTop: 15,
+                            borderWidth: 1,
+                            borderColor: "#0A84FF",
+                          }}
+                          onPress={handlePrintSalarySlip}
+                        >
+                          <Text
+                            style={{
+                              color: "#0A84FF",
+                              fontWeight: "bold",
+                              fontSize: 12,
+                            }}
+                          >
+                            🖨️ Cetak Slip
+                          </Text>
+                        </TouchableOpacity>
                       </View>
                     </View>
                   )}
@@ -2992,7 +3211,6 @@ export default function ManageScreen() {
               paddingBottom: insets.bottom || 20,
             }}
           >
-            {/* Added maxHeight: '90%' to keep it contained */}
             <View
               style={{
                 backgroundColor: "#1C1C1E",
@@ -3100,7 +3318,7 @@ export default function ManageScreen() {
                   onChangeText={setNewItemCategory}
                 />
 
-                {/* NEW Vertical Category Box */}
+                {/* Vertical Category Box */}
                 {categories.length > 0 && (
                   <View
                     style={{
@@ -3158,23 +3376,89 @@ export default function ManageScreen() {
                     </ScrollView>
                   </View>
                 )}
-                <TextInput
+                {/* CATEGORY TYPE UI */}
+                <Text
                   style={{
-                    backgroundColor: "#121212",
-                    color: "#FFF",
-                    padding: 15,
-                    borderRadius: 8,
-                    marginBottom: 15,
-                    borderWidth: 1,
-                    borderColor: "#2C2C2E",
+                    color: "#8E8E93",
+                    fontSize: 12,
+                    fontWeight: "bold",
+                    marginBottom: 10,
                   }}
-                  placeholder="Atau tambah kategori baru..."
-                  placeholderTextColor="#8E8E93"
-                  value={newItemCategory}
-                  onChangeText={setNewItemCategory}
-                />
+                >
+                  TIPE KATEGORI (UNTUK STAFF)
+                </Text>
+                <View
+                  style={{ flexDirection: "row", gap: 10, marginBottom: 20 }}
+                >
+                  <TouchableOpacity
+                    style={{
+                      flex: 1,
+                      padding: 12,
+                      borderRadius: 8,
+                      borderWidth: 2,
+                      alignItems: "center",
+                      borderColor:
+                        newItemCategoryType === "Bonus" ? "#0A84FF" : "#2C2C2E",
+                      backgroundColor:
+                        newItemCategoryType === "Bonus"
+                          ? "rgba(10,132,255,0.2)"
+                          : "#1C1C1E",
+                    }}
+                    onPress={() => setNewItemCategoryType("Bonus")}
+                  >
+                    <Text
+                      style={{
+                        color:
+                          newItemCategoryType === "Bonus" ? "#FFF" : "#8E8E93",
+                        fontWeight: "bold",
+                      }}
+                    >
+                      Bonus (Layanan)
+                    </Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={{
+                      flex: 1,
+                      padding: 12,
+                      borderRadius: 8,
+                      borderWidth: 2,
+                      alignItems: "center",
+                      borderColor:
+                        newItemCategoryType === "Penjualan"
+                          ? "#0A84FF"
+                          : "#2C2C2E",
+                      backgroundColor:
+                        newItemCategoryType === "Penjualan"
+                          ? "rgba(10,132,255,0.2)"
+                          : "#1C1C1E",
+                    }}
+                    onPress={() => setNewItemCategoryType("Penjualan")}
+                  >
+                    <Text
+                      style={{
+                        color:
+                          newItemCategoryType === "Penjualan"
+                            ? "#FFF"
+                            : "#8E8E93",
+                        fontWeight: "bold",
+                      }}
+                    >
+                      Penjualan (Produk)
+                    </Text>
+                  </TouchableOpacity>
+                </View>
 
                 {/* Basic Item Details */}
+                <Text
+                  style={{
+                    color: "#8E8E93",
+                    fontSize: 12,
+                    fontWeight: "bold",
+                    marginBottom: 10,
+                  }}
+                >
+                  HARGA
+                </Text>
                 <TextInput
                   style={{
                     backgroundColor: "#121212",
@@ -3191,6 +3475,16 @@ export default function ManageScreen() {
                   value={newItemPrice}
                   onChangeText={setNewItemPrice}
                 />
+                <Text
+                  style={{
+                    color: "#8E8E93",
+                    fontSize: 12,
+                    fontWeight: "bold",
+                    marginBottom: 10,
+                  }}
+                >
+                  DESKRIPSI
+                </Text>
                 <TextInput
                   style={{
                     backgroundColor: "#121212",
@@ -3841,6 +4135,49 @@ export default function ManageScreen() {
                   </Text>
                 </View>
               </View>
+
+              {(() => {
+                const netMins =
+                  attendanceStats.extraMins - attendanceStats.penaltyMins;
+                const isPositive = netMins >= 0;
+                const absMins = Math.abs(netMins);
+                return (
+                  <View
+                    style={{
+                      backgroundColor: "#121212",
+                      padding: 12,
+                      borderRadius: 8,
+                      borderWidth: 1,
+                      borderColor: isPositive
+                        ? "rgba(52, 199, 89, 0.3)"
+                        : "rgba(255, 69, 58, 0.3)",
+                      alignItems: "center",
+                      marginBottom: 20,
+                    }}
+                  >
+                    <Text
+                      style={{
+                        color: "#8E8E93",
+                        fontSize: 11,
+                        fontWeight: "bold",
+                        marginBottom: 4,
+                      }}
+                    >
+                      HASIL (EKSTRA - TELAT)
+                    </Text>
+                    <Text
+                      style={{
+                        color: isPositive ? "#34C759" : "#FF453A",
+                        fontSize: 16,
+                        fontWeight: "bold",
+                      }}
+                    >
+                      {isPositive ? "+ " : "- "} {Math.floor(absMins / 60)} Jam{" "}
+                      {absMins % 60} Min
+                    </Text>
+                  </View>
+                );
+              })()}
 
               <Text style={styles.bonusInputLabel}>
                 NOMINAL BONUS / POTONGAN (Rp)

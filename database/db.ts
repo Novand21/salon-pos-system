@@ -16,6 +16,7 @@ export const initDB = () => {
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 name TEXT NOT NULL,
                 category TEXT NOT NULL,
+                category_type TEXT DEFAULT 'Bonus',
                 base_price INTEGER NOT NULL,
                 description TEXT,
                 is_stock_enabled BOOLEAN DEFAULT 0,
@@ -287,13 +288,19 @@ export const initDB = () => {
       currentVersion = 8;
       console.log("Database migrated to version 8 successfully");
     }
+
+    // Version 8: Added new columns to Expenditures and Services_Products
     if (currentVersion === 8) {
       try {
         db.execSync(`
           ALTER TABLE Expenditures ADD COLUMN category TEXT DEFAULT 'Operasional';
+          ALTER TABLE Services_Products ADD COLUMN category_type TEXT DEFAULT 'Bonus';
+
         `);
       } catch (e) {
-        console.log("Expenditures category column already exists, skipping...");
+        console.log(
+          "Expenditures category and Services_Products column already exists, skipping...",
+        );
       }
       db.execSync("PRAGMA user_version = 9;");
       currentVersion = 9;

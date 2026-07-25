@@ -30,11 +30,23 @@ export const connectToPrinter = async (macAddress: string) => {
 
 export const printReceiptRaw = async (text: string) => {
   try {
-    // 1. Print the Image First
+    // Attempt to wake up the Bluetooth engine first.
+    // If Bluetooth is turned off, this will fail safely and trigger the catch block.
+    try {
+      await BLEPrinter.init();
+    } catch (initError) {
+      console.error(
+        "Bluetooth is off or printer engine failed to start: ",
+        initError,
+      );
+      return false; // Abort immediately so it doesn't crash!
+    }
+
+    // Print the Image First
     // This library's Java side will handle the chunking safely!
     await BLEPrinter.printImageBase64(LOGO_BASE64, { imageWidth: 200 });
 
-    // 2. Print the Receipt Text directly underneath it
+    // Print the Receipt Text directly underneath it
     await BLEPrinter.printText(text);
 
     return true;

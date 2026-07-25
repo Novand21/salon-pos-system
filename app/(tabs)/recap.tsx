@@ -1,5 +1,6 @@
 import React, { useCallback, useState } from "react";
 import {
+  Alert,
   FlatList,
   KeyboardAvoidingView,
   Modal,
@@ -56,12 +57,7 @@ export default function RecapScreen() {
   const [salaryEffect, setSalaryEffect] = useState<"none" | "add" | "subtract">(
     "none",
   );
-  const defaultExpenseCategories = [
-    "Operasional",
-    "Kasbon",
-    "Uang Makan",
-    "Penjualan",
-  ];
+  const defaultExpenseCategories = ["Operasional", "Kasbon", "Uang Makan"];
 
   // passwords
   const [showPasswordModal, setShowPasswordModal] = useState(false);
@@ -393,35 +389,46 @@ export default function RecapScreen() {
   };
 
   const handleReprint = async () => {
-    if (!selectedTx || selectedTx.type !== "sale") return;
+    Alert.alert(
+      "Konfirmasi Cetak Ulang",
+      "Apakah Anda yakin ingin mencetak ulang struk ini?",
+      [
+        { text: "Batal", style: "cancel" },
+        {
+          text: "Cetak",
+          onPress: async () => {
+            if (!selectedTx || selectedTx.type !== "sale") return;
 
-    if (!selectedTx.parsedCart || selectedTx.parsedCart.length === 0) {
-      alert("Transaksi lama dengan data yang telah dihapus.");
-      return;
-    }
+            if (!selectedTx.parsedCart || selectedTx.parsedCart.length === 0) {
+              alert("Transaksi lama dengan data yang telah dihapus.");
+              return;
+            }
 
-    try {
-      const cartItems = selectedTx.parsedCart;
+            try {
+              const cartItems = selectedTx.parsedCart;
 
-      const rawPrinterText = generateThermalReceiptString(
-        selectedTx.trx_code,
-        selectedTx.queue_number,
-        cartItems,
-        selectedTx.amount,
-        selectedTx.paymentMethod,
-        selectedTx.stylist,
-        selectedTx.amountTendered,
-        selectedTx.changeAmount,
-        selectedTx.timestamp,
-      );
+              const rawPrinterText = generateThermalReceiptString(
+                selectedTx.trx_code,
+                selectedTx.queue_number,
+                cartItems,
+                selectedTx.amount,
+                selectedTx.paymentMethod,
+                selectedTx.stylist,
+                selectedTx.amountTendered,
+                selectedTx.changeAmount,
+                selectedTx.timestamp,
+              );
 
-      const printed = await printReceiptRaw(rawPrinterText);
-      if (!printed) alert("Tidak ada printer aktif! ");
-    } catch (error) {
-      console.error(error);
-    }
+              const printed = await printReceiptRaw(rawPrinterText);
+              if (!printed) alert("Tidak ada printer aktif! ");
+            } catch (error) {
+              console.error(error);
+            }
+          },
+        },
+      ],
+    );
   };
-
   return (
     <SafeAreaView style={styles.container} edges={["top", "left", "right"]}>
       <View style={styles.header}>
@@ -601,7 +608,7 @@ export default function RecapScreen() {
               <Text style={styles.ledgerSubtitle}>
                 {tx.type === "expense"
                   ? `${tx.dateStr} • Pukul ${tx.time}`
-                  : `${tx.dateStr} • ${tx.time} ${tx.stylist ? `• Kasir: ${tx.stylist}` : ""}`}
+                  : `${tx.dateStr} • Kasir: ${tx.stylist}`}
               </Text>
             </View>
 
