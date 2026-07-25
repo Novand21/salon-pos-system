@@ -990,12 +990,21 @@ export default function ManageScreen() {
         {
           text: "Cetak",
           onPress: async () => {
+            const uangMakanDays = staffOtherTransactions.filter(
+              (tx) => tx.title === "Uang Makan",
+            ).length;
+
+            const netLemburMins =
+              attendanceStats.extraMins - attendanceStats.penaltyMins;
+
             const slipString = generateSalarySlipString(
               selectedPayrollStaff.name,
               baseSalary,
               menuBonusesTotal,
               totalUangMakan,
+              uangMakanDays,
               manualBonuses, // Ekstra / Telat total
+              netLemburMins,
               totalPenjualan,
               totalKasbon,
               payrollStartDate,

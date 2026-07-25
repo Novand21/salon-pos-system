@@ -84,7 +84,9 @@ export const generateSalarySlipString = (
   baseSalary: number,
   menuBonus: number,
   uangMakan: number,
+  uangMakanDays: number,
   ekstraTelat: number,
+  netLemburMins: number,
   penjualan: number,
   kasbon: number,
   dateStart?: Date,
@@ -130,23 +132,33 @@ export const generateSalarySlipString = (
   receipt += dashedDivider;
   receipt += leftRightText("GAJI:", `Rp${formatRp(baseSalary)}`);
   receipt += leftRightText("BONUS:", `Rp${formatRp(menuBonus)}`);
-  receipt += leftRightText("UM:", `Rp${formatRp(uangMakan)}`);
+  receipt += leftRightText(
+    `UM (${uangMakanDays} Hari):`,
+    `Rp${formatRp(uangMakan)}`,
+  );
 
   // Format Ekstra/Telat carefully in case it's a negative penalty
+  const absLemburMins = Math.abs(netLemburMins);
+  const lemburHours = Math.floor(absLemburMins / 60);
+  const lemburMinsStr = absLemburMins % 60;
+  const timeLabel = `${lemburHours}j ${lemburMinsStr}m`;
   if (ekstraTelat < 0) {
     receipt += leftRightText(
-      "Lembur/Telat:",
+      `Telat (-${timeLabel}):`,
       `-Rp${formatRp(Math.abs(ekstraTelat))}`,
     );
   } else {
-    receipt += leftRightText("Lembur:", `Rp${formatRp(ekstraTelat)}`);
+    receipt += leftRightText(
+      `Lembur (+${timeLabel}):`,
+      `Rp${formatRp(ekstraTelat)}`,
+    );
   }
 
   receipt += leftRightText("Penjualan:", `Rp${formatRp(penjualan)}`);
 
   receipt += dashedDivider;
 
-  // 4. Totals
+  // Totals
   receipt += leftRightText("TOTAL:", `Rp${formatRp(totalPendapatan)}`);
   receipt += leftRightText("KASBON:", `-Rp${formatRp(absKasbon)}`);
 
@@ -155,7 +167,7 @@ export const generateSalarySlipString = (
   receipt += solidDivider;
   receipt += "\n\n";
 
-  // // 5. Footer
+  // Footer
   // receipt += "\n" + centerText("Terima Kasih Atas");
   // receipt += centerText("Kerja Keras Anda!");
   // receipt += "\n\n\n";
