@@ -32,6 +32,8 @@ import { db } from "../../database/db";
 import { printReceiptRaw } from "@/utils/bluetooth";
 import { generateSalarySlipString } from "@/utils/printer_slip";
 
+import { OWNER_PASSWORD } from "@/utils/pass";
+
 export default function ManageScreen() {
   const insets = useSafeAreaInsets();
 
@@ -140,19 +142,29 @@ export default function ManageScreen() {
     [],
   );
 
-  // --- BOTTOM BAR ANIMATION STATES ---
+  // BOTTOM BAR ANIMATION STATES
   const [isPayrollExpanded, setIsPayrollExpanded] = useState(false);
+
+  const [showDashboardAuthModal, setShowDashboardAuthModal] = useState(false);
+  const [dashboardPassword, setDashboardPassword] = useState("");
+  const [isDashboardPasswordVisible, setIsDashboardPasswordVisible] =
+    useState(false);
 
   // We start the height at 0 (hidden)
   const payrollDetailsHeight = useRef(new Animated.Value(0)).current;
 
+  // authentication handler
+  const handleDashboardAuth = () => {
+    if (dashboardPassword === OWNER_PASSWORD) {
+      setShowDashboardAuthModal(false);
+      setShowStaffDashboard(true);
+    } else {
+      alert("Password salah!");
+    }
+  };
+
   const togglePayrollBar = (expand: boolean) => {
     setIsPayrollExpanded(expand);
-    Animated.timing(payrollDetailsHeight, {
-      toValue: expand ? 200 : 0,
-      duration: 300, // 300ms is a pretty smooth
-      useNativeDriver: false,
-    }).start();
   };
 
   const payrollPanResponder = React.useMemo(
@@ -1005,6 +1017,23 @@ export default function ManageScreen() {
             const netLemburMins =
               attendanceStats.extraMins - attendanceStats.penaltyMins;
 
+            const startOfDay = new Date(payrollStartDate);
+            startOfDay.setHours(0, 0, 0, 0);
+            const endOfDay = new Date(payrollEndDate);
+            endOfDay.setHours(23, 59, 59, 999);
+
+            const staffAtt = attendanceData.filter((att) => {
+              if (att.staffId !== selectedPayrollStaff.id) return false;
+              const attDate = new Date(att.date);
+              attDate.setHours(12, 0, 0, 0);
+              return attDate >= startOfDay && attDate <= endOfDay;
+            });
+
+            let izinDays = 0;
+            staffAtt.forEach((rec) => {
+              if (rec.status === "Izin") izinDays++;
+            });
+
             const slipString = generateSalarySlipString(
               selectedPayrollStaff.name,
               baseSalary,
@@ -1014,6 +1043,7 @@ export default function ManageScreen() {
               manualBonuses, // Ekstra / Telat total
               netLemburMins,
               totalPenjualan,
+              izinDays,
               totalKasbon,
               payrollStartDate,
               payrollEndDate,
@@ -1054,7 +1084,11 @@ export default function ManageScreen() {
           </TouchableOpacity>
           <TouchableOpacity
             style={styles.tabButton}
-            onPress={() => setShowStaffDashboard(true)}
+            onPress={() => {
+              setIsDashboardPasswordVisible(false);
+              setShowDashboardAuthModal(true);
+              setDashboardPassword("");
+            }}
           >
             <Text style={styles.textGray}>Staff Dashboard</Text>
           </TouchableOpacity>
@@ -1553,7 +1587,7 @@ export default function ManageScreen() {
                                     styles.colStatus,
                                   ]}
                                 >
-                                  {["Hadir", "Izin", "Sakit"].map((st) => (
+                                  {["Hadir", "Izin", "Off"].map((st) => (
                                     <TouchableOpacity
                                       key={st}
                                       onPress={() => {
@@ -2810,9 +2844,8 @@ export default function ManageScreen() {
                             paddingBottom: Math.max(insets.bottom || 20, 20),
                           },
                         ]}
-                        {...payrollPanResponder.panHandlers}
                       >
-                        {/* DRAG HANDLE*/}
+                        {/* DRAG HANDLE */}
                         <TouchableOpacity
                           activeOpacity={0.8}
                           onPress={() => togglePayrollBar(!isPayrollExpanded)}
@@ -2833,13 +2866,8 @@ export default function ManageScreen() {
                           />
                         </TouchableOpacity>
 
-                        {/* COLLAPSIBLE DETAILS */}
-                        <Animated.View
-                          style={{
-                            height: payrollDetailsHeight,
-                            overflow: "hidden",
-                          }}
-                        >
+                        {/* COLLAPSIBLE DETAILS*/}
+                        {isPayrollExpanded && (
                           <View
                             style={{
                               paddingBottom: 15,
@@ -2954,9 +2982,8 @@ export default function ManageScreen() {
                               </Text>
                             </View>
                           </View>
-                        </Animated.View>
+                        )}
 
-                        {/* ALWAYS VISIBLE TOTAL ROW */}
                         <TouchableOpacity
                           activeOpacity={0.8}
                           onPress={() => togglePayrollBar(!isPayrollExpanded)}
@@ -4521,12 +4548,12 @@ export default function ManageScreen() {
 
                 let countHadir = 0;
                 let countIzin = 0;
-                let countSakit = 0;
+                let countOff = 0;
 
                 staffAtt.forEach((rec) => {
                   if (rec.status === "Hadir") countHadir++;
                   if (rec.status === "Izin") countIzin++;
-                  if (rec.status === "Sakit") countSakit++;
+                  if (rec.status === "Off") countOff++;
                 });
 
                 return (
@@ -4593,10 +4620,10 @@ export default function ManageScreen() {
                             fontWeight: "bold",
                           }}
                         >
-                          {countSakit}
+                          {countOff}
                         </Text>
                         <Text style={{ color: "#8E8E93", fontSize: 11 }}>
-                          Sakit
+                          Off
                         </Text>
                       </View>
                     </View>
@@ -4650,6 +4677,94 @@ export default function ManageScreen() {
             </View>
           </SafeAreaView>
         </KeyboardAvoidingView>
+      </Modal>
+
+      {/* PASSWORD MODAL */}
+      <Modal
+        visible={showDashboardAuthModal}
+        animationType="fade"
+        transparent={true}
+        onRequestClose={() => setShowDashboardAuthModal(false)}
+      >
+        <SafeAreaView style={styles.payrollModalOverlay}>
+          <KeyboardAvoidingView
+            behavior={Platform.OS === "ios" ? "padding" : "height"}
+            style={{ flex: 1, justifyContent: "center" }}
+          >
+            <View style={styles.bonusModalContainer}>
+              <Text style={styles.bonusModalTitle}>Akses Owner</Text>
+              <Text
+                style={{
+                  color: "#8E8E93",
+                  fontSize: 14,
+                  marginBottom: 20,
+                  textAlign: "center",
+                }}
+              >
+                Masukkan password untuk mengakses Staff Dashboard.
+              </Text>
+
+              <View
+                style={{
+                  flexDirection: "row",
+                  alignItems: "center",
+                  backgroundColor: "#121212",
+                  borderRadius: 8,
+                  borderWidth: 1,
+                  borderColor: "#0A84FF",
+                  marginBottom: 25,
+                  paddingHorizontal: 15,
+                  height: 55,
+                }}
+              >
+                <TextInput
+                  style={{
+                    flex: 1,
+                    color: "#FFF",
+                    height: "100%",
+                    fontSize: 16,
+                  }}
+                  placeholder="Password..."
+                  placeholderTextColor="#8E8E93"
+                  secureTextEntry={!isDashboardPasswordVisible}
+                  value={dashboardPassword}
+                  onChangeText={setDashboardPassword}
+                  autoFocus={true}
+                />
+                <TouchableOpacity
+                  onPress={() =>
+                    setIsDashboardPasswordVisible(!isDashboardPasswordVisible)
+                  }
+                  style={{ padding: 10 }}
+                >
+                  <MaterialCommunityIcons
+                    name={isDashboardPasswordVisible ? "eye" : "eye-off"}
+                    size={20}
+                    color="#8E8E93"
+                  />
+                </TouchableOpacity>
+              </View>
+
+              <View style={{ flexDirection: "row", gap: 10 }}>
+                <TouchableOpacity
+                  style={[styles.closeBtnPill, { flex: 1, borderRadius: 8 }]}
+                  onPress={() => setShowDashboardAuthModal(false)}
+                >
+                  <Text style={styles.textWhiteBold}>Batal</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[
+                    styles.closeBtnPill,
+                    { flex: 1, borderRadius: 8, backgroundColor: "#0A84FF" },
+                  ]}
+                  onPress={handleDashboardAuth}
+                >
+                  <Text style={styles.textWhiteBold}>Akses</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </KeyboardAvoidingView>
+        </SafeAreaView>
       </Modal>
     </SafeAreaView>
   );

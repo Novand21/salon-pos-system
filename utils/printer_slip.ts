@@ -88,6 +88,7 @@ export const generateSalarySlipString = (
   ekstraTelat: number,
   netLemburMins: number,
   penjualan: number,
+  izinDays: number,
   kasbon: number,
   dateStart?: Date,
   dateEnd?: Date,
@@ -155,6 +156,10 @@ export const generateSalarySlipString = (
   }
 
   receipt += leftRightText("Penjualan:", `Rp${formatRp(penjualan)}`);
+
+  if (izinDays > 0) {
+    leftRightText("Izin:", `${izinDays} Hari`);
+  }
 
   receipt += dashedDivider;
 
