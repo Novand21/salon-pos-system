@@ -442,15 +442,11 @@ export default function RecapScreen() {
       );
 
       let opExp = 0,
-        kasbonExp = 0,
-        umExp = 0,
-        otherExp = 0;
+        staffExp = 0;
       expenses.forEach((e) => {
         const amt = Math.abs(e.amount);
         if (e.category === "Operasional") opExp += amt;
-        else if (e.category === "Kasbon") kasbonExp += amt;
-        else if (e.category === "Uang Makan") umExp += amt;
-        else otherExp += amt;
+        else staffExp += amt;
       });
 
       // daily ledger table
@@ -514,15 +510,12 @@ export default function RecapScreen() {
               <div class="section-title">2. RINCIAN PENDAPATAN</div>
               <div class="row"><span class="row-title">Pembayaran Tunai (Cash)</span><span class="row-value">Rp ${totalCash.toLocaleString("id-ID")}</span></div>
               <div class="row"><span class="row-title">Pembayaran Non-Tunai (QRIS/Transfer)</span><span class="row-value">Rp ${totalNonCash.toLocaleString("id-ID")}</span></div>
-              <div class="row"><span class="row-title">Total Transaksi Selesai</span><span class="row-value">${sales.length} Transaksi</span></div>
             </div>
 
             <div class="section">
               <div class="section-title">3. RINCIAN PENGELUARAN</div>
               <div class="row"><span class="row-title">Operasional Salon</span><span class="row-value">Rp ${opExp.toLocaleString("id-ID")}</span></div>
-              <div class="row"><span class="row-title">Uang Makan Staff</span><span class="row-value">Rp ${umExp.toLocaleString("id-ID")}</span></div>
-              <div class="row"><span class="row-title">Kasbon Staff</span><span class="row-value">Rp ${kasbonExp.toLocaleString("id-ID")}</span></div>
-              <div class="row"><span class="row-title">Lain-lain</span><span class="row-value">Rp ${otherExp.toLocaleString("id-ID")}</span></div>
+              <div class="row"><span class="row-title">Pengeluaran Staff</span><span class="row-value">Rp ${staffExp.toLocaleString("id-ID")}</span></div>
             </div>
 
             <div class="section">
@@ -605,9 +598,9 @@ export default function RecapScreen() {
 
         <View
           style={{
-            flexDirection: "row",
+            flexDirection: "column",
             gap: 10,
-            alignSelf: "flex-end",
+            alignItems: "flex-end",
             flexShrink: 0,
           }}
         >
