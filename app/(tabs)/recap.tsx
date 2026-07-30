@@ -24,6 +24,7 @@ import { printReceiptRaw } from "../../utils/bluetooth";
 import { generateThermalReceiptString } from "../../utils/printer";
 
 // pdf generating monthly reports for recap
+import * as FileSystem from "expo-file-system/legacy";
 import { printToFileAsync } from "expo-print";
 import * as Sharing from "expo-sharing";
 
@@ -545,7 +546,22 @@ export default function RecapScreen() {
         html: htmlTemplate,
         base64: false,
       });
-      await Sharing.shareAsync(uri, {
+
+      // Safely format the date (forces all spaces and weird characters into underscores)
+      const rawDate = startDate.toLocaleDateString("id-ID", {
+        month: "short",
+        year: "numeric",
+      });
+      const customFileName = `Laporan_Keuangan_Dffond.pdf`;
+
+      const newUri = `${FileSystem.documentDirectory}${customFileName}`;
+
+      await FileSystem.copyAsync({
+        from: uri,
+        to: newUri,
+      });
+
+      await Sharing.shareAsync(newUri, {
         UTI: ".pdf",
         mimeType: "application/pdf",
         dialogTitle: "Laporan Keuangan DFFOND",
