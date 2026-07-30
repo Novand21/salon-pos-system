@@ -2040,6 +2040,7 @@ export default function ManageScreen() {
                       {/* TAB RIWAYAT PEKERJAAN (BONUS) */}
                       {payrollSubTab === "Bonus" && (
                         <FlatList
+                          style={{ flex: 1 }}
                           contentContainerStyle={styles.listContainer}
                           data={sortedBonusTransactions}
                           keyExtractor={(tx) => `ptrx-${tx.id}`}
@@ -2185,6 +2186,18 @@ export default function ManageScreen() {
                                               {cartItem.quantity}x{" "}
                                               {cartItem.name}
                                             </Text>
+                                            {cartItem.customNote ? (
+                                              <Text
+                                                style={{
+                                                  color: "#8E8E93",
+                                                  fontSize: 11,
+                                                  fontStyle: "italic",
+                                                  marginTop: 2,
+                                                }}
+                                              >
+                                                Catatan: {cartItem.customNote}
+                                              </Text>
+                                            ) : null}
                                             <Text
                                               style={{
                                                 color: "#34C759",
@@ -2266,6 +2279,7 @@ export default function ManageScreen() {
                       {/* TAB PENJUALAN */}
                       {payrollSubTab === "Penjualan" && (
                         <FlatList
+                          style={{ flex: 1 }}
                           contentContainerStyle={styles.listContainer}
                           data={sortedPenjualanTransactions}
                           keyExtractor={(tx) => `ptrx-${tx.id}`}
@@ -2411,6 +2425,18 @@ export default function ManageScreen() {
                                               {cartItem.quantity}x{" "}
                                               {cartItem.name}
                                             </Text>
+                                            {cartItem.customNote ? (
+                                              <Text
+                                                style={{
+                                                  color: "#8E8E93",
+                                                  fontSize: 11,
+                                                  fontStyle: "italic",
+                                                  marginTop: 2,
+                                                }}
+                                              >
+                                                Catatan: {cartItem.customNote}
+                                              </Text>
+                                            ) : null}
                                             <Text
                                               style={{
                                                 color: "#34C759",
@@ -2492,6 +2518,7 @@ export default function ManageScreen() {
                       {/* --- TAB KASBON --- */}
                       {payrollSubTab === "Kasbon" && (
                         <FlatList
+                          style={{ flex: 1 }}
                           contentContainerStyle={styles.listContainer}
                           data={sortedOtherTransactions.filter(
                             (tx) => tx.title === "Kasbon",
@@ -2607,6 +2634,7 @@ export default function ManageScreen() {
                       {/* --- TAB UANG MAKAN --- */}
                       {payrollSubTab === "Uang Makan" && (
                         <FlatList
+                          style={{ flex: 1 }}
                           contentContainerStyle={styles.listContainer}
                           data={sortedOtherTransactions.filter(
                             (tx) => tx.title === "Uang Makan",
@@ -2722,6 +2750,7 @@ export default function ManageScreen() {
                       {/* TAB LAIN-LAIN */}
                       {payrollSubTab === "Lainnya" && (
                         <FlatList
+                          style={{ flex: 1 }}
                           contentContainerStyle={styles.listContainer}
                           data={sortedOtherTransactions.filter(
                             (tx) =>
@@ -4023,6 +4052,27 @@ export default function ManageScreen() {
                               </Text>
                             </View>
                           )}
+
+                          {cartItem.customNote ? (
+                            <View
+                              style={{
+                                marginTop: 4,
+                                paddingTop: 4,
+                                borderTopWidth: 1,
+                                borderTopColor: "#F2F2F7",
+                                borderStyle: "dashed",
+                              }}
+                            >
+                              <Text
+                                style={[
+                                  styles.receiptLine,
+                                  { fontStyle: "italic", color: "#555" },
+                                ]}
+                              >
+                                Catatan (Owner): {cartItem.customNote}
+                              </Text>
+                            </View>
+                          ) : null}
 
                           <View
                             style={{

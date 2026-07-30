@@ -23,6 +23,10 @@ import {
 import { printReceiptRaw } from "../../utils/bluetooth";
 import { generateThermalReceiptString } from "../../utils/printer";
 
+// pdf generating monthly reports for recap
+import { printToFileAsync } from "expo-print";
+import * as Sharing from "expo-sharing";
+
 // pass
 import { OWNER_PASSWORD } from "@/utils/pass";
 
@@ -64,9 +68,7 @@ export default function RecapScreen() {
   const [deletePassword, setDeletePassword] = useState("");
   const [isPasswordVisible, setIsPasswordVisible] = useState(false);
 
-  // ==========================================
   // DATE RANGE NAVIGATION FUNCTIONS
-  // ==========================================
   const handleDateChange = (event: any, date?: Date) => {
     if (Platform.OS === "android") {
       setActivePicker(null);
@@ -429,6 +431,138 @@ export default function RecapScreen() {
       ],
     );
   };
+
+  // pdf report generator
+
+  const handleExportPDF = async () => {
+    try {
+      const sales = ledgerData.filter((d) => d.type === "sale");
+      const expenses = ledgerData.filter(
+        (d) => d.type === "expense" && !d.isIgnored,
+      );
+
+      let opExp = 0,
+        kasbonExp = 0,
+        umExp = 0,
+        otherExp = 0;
+      expenses.forEach((e) => {
+        const amt = Math.abs(e.amount);
+        if (e.category === "Operasional") opExp += amt;
+        else if (e.category === "Kasbon") kasbonExp += amt;
+        else if (e.category === "Uang Makan") umExp += amt;
+        else otherExp += amt;
+      });
+
+      // daily ledger table
+      const dailyMap: { [key: string]: { in: number; out: number } } = {};
+      ledgerData.forEach((d) => {
+        if (d.isIgnored) return;
+        const dateStr = d.dateStr;
+        if (!dailyMap[dateStr]) dailyMap[dateStr] = { in: 0, out: 0 };
+        if (d.type === "sale") dailyMap[dateStr].in += d.amount;
+        if (d.type === "expense") dailyMap[dateStr].out += Math.abs(d.amount);
+      });
+
+      const dailyRows = Object.keys(dailyMap)
+        .map((date) => {
+          const row = dailyMap[date];
+          const laba = row.in - row.out;
+          return `
+            <tr>
+              <td>${date}</td>
+              <td style="color: green;">Rp ${row.in.toLocaleString("id-ID")}</td>
+              <td style="color: red;">Rp ${row.out.toLocaleString("id-ID")}</td>
+              <td style="font-weight: bold;">Rp ${laba.toLocaleString("id-ID")}</td>
+            </tr>
+          `;
+        })
+        .join("");
+
+      // Inject Data into HTML Template
+      const htmlTemplate = `
+        <html>
+          <head>
+            <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0, user-scalable=no" />
+            <style>
+              body { font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; padding: 40px; color: #333; }
+              h1 { text-align: center; color: #111; font-size: 28px; margin-bottom: 5px; letter-spacing: 2px;}
+              .subtitle { text-align: center; color: #666; font-size: 14px; margin-bottom: 40px; }
+              .section { margin-bottom: 35px; }
+              .section-title { font-size: 16px; font-weight: bold; border-bottom: 2px solid #0A84FF; padding-bottom: 8px; margin-bottom: 15px; color: #111; }
+              .row { display: flex; justify-content: space-between; margin-bottom: 10px; font-size: 15px; }
+              .row-title { color: #555; }
+              .row-value { font-weight: bold; }
+              .net-profit { font-size: 20px; color: #0A84FF; border-top: 1px dashed #ccc; padding-top: 15px; margin-top: 10px; }
+              table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 13px; }
+              th, td { border: 1px solid #ddd; padding: 12px 8px; text-align: left; }
+              th { background-color: #f2f2f7; color: #333; }
+              .footer { text-align: center; margin-top: 50px; font-size: 11px; color: #999; }
+            </style>
+          </head>
+          <body>
+            <h1>D'FFOND SALON</h1>
+            <div class="subtitle">Laporan Keuangan (${formatDateLabel(startDate)} - ${formatDateLabel(endDate)})</div>
+
+            <div class="section">
+              <div class="section-title">1. RINGKASAN</div>
+              <div class="row"><span class="row-title">Total Pendapatan (Gross)</span><span class="row-value" style="color: green;">Rp ${totalEarnings.toLocaleString("id-ID")}</span></div>
+              <div class="row"><span class="row-title">Total Pengeluaran</span><span class="row-value" style="color: red;">- Rp ${totalExpenses.toLocaleString("id-ID")}</span></div>
+              <div class="row net-profit"><span class="row-title" style="color: #111;">Laba Bersih (Net Profit)</span><span class="row-value">Rp ${netEarning.toLocaleString("id-ID")}</span></div>
+            </div>
+
+            <div class="section">
+              <div class="section-title">2. RINCIAN PENDAPATAN</div>
+              <div class="row"><span class="row-title">Pembayaran Tunai (Cash)</span><span class="row-value">Rp ${totalCash.toLocaleString("id-ID")}</span></div>
+              <div class="row"><span class="row-title">Pembayaran Non-Tunai (QRIS/Transfer)</span><span class="row-value">Rp ${totalNonCash.toLocaleString("id-ID")}</span></div>
+              <div class="row"><span class="row-title">Total Transaksi Selesai</span><span class="row-value">${sales.length} Transaksi</span></div>
+            </div>
+
+            <div class="section">
+              <div class="section-title">3. RINCIAN PENGELUARAN</div>
+              <div class="row"><span class="row-title">Operasional Salon</span><span class="row-value">Rp ${opExp.toLocaleString("id-ID")}</span></div>
+              <div class="row"><span class="row-title">Uang Makan Staff</span><span class="row-value">Rp ${umExp.toLocaleString("id-ID")}</span></div>
+              <div class="row"><span class="row-title">Kasbon Staff</span><span class="row-value">Rp ${kasbonExp.toLocaleString("id-ID")}</span></div>
+              <div class="row"><span class="row-title">Lain-lain</span><span class="row-value">Rp ${otherExp.toLocaleString("id-ID")}</span></div>
+            </div>
+
+            <div class="section">
+              <div class="section-title">4. RIWAYAT TRANSAKSI HARIAN</div>
+              <table>
+                <thead>
+                  <tr>
+                    <th>Tanggal</th>
+                    <th>Pemasukan</th>
+                    <th>Pengeluaran</th>
+                    <th>Laba Bersih</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${dailyRows || `<tr><td colspan="4" style="text-align: center;">Tidak ada transaksi</td></tr>`}
+                </tbody>
+              </table>
+            </div>
+
+            <div class="footer">
+              Dicetak pada: ${new Date().toLocaleString("id-ID")}</br>
+            </div>
+          </body>
+        </html>
+      `;
+      const { uri } = await printToFileAsync({
+        html: htmlTemplate,
+        base64: false,
+      });
+      await Sharing.shareAsync(uri, {
+        UTI: ".pdf",
+        mimeType: "application/pdf",
+        dialogTitle: "Laporan Keuangan DFFOND",
+      });
+    } catch (err) {
+      console.error("PDF Export Error:", err);
+      alert("Gagal membuat PDF.");
+    }
+  };
+
   return (
     <SafeAreaView style={styles.container} edges={["top", "left", "right"]}>
       <View style={styles.header}>
@@ -469,15 +603,45 @@ export default function RecapScreen() {
           </View>
         </View>
 
-        <TouchableOpacity
-          style={styles.addExpenseBtn}
-          onPress={() => {
-            setShowExpenseModal(true);
-            setExpenseDate(new Date());
+        <View
+          style={{
+            flexDirection: "row",
+            gap: 10,
+            alignSelf: "flex-end",
+            flexShrink: 0,
           }}
         >
-          <Text style={styles.textWhite}>Kelola</Text>
-        </TouchableOpacity>
+          <TouchableOpacity
+            style={[
+              styles.addExpenseBtn,
+              {
+                backgroundColor: "rgba(10,132,255,0.15)",
+                borderColor: "#0A84FF",
+                borderWidth: 1,
+              },
+            ]}
+            onPress={handleExportPDF}
+          >
+            <Text
+              style={[
+                styles.textWhite,
+                { color: "#0A84FF", fontWeight: "bold" },
+              ]}
+            >
+              📄 Export
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.addExpenseBtn}
+            onPress={() => {
+              setShowExpenseModal(true);
+              setExpenseDate(new Date());
+            }}
+          >
+            <Text style={styles.textWhite}>Kelola</Text>
+          </TouchableOpacity>
+        </View>
       </View>
 
       {/* NATIVE CALENDAR MODAL */}

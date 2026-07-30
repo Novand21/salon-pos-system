@@ -158,7 +158,7 @@ export const generateSalarySlipString = (
   receipt += leftRightText("Penjualan:", `Rp${formatRp(penjualan)}`);
 
   if (izinDays > 0) {
-    leftRightText("Izin:", `${izinDays} Hari`);
+    receipt += leftRightText("Izin:", `${izinDays} Hari`);
   }
 
   receipt += dashedDivider;
