@@ -499,28 +499,8 @@ export default function RecapScreen() {
           <body>
             <h1>D'FFOND SALON</h1>
             <div class="subtitle">Laporan Keuangan (${formatDateLabel(startDate)} - ${formatDateLabel(endDate)})</div>
-
             <div class="section">
-              <div class="section-title">1. RINGKASAN</div>
-              <div class="row"><span class="row-title">Total Pendapatan (Gross)</span><span class="row-value" style="color: green;">Rp ${totalEarnings.toLocaleString("id-ID")}</span></div>
-              <div class="row"><span class="row-title">Total Pengeluaran</span><span class="row-value" style="color: red;">- Rp ${totalExpenses.toLocaleString("id-ID")}</span></div>
-              <div class="row net-profit"><span class="row-title" style="color: #111;">Laba Bersih (Net Profit)</span><span class="row-value">Rp ${netEarning.toLocaleString("id-ID")}</span></div>
-            </div>
-
-            <div class="section">
-              <div class="section-title">2. RINCIAN PENDAPATAN</div>
-              <div class="row"><span class="row-title">Pembayaran Tunai (Cash)</span><span class="row-value">Rp ${totalCash.toLocaleString("id-ID")}</span></div>
-              <div class="row"><span class="row-title">Pembayaran Non-Tunai (QRIS/Transfer)</span><span class="row-value">Rp ${totalNonCash.toLocaleString("id-ID")}</span></div>
-            </div>
-
-            <div class="section">
-              <div class="section-title">3. RINCIAN PENGELUARAN</div>
-              <div class="row"><span class="row-title">Operasional Salon</span><span class="row-value">Rp ${opExp.toLocaleString("id-ID")}</span></div>
-              <div class="row"><span class="row-title">Pengeluaran Staff</span><span class="row-value">Rp ${staffExp.toLocaleString("id-ID")}</span></div>
-            </div>
-
-            <div class="section">
-              <div class="section-title">4. RIWAYAT TRANSAKSI HARIAN</div>
+              <div class="section-title">1. RIWAYAT TRANSAKSI HARIAN</div>
               <table>
                 <thead>
                   <tr>
@@ -536,8 +516,23 @@ export default function RecapScreen() {
               </table>
             </div>
 
-            <div class="footer">
-              Dicetak pada: ${new Date().toLocaleString("id-ID")}</br>
+            
+            <div class="section">
+              <div class="section-title">2. RINCIAN PENDAPATAN</div>
+              <div class="row"><span class="row-title">Pembayaran Tunai (Cash)</span><span class="row-value">Rp ${totalCash.toLocaleString("id-ID")}</span></div>
+              <div class="row"><span class="row-title">Pembayaran Non-Tunai (QRIS/Transfer)</span><span class="row-value">Rp ${totalNonCash.toLocaleString("id-ID")}</span></div>
+            </div>
+            
+            <div class="section">
+              <div class="section-title">3. RINCIAN PENGELUARAN</div>
+              <div class="row"><span class="row-title">Operasional Salon</span><span class="row-value">Rp ${opExp.toLocaleString("id-ID")}</span></div>
+              <div class="row"><span class="row-title">Pengeluaran Staff</span><span class="row-value">Rp ${staffExp.toLocaleString("id-ID")}</span></div>
+            </div>
+            <div class="section">
+              <div class="section-title">4. RINGKASAN</div>
+              <div class="row"><span class="row-title">Total Pendapatan (Gross)</span><span class="row-value" style="color: green;">Rp ${totalEarnings.toLocaleString("id-ID")}</span></div>
+              <div class="row"><span class="row-title">Total Pengeluaran</span><span class="row-value" style="color: red;">- Rp ${totalExpenses.toLocaleString("id-ID")}</span></div>
+              <div class="row net-profit"><span class="row-title" style="color: #111;">Laba Bersih (Net Profit)</span><span class="row-value">Rp ${netEarning.toLocaleString("id-ID")}</span></div>
             </div>
           </body>
         </html>
@@ -547,14 +542,35 @@ export default function RecapScreen() {
         base64: false,
       });
 
-      // Safely format the date (forces all spaces and weird characters into underscores)
-      const rawDate = startDate.toLocaleDateString("id-ID", {
-        month: "short",
-        year: "numeric",
-      });
-      const customFileName = `Laporan_Keuangan_Dffond.pdf`;
+      const startString = startDate
+        .toLocaleDateString("id-ID", {
+          month: "short",
+          year: "numeric",
+        })
+        .replace(/[^a-zA-Z0-9]/g, "_");
+
+      const endString = endDate
+        .toLocaleDateString("id-ID", {
+          month: "short",
+          year: "numeric",
+        })
+        .replace(/[^a-zA-Z0-9]/g, "_");
+
+      const dateRangeStr =
+        startString === endString
+          ? startString
+          : `${startString}_to_${endString}`;
+
+      // Add Date.now() to guarantee a 100% unique file name every single time
+      const customFileName = `Laporan_Keuangan_${dateRangeStr}_${Date.now()}.pdf`;
 
       const newUri = `${FileSystem.documentDirectory}${customFileName}`;
+
+      // Delete any existing file with this exact name just to be safe
+      const fileInfo = await FileSystem.getInfoAsync(newUri);
+      if (fileInfo.exists) {
+        await FileSystem.deleteAsync(newUri);
+      }
 
       await FileSystem.copyAsync({
         from: uri,
