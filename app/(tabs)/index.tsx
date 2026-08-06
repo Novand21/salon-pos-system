@@ -1,6 +1,7 @@
 import { router, useFocusEffect, useLocalSearchParams } from "expo-router";
 import React, { useCallback, useState } from "react";
 import {
+  FlatList,
   Image,
   KeyboardAvoidingView,
   Modal,
@@ -10,6 +11,7 @@ import {
   Text,
   TextInput,
   TouchableOpacity,
+  useWindowDimensions,
   View,
 } from "react-native";
 
@@ -28,6 +30,10 @@ import { useCart } from "../../context/CartContext";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 
 export default function RegisterScreen() {
+  const { width } = useWindowDimensions();
+  const isTablet = width >= 768;
+  const numCols = isTablet ? Math.floor(width / 260) : 2;
+
   const {
     cart,
     addToCart,
@@ -823,10 +829,15 @@ export default function RegisterScreen() {
       </View>
 
       {/* Item Grid */}
-      <ScrollView contentContainerStyle={styles.grid}>
-        {displayedItems.map((item) => (
+      <FlatList
+        key={numCols}
+        data={displayedItems}
+        keyExtractor={(item) => item.id.toString()}
+        numColumns={numCols}
+        contentContainerStyle={{ padding: 10, paddingBottom: 100 }}
+        columnWrapperStyle={{ gap: 12 }}
+        renderItem={({ item }) => (
           <TouchableOpacity
-            key={item.id}
             onPress={() => {
               setSelectedItem(item);
               setSelectedAddOns([]);
@@ -840,20 +851,40 @@ export default function RegisterScreen() {
               );
               setCustomerNote("");
             }}
-            style={styles.itemCard}
+            // Dynamic padding: 10px on phones, 16px on tablets
+            style={[styles.itemCard, { padding: isTablet ? 16 : 10 }]}
           >
             {item.image_uri ? (
               <Image
                 source={{ uri: item.image_uri }}
-                style={styles.itemImagePlaceholder}
+                // Locks the height to perfectly match the dynamic width (1:1 ratio)
+                style={[
+                  styles.itemImagePlaceholder,
+                  { aspectRatio: 1, height: undefined },
+                ]}
               />
             ) : (
-              <View style={styles.itemImagePlaceholder} />
+              <View
+                style={[
+                  styles.itemImagePlaceholder,
+                  { aspectRatio: 1, height: undefined },
+                ]}
+              />
             )}
-            <Text style={styles.itemName}>{item.name}</Text>
-            <Text style={styles.itemPrice}>
+
+            {/* Dynamic fonts to match the card size */}
+            <Text style={[styles.itemName, { fontSize: isTablet ? 18 : 14 }]}>
+              {item.name}
+            </Text>
+            <Text
+              style={[
+                styles.itemPrice,
+                { fontSize: isTablet ? 16 : 13, marginTop: isTablet ? 8 : 4 },
+              ]}
+            >
               Rp {item.price.toLocaleString("id-ID")}
             </Text>
+
             {!!item.is_stock_enabled && (
               <Text
                 style={{
@@ -870,8 +901,8 @@ export default function RegisterScreen() {
               <Text style={styles.addButtonText}>+</Text>
             </View>
           </TouchableOpacity>
-        ))}
-      </ScrollView>
+        )}
+      />
 
       {/* Cart Summary Bar */}
       <View style={styles.cartBar}>
@@ -2049,24 +2080,19 @@ const styles = StyleSheet.create({
     color: "#8E8E93",
   },
 
-  grid: {
-    padding: 10,
-    flexDirection: "row",
-    flexWrap: "wrap",
-    justifyContent: "space-between",
-  },
   itemCard: {
-    width: "48%",
+    flex: 1,
     backgroundColor: "#1C1C1E",
     borderRadius: 12,
     padding: 12,
-    marginBottom: 15,
+    marginBottom: 12,
   },
   itemImagePlaceholder: {
-    height: 80,
+    width: "100%",
     backgroundColor: "#2C2C2E",
     borderRadius: 8,
     marginBottom: 10,
+    resizeMode: "cover",
   },
   itemName: {
     color: "#FFF",
