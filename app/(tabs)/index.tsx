@@ -45,7 +45,7 @@ export default function RegisterScreen() {
   const [staffList, setStaffList] = useState<any[]>([]);
 
   // States for Menu and Side Panel
-  const [activeCategory, setActiveCategory] = useState("Semua");
+  const [activeCategory, setActiveCategory] = useState("SEMUA");
   const [selectedItem, setSelectedItem] = useState<any>(null);
   const [selectedAddOns, setSelectedAddOns] = useState<any[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
@@ -133,13 +133,15 @@ export default function RegisterScreen() {
             }));
             setMenuItems(formattedMenu);
 
-            const uniqueCategories = Array.from(
-              new Set(services.map((s: any) => s.category)),
-            ) as string[];
-            setCategories(["Semua", ...uniqueCategories]);
+            const uniqueCategories = (
+              Array.from(
+                new Set(services.map((s: any) => s.category)),
+              ) as string[]
+            ).sort((a, b) => a.localeCompare(b));
+            setCategories(["SEMUA", ...uniqueCategories]);
 
             if (!activeCategory) {
-              setActiveCategory("Semua");
+              setActiveCategory("SEMUA");
             }
 
             setStaffList(employees);
@@ -164,7 +166,7 @@ export default function RegisterScreen() {
       return item.name.toLowerCase().includes(searchQuery.toLowerCase());
     }
     // If the search bar is empty, just show the currently selected category
-    if (activeCategory === "Semua") {
+    if (activeCategory === "SEMUA") {
       return true;
     }
     return item.category === activeCategory;

@@ -357,16 +357,17 @@ export default function ManageScreen() {
 
   // filter states
   const [categories, setCategories] = useState<any[]>([]);
-  const [activeCategory, setActiveCategory] = useState("Semua");
+  const [activeCategory, setActiveCategory] = useState("SEMUA");
   // filter states for searching
   const [searchQuery, setSearchQuery] = useState("");
   // logic for selected category
+  const [showCategoryModal, setShowCategoryModal] = useState(false);
   const displayedMenuItems = menuItems.filter((item) => {
     if (searchQuery.length > 0) {
       return item.name.toLowerCase().includes(searchQuery.toLowerCase());
     }
 
-    if (activeCategory === "Semua") {
+    if (activeCategory === "SEMUA") {
       return true;
     }
     return item.category === activeCategory;
@@ -525,10 +526,12 @@ export default function ManageScreen() {
       setMenuItems(refreshedItems);
 
       // Extract categories and auto-select the one we just added!
-      const uniqueCats = Array.from(
-        new Set(refreshedItems.map((s: any) => s.category)),
-      ) as string[];
-      setCategories(["Semua", ...uniqueCats]);
+      const uniqueCats = (
+        Array.from(
+          new Set(refreshedItems.map((s: any) => s.category)),
+        ) as string[]
+      ).sort((a, b) => a.localeCompare(b));
+      setCategories(["SEMUA", ...uniqueCats]);
       setActiveCategory(newItemCategory); // <-- Force UI to snap to this category instantly!
 
       // Clear inputs and close
@@ -564,14 +567,16 @@ export default function ManageScreen() {
               );
               setMenuItems(refreshedItems);
 
-              const uniqueCats = Array.from(
-                new Set(refreshedItems.map((s: any) => s.category)),
-              ) as string[];
-              setCategories(["Semua", ...uniqueCats]);
+              const uniqueCats = (
+                Array.from(
+                  new Set(refreshedItems.map((s: any) => s.category)),
+                ) as string[]
+              ).sort((a, b) => a.localeCompare(b));
+              setCategories(["SEMUA", ...uniqueCats]);
 
               // If the current category was wiped out completely, fallback to the first available category
               if (!uniqueCats.includes(activeCategory)) {
-                setActiveCategory("Semua");
+                setActiveCategory("SEMUA");
               }
             } catch (e) {
               console.error("Error deleting menu item:", e);
@@ -978,10 +983,12 @@ export default function ManageScreen() {
             );
             setMenuItems(services);
 
-            const uniqueCategories = Array.from(
-              new Set(services.map((s: any) => s.category)),
-            ) as string[];
-            setCategories(["Semua", ...uniqueCategories]);
+            const uniqueCategories = (
+              Array.from(
+                new Set(services.map((s: any) => s.category)),
+              ) as string[]
+            ).sort((a, b) => a.localeCompare(b));
+            setCategories(["SEMUA", ...uniqueCategories]);
 
             const employees = db.getAllSync(
               "SELECT * FROM Employees ORDER BY name",
@@ -1124,26 +1131,50 @@ export default function ManageScreen() {
               <Text style={styles.textWhiteBold}>+ Tambah Menu Baru</Text>
             </TouchableOpacity>
 
-            {/* SEARCH BAR UI */}
-            <View style={styles.searchContainer}>
-              <TextInput
-                style={styles.searchInput}
-                placeholder="Cari menu atau produk..."
-                placeholderTextColor="#8E8E93"
-                value={searchQuery}
-                onChangeText={setSearchQuery}
-                clearButtonMode="while-editing"
-              />
-              {searchQuery.length > 0 && (
-                <TouchableOpacity
-                  onPress={() => setSearchQuery("")}
-                  style={styles.clearSearchBtn}
-                >
-                  <Text style={{ color: "#0A84FF", fontWeight: "bold" }}>
-                    Hapus
-                  </Text>
-                </TouchableOpacity>
-              )}
+            {/* SEARCH BAR & CATEGORY MENU ICON */}
+            <View
+              style={{
+                flexDirection: "row",
+                alignItems: "center",
+                marginBottom: 20,
+              }}
+            >
+              <TouchableOpacity
+                onPress={() => setShowCategoryModal(true)}
+                style={{
+                  marginRight: 15,
+                  backgroundColor: "#1C1C1E",
+                  padding: 10,
+                  borderRadius: 10,
+                  borderWidth: 1,
+                  borderColor: "#2C2C2E",
+                }}
+              >
+                <MaterialCommunityIcons name="menu" size={28} color="#FFF" />
+              </TouchableOpacity>
+
+              <View
+                style={[styles.searchContainer, { marginBottom: 0, flex: 1 }]}
+              >
+                <TextInput
+                  style={styles.searchInput}
+                  placeholder="Cari menu atau produk..."
+                  placeholderTextColor="#8E8E93"
+                  value={searchQuery}
+                  onChangeText={setSearchQuery}
+                  clearButtonMode="while-editing"
+                />
+                {searchQuery.length > 0 && (
+                  <TouchableOpacity
+                    onPress={() => setSearchQuery("")}
+                    style={styles.clearSearchBtn}
+                  >
+                    <Text style={{ color: "#0A84FF", fontWeight: "bold" }}>
+                      Hapus
+                    </Text>
+                  </TouchableOpacity>
+                )}
+              </View>
             </View>
 
             {/* CATEGORY SCROLL VIEW */}
@@ -4816,6 +4847,71 @@ export default function ManageScreen() {
           </KeyboardAvoidingView>
         </SafeAreaView>
       </Modal>
+      {/* --- CATEGORY MODAL --- */}
+      <Modal
+        visible={showCategoryModal}
+        animationType="fade"
+        transparent={true}
+        onRequestClose={() => setShowCategoryModal(false)}
+      >
+        <TouchableOpacity
+          style={styles.modalOverlay}
+          activeOpacity={1}
+          onPress={() => setShowCategoryModal(false)}
+        >
+          <View
+            style={{
+              backgroundColor: "#1C1C1E",
+              width: 250,
+              maxHeight: "70%",
+              borderRadius: 12,
+              padding: 20,
+              alignSelf: "flex-start",
+              marginTop: (insets.top || 20) + 140, // Adjusted to position near the search bar
+              marginLeft: 20,
+              borderWidth: 1,
+              borderColor: "#2C2C2E",
+            }}
+          >
+            <Text
+              style={{
+                color: "#8E8E93",
+                fontWeight: "bold",
+                marginBottom: 15,
+                fontSize: 12,
+              }}
+            >
+              KATEGORI MENU
+            </Text>
+            <ScrollView showsVerticalScrollIndicator={false}>
+              {categories.map((cat) => (
+                <TouchableOpacity
+                  key={cat}
+                  onPress={() => {
+                    setActiveCategory(cat);
+                    setShowCategoryModal(false);
+                  }}
+                  style={{
+                    paddingVertical: 12,
+                    borderBottomWidth: 1,
+                    borderBottomColor: "#2C2C2E",
+                  }}
+                >
+                  <Text
+                    style={{
+                      color: activeCategory === cat ? "#0A84FF" : "#FFF",
+                      fontWeight: activeCategory === cat ? "bold" : "normal",
+                      fontSize: 16,
+                    }}
+                  >
+                    {cat}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          </View>
+        </TouchableOpacity>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -5316,5 +5412,9 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     alignItems: "center",
     marginBottom: 8,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.7)",
   },
 });
