@@ -86,6 +86,7 @@ export default function ManageScreen() {
   const [showAddStaffModal, setShowAddStaffModal] = useState(false);
   const [newStaffName, setNewStaffName] = useState("");
   const [newStaffRole, setNewStaffRole] = useState("Stylist");
+  const [editingStaffId, setEditingStaffId] = useState<number | null>(null);
 
   // payroll for staff and bonuses
   const [selectedPayrollStaff, setSelectedPayrollStaff] = useState<any>(null);
@@ -595,16 +596,30 @@ export default function ManageScreen() {
   };
 
   // Staff Handlers ---
+
+  const openEditStaffModal = (staff: any) => {
+    setEditingStaffId(staff.id);
+    setNewStaffName(staff.name);
+    setNewStaffRole(staff.role);
+    setShowAddStaffModal(true);
+  };
   const handleSaveStaff = () => {
     if (!newStaffName || !newStaffRole)
       return alert("Nama dan Posisi wajib diisi!");
 
     try {
-      db.runSync(
-        "INSERT INTO Employees (name, role) VALUES (?, ?)",
-        newStaffName,
-        newStaffRole,
-      );
+      if (editingStaffId) {
+        db.runSync("UPDATE Employees SET name = ?, role = ? WHERE id = ?", [
+          newStaffName,
+          newStaffRole,
+          editingStaffId,
+        ]);
+      } else {
+        db.runSync("INSERT INTO Employees (name, role) VALUES (?, ?)", [
+          newStaffName,
+          newStaffRole,
+        ]);
+      }
 
       // Refresh the staff list instantly
       const refreshedStaff = db.getAllSync(
@@ -1323,7 +1338,12 @@ export default function ManageScreen() {
                 <ScrollView contentContainerStyle={styles.listContainer}>
                   <TouchableOpacity
                     style={styles.addButton}
-                    onPress={() => setShowAddStaffModal(true)}
+                    onPress={() => {
+                      setEditingStaffId(null);
+                      setNewStaffName("");
+                      setNewStaffRole("Stylist");
+                      setShowAddStaffModal(true);
+                    }}
                   >
                     <Text style={styles.textWhiteBold}>
                       + Tambah Staff Baru
@@ -1337,12 +1357,36 @@ export default function ManageScreen() {
                           Posisi: {staff.role}
                         </Text>
                       </View>
-                      <TouchableOpacity
-                        style={styles.deleteButton}
-                        onPress={() => handleDeleteStaff(staff.id)}
-                      >
-                        <Text style={styles.deleteText}>Hapus</Text>
-                      </TouchableOpacity>
+
+                      <View style={{ flexDirection: "row", gap: 10 }}>
+                        <TouchableOpacity
+                          style={{
+                            backgroundColor: "rgba(10, 132, 255, 0.1)",
+                            padding: 10,
+                            borderRadius: 8,
+                            borderWidth: 1,
+                            borderColor: "#0A84FF",
+                          }}
+                          onPress={() => openEditStaffModal(staff)}
+                        >
+                          <Text
+                            style={{
+                              color: "#0A84FF",
+                              fontWeight: "bold",
+                              fontSize: 12,
+                            }}
+                          >
+                            Edit
+                          </Text>
+                        </TouchableOpacity>
+
+                        <TouchableOpacity
+                          style={styles.deleteButton}
+                          onPress={() => handleDeleteStaff(staff.id)}
+                        >
+                          <Text style={styles.deleteText}>Hapus</Text>
+                        </TouchableOpacity>
+                      </View>
                     </View>
                   ))}
                 </ScrollView>
@@ -3820,7 +3864,7 @@ export default function ManageScreen() {
                   marginBottom: 20,
                 }}
               >
-                Tambah Staff Baru
+                {editingStaffId ? "Edit Staff" : "Tambah Staff Baru"}
               </Text>
 
               <Text

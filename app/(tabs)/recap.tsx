@@ -12,6 +12,8 @@ import {
   View,
 } from "react-native";
 
+
+
 import ZoomableReceipt from "@/components/ZoomableReceipt";
 import { db } from "@/database/db";
 import DateTimePicker from "@react-native-community/datetimepicker";
