@@ -1471,8 +1471,9 @@ export default function ManageScreen() {
                     <ScrollView
                       horizontal
                       showsHorizontalScrollIndicator={true}
+                      contentContainerStyle={{ minWidth: "100%" }}
                     >
-                      <View>
+                      <View style={{ flex: 1 }}>
                         {/* Table Header */}
                         <View style={styles.tableHeaderRow}>
                           <Text
@@ -5276,10 +5277,10 @@ const styles = StyleSheet.create({
   },
 
   // Table Column Widths
-  colName: { width: 130 },
-  colDate: { width: 90 },
-  colTime: { width: 70 },
-  colStatus: { width: 190 },
+  colName: { flex: 2, minWidth: 130 },
+  colDate: { flex: 1.5, minWidth: 90 },
+  colTime: { flex: 1, minWidth: 70 },
+  colStatus: { flex: 2.5, minWidth: 190 },
 
   statusContainer: {
     flexDirection: "row",
