@@ -5,7 +5,6 @@ import {
   KeyboardAvoidingView,
   Modal,
   Platform,
-  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -13,9 +12,14 @@ import {
   View,
 } from "react-native";
 
+import ZoomableReceipt from "@/components/ZoomableReceipt";
 import { db } from "@/database/db";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import { useFocusEffect } from "expo-router";
+import {
+  GestureHandlerRootView,
+  ScrollView,
+} from "react-native-gesture-handler";
 import {
   SafeAreaView,
   useSafeAreaInsets,
@@ -68,6 +72,9 @@ export default function RecapScreen() {
   const [showPasswordModal, setShowPasswordModal] = useState(false);
   const [deletePassword, setDeletePassword] = useState("");
   const [isPasswordVisible, setIsPasswordVisible] = useState(false);
+
+  // RECEIPT ZOOM
+  const [isZoomed, setIsZoomed] = useState(false);
 
   // DATE RANGE NAVIGATION FUNCTIONS
   const handleDateChange = (event: any, date?: Date) => {
@@ -866,433 +873,458 @@ export default function RecapScreen() {
         transparent={true}
         onRequestClose={() => setSelectedTx(null)}
       >
-        <View
-          style={[
-            styles.modalOverlay,
-            { paddingTop: insets.top, paddingBottom: insets.bottom },
-          ]}
-        >
-          <ScrollView
-            style={{ width: "100%", maxHeight: "80%" }}
-            contentContainerStyle={{
-              alignItems: "center",
-              paddingVertical: 10,
-            }}
-            showsVerticalScrollIndicator={true}
+        <GestureHandlerRootView style={{ flex: 1 }}>
+          <View
+            style={[
+              styles.modalOverlay,
+              { paddingTop: insets.top, paddingBottom: insets.bottom },
+            ]}
           >
-            <View style={styles.receiptPaper}>
-              <Text style={styles.receiptTitle}>D'FFOND SALON</Text>
-              <Text style={styles.receiptCenter}>
-                Jl. Dagopojok No.16, Kota Bandung
-              </Text>
+            <ScrollView
+              style={{ width: "100%", maxHeight: "80%" }}
+              contentContainerStyle={{
+                alignItems: "center",
+                paddingVertical: 10,
+              }}
+              showsVerticalScrollIndicator={true}
+              scrollEnabled={!isZoomed}
+            >
+              <ZoomableReceipt onZoomChange={(zoomed) => setIsZoomed(zoomed)}>
+                <View style={styles.receiptPaper}>
+                  <Text style={styles.receiptTitle}>D'FFOND SALON</Text>
+                  <Text style={styles.receiptCenter}>
+                    Jl. Dagopojok No.16, Kota Bandung
+                  </Text>
 
-              <Text style={styles.receiptDivider}>
-                --------------------------------
-              </Text>
-              <Text style={styles.receiptLine}>
-                Tanggal:{" "}
-                {selectedTx
-                  ? new Date(selectedTx.timestamp).toLocaleDateString("en-GB")
-                  : ""}
-              </Text>
-              <Text style={styles.receiptLine}>Waktu: {selectedTx?.time}</Text>
-              {selectedTx?.type === "sale" && (
-                <Text style={styles.receiptLine}>
-                  Cashier: {selectedTx?.stylist}
-                </Text>
-              )}
-              <Text style={styles.receiptDivider}>
-                --------------------------------
-              </Text>
+                  <Text style={styles.receiptDivider}>
+                    --------------------------------
+                  </Text>
+                  <Text style={styles.receiptLine}>
+                    Tanggal:{" "}
+                    {selectedTx
+                      ? new Date(selectedTx.timestamp).toLocaleDateString(
+                          "en-GB",
+                        )
+                      : ""}
+                  </Text>
+                  <Text style={styles.receiptLine}>
+                    Waktu: {selectedTx?.time}
+                  </Text>
+                  {selectedTx?.type === "sale" && (
+                    <Text style={styles.receiptLine}>
+                      Cashier: {selectedTx?.stylist}
+                    </Text>
+                  )}
+                  <Text style={styles.receiptDivider}>
+                    --------------------------------
+                  </Text>
 
-              {selectedTx?.type === "sale" ? (
-                <View>
-                  {/* USE THE FULL CART JSON INSTEAD OF THE FLATTENED TRANSACTION ITEMS */}
-                  {(selectedTx.parsedCart || []).map(
-                    (cartItem: any, index: number) => {
-                      const addOnsTotal =
-                        cartItem.selectedAddOns &&
-                        cartItem.selectedAddOns.length > 0
-                          ? cartItem.selectedAddOns.reduce(
-                              (sum: number, addon: any) => sum + addon.price,
-                              0,
-                            )
-                          : 0;
-                      const basePriceWithAddons = cartItem.price + addOnsTotal;
-                      const discountNominal = Math.round(
-                        basePriceWithAddons *
-                          cartItem.quantity *
-                          (cartItem.discountPercent / 100),
-                      );
+                  {selectedTx?.type === "sale" ? (
+                    <View>
+                      {/* USE THE FULL CART JSON INSTEAD OF THE FLATTENED TRANSACTION ITEMS */}
+                      {(selectedTx.parsedCart || []).map(
+                        (cartItem: any, index: number) => {
+                          const addOnsTotal =
+                            cartItem.selectedAddOns &&
+                            cartItem.selectedAddOns.length > 0
+                              ? cartItem.selectedAddOns.reduce(
+                                  (sum: number, addon: any) =>
+                                    sum + addon.price,
+                                  0,
+                                )
+                              : 0;
+                          const basePriceWithAddons =
+                            cartItem.price + addOnsTotal;
+                          const discountNominal = Math.round(
+                            basePriceWithAddons *
+                              cartItem.quantity *
+                              (cartItem.discountPercent / 100),
+                          );
 
-                      return (
-                        <View
-                          key={cartItem.cartId || index}
-                          style={{
-                            marginBottom: 12,
-                            paddingBottom: 8,
-                            borderBottomWidth: 1,
-                            borderBottomColor: "#F2F2F7",
-                          }}
-                        >
-                          {/* 1. JUST THE ITEM NAME (Removed quantity from here) */}
-                          <View
-                            style={{
-                              flexDirection: "row",
-                              justifyContent: "space-between",
-                              alignItems: "flex-start",
-                            }}
-                          >
-                            <Text
-                              style={[
-                                styles.receiptLine,
-                                { flex: 1, fontWeight: "bold" },
-                              ]}
-                            >
-                              {cartItem.name}
-                            </Text>
-                          </View>
-
-                          {/* QUANTITY & BASE TOTAL ROW */}
-                          <View
-                            style={{
-                              flexDirection: "row",
-                              justifyContent: "space-between",
-                              marginTop: 4,
-                            }}
-                          >
-                            <Text style={styles.receiptLine}>
-                              {cartItem.quantity}x Rp{" "}
-                              {cartItem.price.toLocaleString("id-ID")}
-                            </Text>
-                            <Text style={styles.receiptLine}>
-                              Rp{" "}
-                              {(
-                                cartItem.quantity * cartItem.price
-                              ).toLocaleString("id-ID")}
-                            </Text>
-                          </View>
-
-                          {/* Stylists */}
-                          {cartItem.stylists &&
-                            cartItem.stylists.length > 0 && (
-                              <View style={styles.receiptRowWrap}>
-                                <Text
-                                  style={[
-                                    styles.receiptTextLeftWrap,
-                                    { fontStyle: "italic", paddingLeft: 0 },
-                                  ]}
-                                >
-                                  {cartItem.stylists
-                                    .map((s: string) => `@${s}`)
-                                    .join(", ")}
-                                </Text>
-                              </View>
-                            )}
-
-                          {/* Add-ons List */}
-                          {cartItem.selectedAddOns.map(
-                            (addon: any, idx: number) => {
-                              const totalAddonQty =
-                                (addon.quantity || 1) * cartItem.quantity;
-                              const totalAddonPrice =
-                                addon.price * totalAddonQty;
-
-                              if (totalAddonQty === 1) {
-                                return (
-                                  <View
-                                    key={idx}
-                                    style={{
-                                      flexDirection: "row",
-                                      justifyContent: "space-between",
-                                      alignItems: "flex-start",
-                                      marginVertical: 2,
-                                    }}
-                                  >
-                                    <Text
-                                      style={{
-                                        color: "#555",
-                                        fontSize: 12,
-                                        flex: 1,
-                                        flexShrink: 1,
-                                        paddingRight: 15,
-                                      }}
-                                    >
-                                      + {addon.name}
-                                    </Text>
-                                    <Text
-                                      style={{
-                                        color: "#555",
-                                        fontSize: 12,
-                                        textAlign: "right",
-                                      }}
-                                    >
-                                      Rp{" "}
-                                      {totalAddonPrice.toLocaleString("id-ID")}
-                                    </Text>
-                                  </View>
-                                );
-                              } else {
-                                return (
-                                  <View key={idx} style={{ marginVertical: 2 }}>
-                                    <Text
-                                      style={{ color: "#555", fontSize: 12 }}
-                                    >
-                                      + {addon.name}
-                                    </Text>
-
-                                    <View
-                                      style={{
-                                        flexDirection: "row",
-                                        justifyContent: "space-between",
-                                        alignItems: "flex-start",
-                                        paddingLeft: 14,
-                                        marginTop: 2,
-                                      }}
-                                    >
-                                      <Text
-                                        style={{
-                                          color: "#555",
-                                          fontSize: 12,
-                                          flex: 1,
-                                          flexShrink: 1,
-                                          paddingRight: 15,
-                                        }}
-                                      >
-                                        ({totalAddonQty}x Rp{" "}
-                                        {addon.price.toLocaleString("id-ID")})
-                                      </Text>
-                                      <Text
-                                        style={{
-                                          color: "#555",
-                                          fontSize: 12,
-                                          textAlign: "right",
-                                        }}
-                                      >
-                                        Rp{" "}
-                                        {totalAddonPrice.toLocaleString(
-                                          "id-ID",
-                                        )}
-                                      </Text>
-                                    </View>
-                                  </View>
-                                );
-                              }
-                            },
-                          )}
-
-                          {/* Discount Info */}
-                          {cartItem.discountPercent > 0 && (
-                            <View style={styles.receiptRowWrap}>
-                              <Text
-                                style={[
-                                  styles.receiptDiscountLeftWrap,
-                                  { paddingLeft: 10 },
-                                ]}
-                              >
-                                Disc {cartItem.discountPercent}%{" "}
-                                {cartItem.discountDesc
-                                  ? `(${cartItem.discountDesc})`
-                                  : ""}
-                              </Text>
-                              <Text style={styles.receiptDiscountRight}>
-                                -Rp {discountNominal.toLocaleString("id-ID")}
-                              </Text>
-                            </View>
-                          )}
-
-                          {/* SUBTOTAL ROW */}
-                          <View
-                            style={{
-                              flexDirection: "row",
-                              justifyContent: "flex-end",
-                              marginTop: 2,
-                            }}
-                          >
-                            <Text
-                              style={[
-                                styles.receiptLine,
-                                { fontWeight: "bold" },
-                              ]}
-                            >
-                              Subtotal: Rp{" "}
-                              {cartItem.itemTotal.toLocaleString("id-ID")}
-                            </Text>
-                          </View>
-                          {/* DISPLAY CUSTOM NOTE IN RECAP */}
-                          {cartItem.customNote ? (
+                          return (
                             <View
+                              key={cartItem.cartId || index}
                               style={{
-                                marginTop: 4,
-                                paddingTop: 4,
-                                borderTopWidth: 1,
-                                borderTopColor: "#F2F2F7",
-                                borderStyle: "dashed",
+                                marginBottom: 12,
+                                paddingBottom: 8,
+                                borderBottomWidth: 1,
+                                borderBottomColor: "#F2F2F7",
                               }}
                             >
-                              <Text
-                                style={[
-                                  styles.receiptLine,
-                                  { fontStyle: "italic", color: "#555" },
-                                ]}
+                              {/* 1. JUST THE ITEM NAME (Removed quantity from here) */}
+                              <View
+                                style={{
+                                  flexDirection: "row",
+                                  justifyContent: "space-between",
+                                  alignItems: "flex-start",
+                                }}
                               >
-                                Catatan: {cartItem.customNote}
-                              </Text>
+                                <Text
+                                  style={[
+                                    styles.receiptLine,
+                                    { flex: 1, fontWeight: "bold" },
+                                  ]}
+                                >
+                                  {cartItem.name}
+                                </Text>
+                              </View>
+
+                              {/* QUANTITY & BASE TOTAL ROW */}
+                              <View
+                                style={{
+                                  flexDirection: "row",
+                                  justifyContent: "space-between",
+                                  marginTop: 4,
+                                }}
+                              >
+                                <Text style={styles.receiptLine}>
+                                  {cartItem.quantity}x Rp{" "}
+                                  {cartItem.price.toLocaleString("id-ID")}
+                                </Text>
+                                <Text style={styles.receiptLine}>
+                                  Rp{" "}
+                                  {(
+                                    cartItem.quantity * cartItem.price
+                                  ).toLocaleString("id-ID")}
+                                </Text>
+                              </View>
+
+                              {/* Stylists */}
+                              {cartItem.stylists &&
+                                cartItem.stylists.length > 0 && (
+                                  <View style={styles.receiptRowWrap}>
+                                    <Text
+                                      style={[
+                                        styles.receiptTextLeftWrap,
+                                        { fontStyle: "italic", paddingLeft: 0 },
+                                      ]}
+                                    >
+                                      {cartItem.stylists
+                                        .map((s: string) => `@${s}`)
+                                        .join(", ")}
+                                    </Text>
+                                  </View>
+                                )}
+
+                              {/* Add-ons List */}
+                              {cartItem.selectedAddOns.map(
+                                (addon: any, idx: number) => {
+                                  const totalAddonQty =
+                                    (addon.quantity || 1) * cartItem.quantity;
+                                  const totalAddonPrice =
+                                    addon.price * totalAddonQty;
+
+                                  if (totalAddonQty === 1) {
+                                    return (
+                                      <View
+                                        key={idx}
+                                        style={{
+                                          flexDirection: "row",
+                                          justifyContent: "space-between",
+                                          alignItems: "flex-start",
+                                          marginVertical: 2,
+                                        }}
+                                      >
+                                        <Text
+                                          style={{
+                                            color: "#555",
+                                            fontSize: 12,
+                                            flex: 1,
+                                            flexShrink: 1,
+                                            paddingRight: 15,
+                                          }}
+                                        >
+                                          + {addon.name}
+                                        </Text>
+                                        <Text
+                                          style={{
+                                            color: "#555",
+                                            fontSize: 12,
+                                            textAlign: "right",
+                                          }}
+                                        >
+                                          Rp{" "}
+                                          {totalAddonPrice.toLocaleString(
+                                            "id-ID",
+                                          )}
+                                        </Text>
+                                      </View>
+                                    );
+                                  } else {
+                                    return (
+                                      <View
+                                        key={idx}
+                                        style={{ marginVertical: 2 }}
+                                      >
+                                        <Text
+                                          style={{
+                                            color: "#555",
+                                            fontSize: 12,
+                                          }}
+                                        >
+                                          + {addon.name}
+                                        </Text>
+
+                                        <View
+                                          style={{
+                                            flexDirection: "row",
+                                            justifyContent: "space-between",
+                                            alignItems: "flex-start",
+                                            paddingLeft: 14,
+                                            marginTop: 2,
+                                          }}
+                                        >
+                                          <Text
+                                            style={{
+                                              color: "#555",
+                                              fontSize: 12,
+                                              flex: 1,
+                                              flexShrink: 1,
+                                              paddingRight: 15,
+                                            }}
+                                          >
+                                            ({totalAddonQty}x Rp{" "}
+                                            {addon.price.toLocaleString(
+                                              "id-ID",
+                                            )}
+                                            )
+                                          </Text>
+                                          <Text
+                                            style={{
+                                              color: "#555",
+                                              fontSize: 12,
+                                              textAlign: "right",
+                                            }}
+                                          >
+                                            Rp{" "}
+                                            {totalAddonPrice.toLocaleString(
+                                              "id-ID",
+                                            )}
+                                          </Text>
+                                        </View>
+                                      </View>
+                                    );
+                                  }
+                                },
+                              )}
+
+                              {/* Discount Info */}
+                              {cartItem.discountPercent > 0 && (
+                                <View style={styles.receiptRowWrap}>
+                                  <Text
+                                    style={[
+                                      styles.receiptDiscountLeftWrap,
+                                      { paddingLeft: 10 },
+                                    ]}
+                                  >
+                                    Disc {cartItem.discountPercent}%{" "}
+                                    {cartItem.discountDesc
+                                      ? `(${cartItem.discountDesc})`
+                                      : ""}
+                                  </Text>
+                                  <Text style={styles.receiptDiscountRight}>
+                                    -Rp{" "}
+                                    {discountNominal.toLocaleString("id-ID")}
+                                  </Text>
+                                </View>
+                              )}
+
+                              {/* SUBTOTAL ROW */}
+                              <View
+                                style={{
+                                  flexDirection: "row",
+                                  justifyContent: "flex-end",
+                                  marginTop: 2,
+                                }}
+                              >
+                                <Text
+                                  style={[
+                                    styles.receiptLine,
+                                    { fontWeight: "bold" },
+                                  ]}
+                                >
+                                  Subtotal: Rp{" "}
+                                  {cartItem.itemTotal.toLocaleString("id-ID")}
+                                </Text>
+                              </View>
+                              {/* DISPLAY CUSTOM NOTE IN RECAP */}
+                              {cartItem.customNote ? (
+                                <View
+                                  style={{
+                                    marginTop: 4,
+                                    paddingTop: 4,
+                                    borderTopWidth: 1,
+                                    borderTopColor: "#F2F2F7",
+                                    borderStyle: "dashed",
+                                  }}
+                                >
+                                  <Text
+                                    style={[
+                                      styles.receiptLine,
+                                      { fontStyle: "italic", color: "#555" },
+                                    ]}
+                                  >
+                                    Catatan: {cartItem.customNote}
+                                  </Text>
+                                </View>
+                              ) : null}
                             </View>
-                          ) : null}
+                          );
+                        },
+                      )}
+
+                      <Text style={styles.receiptDivider}>
+                        --------------------------------
+                      </Text>
+
+                      {/* Payment Method Details */}
+                      <View style={styles.receiptRowWrap}>
+                        <Text style={styles.receiptLine}>PEMBAYARAN:</Text>
+                        <Text style={styles.receiptLine}>
+                          {selectedTx?.paymentMethod}
+                        </Text>
+                      </View>
+
+                      {/* 3. TOTAL CHANGE FOR CUSTOMER (IF CASH) */}
+
+                      <View>
+                        <View style={[styles.receiptRowWrap, { marginTop: 4 }]}>
+                          <Text style={styles.receiptLine}>UANG TUNAI:</Text>
+                          <Text style={styles.receiptLine}>
+                            Rp{" "}
+                            {selectedTx?.amountTendered.toLocaleString("id-ID")}
+                          </Text>
                         </View>
-                      );
-                    },
-                  )}
-
-                  <Text style={styles.receiptDivider}>
-                    --------------------------------
-                  </Text>
-
-                  {/* Payment Method Details */}
-                  <View style={styles.receiptRowWrap}>
-                    <Text style={styles.receiptLine}>PEMBAYARAN:</Text>
-                    <Text style={styles.receiptLine}>
-                      {selectedTx?.paymentMethod}
-                    </Text>
-                  </View>
-
-                  {/* 3. TOTAL CHANGE FOR CUSTOMER (IF CASH) */}
-
-                  <View>
-                    <View style={[styles.receiptRowWrap, { marginTop: 4 }]}>
-                      <Text style={styles.receiptLine}>UANG TUNAI:</Text>
-                      <Text style={styles.receiptLine}>
-                        Rp {selectedTx?.amountTendered.toLocaleString("id-ID")}
+                        <View style={[styles.receiptRowWrap, { marginTop: 4 }]}>
+                          <Text
+                            style={[
+                              styles.receiptLine,
+                              { fontWeight: "bold", color: "#cf2d18" },
+                            ]}
+                          >
+                            KEMBALIAN:
+                          </Text>
+                          <Text
+                            style={[
+                              styles.receiptLine,
+                              { fontWeight: "bold", color: "#cf2d18" },
+                            ]}
+                          >
+                            Rp{" "}
+                            {selectedTx?.changeAmount.toLocaleString("id-ID")}
+                          </Text>
+                        </View>
+                      </View>
+                      <Text style={styles.receiptDivider}>
+                        --------------------------------
                       </Text>
+                      {/* Grand Total Row */}
+                      <View style={styles.receiptRowWrap}>
+                        <Text
+                          style={{
+                            color: "#000",
+                            fontSize: 14,
+                            fontWeight: "bold",
+                          }}
+                        >
+                          TOTAL:
+                        </Text>
+                        <Text
+                          style={{
+                            color: "#000",
+                            fontSize: 14,
+                            fontWeight: "bold",
+                          }}
+                        >
+                          Rp {selectedTx?.amount.toLocaleString("id-ID")}
+                        </Text>
+                      </View>
                     </View>
-                    <View style={[styles.receiptRowWrap, { marginTop: 4 }]}>
+                  ) : (
+                    <View style={{ paddingVertical: 10 }}>
+                      <Text style={styles.receiptBold}>
+                        {selectedTx?.category?.toUpperCase() || "PENGELUARAN"}
+                      </Text>
                       <Text
                         style={[
                           styles.receiptLine,
-                          { fontWeight: "bold", color: "#cf2d18" },
+                          { textAlign: "center", marginBottom: 15 },
                         ]}
                       >
-                        KEMBALIAN:
+                        {selectedTx?.details}
                       </Text>
-                      <Text
-                        style={[
-                          styles.receiptLine,
-                          { fontWeight: "bold", color: "#cf2d18" },
-                        ]}
-                      >
-                        Rp {selectedTx?.changeAmount.toLocaleString("id-ID")}
-                      </Text>
+
+                      <View style={styles.receiptRowWrap}>
+                        <Text
+                          style={{
+                            color: "#000",
+                            fontSize: 14,
+                            fontWeight: "bold",
+                          }}
+                        >
+                          TOTAL:
+                        </Text>
+                        <Text
+                          style={{
+                            color: selectedTx?.isIgnored ? "#8E8E93" : "#000",
+                            fontSize: 14,
+                            fontWeight: "bold",
+                          }}
+                        >
+                          - Rp{" "}
+                          {(selectedTx?.isIgnored
+                            ? selectedTx?.displayAmount
+                            : Math.abs(selectedTx?.amount || 0)
+                          ).toLocaleString("id-ID")}
+                        </Text>
+                      </View>
+                      {selectedTx?.isIgnored && (
+                        <Text
+                          style={{
+                            color: "#8E8E93",
+                            fontSize: 12,
+                            textAlign: "right",
+                            marginTop: 5,
+                            fontStyle: "italic",
+                          }}
+                        >
+                          (Tidak Memotong Saldo Owner)
+                        </Text>
+                      )}
                     </View>
-                  </View>
+                  )}
                   <Text style={styles.receiptDivider}>
                     --------------------------------
                   </Text>
-                  {/* Grand Total Row */}
-                  <View style={styles.receiptRowWrap}>
-                    <Text
-                      style={{
-                        color: "#000",
-                        fontSize: 14,
-                        fontWeight: "bold",
-                      }}
-                    >
-                      TOTAL:
-                    </Text>
-                    <Text
-                      style={{
-                        color: "#000",
-                        fontSize: 14,
-                        fontWeight: "bold",
-                      }}
-                    >
-                      Rp {selectedTx?.amount.toLocaleString("id-ID")}
-                    </Text>
-                  </View>
                 </View>
-              ) : (
-                <View style={{ paddingVertical: 10 }}>
-                  <Text style={styles.receiptBold}>
-                    {selectedTx?.category?.toUpperCase() || "PENGELUARAN"}
-                  </Text>
-                  <Text
-                    style={[
-                      styles.receiptLine,
-                      { textAlign: "center", marginBottom: 15 },
-                    ]}
-                  >
-                    {selectedTx?.details}
-                  </Text>
+              </ZoomableReceipt>
+            </ScrollView>
 
-                  <View style={styles.receiptRowWrap}>
-                    <Text
-                      style={{
-                        color: "#000",
-                        fontSize: 14,
-                        fontWeight: "bold",
-                      }}
-                    >
-                      TOTAL:
-                    </Text>
-                    <Text
-                      style={{
-                        color: selectedTx?.isIgnored ? "#8E8E93" : "#000",
-                        fontSize: 14,
-                        fontWeight: "bold",
-                      }}
-                    >
-                      - Rp{" "}
-                      {(selectedTx?.isIgnored
-                        ? selectedTx?.displayAmount
-                        : Math.abs(selectedTx?.amount || 0)
-                      ).toLocaleString("id-ID")}
-                    </Text>
-                  </View>
-                  {selectedTx?.isIgnored && (
-                    <Text
-                      style={{
-                        color: "#8E8E93",
-                        fontSize: 12,
-                        textAlign: "right",
-                        marginTop: 5,
-                        fontStyle: "italic",
-                      }}
-                    >
-                      (Tidak Memotong Saldo Owner)
-                    </Text>
-                  )}
-                </View>
-              )}
-              <Text style={styles.receiptDivider}>
-                --------------------------------
-              </Text>
-            </View>
-          </ScrollView>
-
-          <View style={styles.modalActions}>
-            <TouchableOpacity
-              onPress={() => setSelectedTx(null)}
-              style={styles.closeBtn}
-            >
-              <Text style={styles.textWhiteBold}>Tutup</Text>
-            </TouchableOpacity>
-
-            {selectedTx?.type === "sale" && (
+            <View style={styles.modalActions}>
               <TouchableOpacity
-                style={styles.reprintBtn}
-                onPress={handleReprint}
+                onPress={() => setSelectedTx(null)}
+                style={styles.closeBtn}
               >
-                <Text style={styles.textWhiteBold}>🖨️ Reprint</Text>
+                <Text style={styles.textWhiteBold}>Tutup</Text>
               </TouchableOpacity>
-            )}
-            <TouchableOpacity
-              style={styles.deleteBtn}
-              onPress={handleDeleteTransaction}
-            >
-              <Text style={styles.textWhiteBold}>🗑️ Hapus</Text>
-            </TouchableOpacity>
+
+              {selectedTx?.type === "sale" && (
+                <TouchableOpacity
+                  style={styles.reprintBtn}
+                  onPress={handleReprint}
+                >
+                  <Text style={styles.textWhiteBold}>🖨️ Reprint</Text>
+                </TouchableOpacity>
+              )}
+              <TouchableOpacity
+                style={styles.deleteBtn}
+                onPress={handleDeleteTransaction}
+              >
+                <Text style={styles.textWhiteBold}>🗑️ Hapus</Text>
+              </TouchableOpacity>
+            </View>
           </View>
-        </View>
+        </GestureHandlerRootView>
       </Modal>
 
       {/* EXPENSE MODAL */}

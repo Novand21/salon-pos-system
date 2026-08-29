@@ -15,17 +15,18 @@ import {
   View,
 } from "react-native";
 
+
 // printer bluetooth ui
 import { printReceiptRaw } from "../../utils/bluetooth";
 import { generateThermalReceiptString } from "../../utils/printer";
 
+import { db } from "@/database/db";
 import {
   SafeAreaView,
   useSafeAreaInsets,
 } from "react-native-safe-area-context";
-// 🧠 1. IMPORT OUR GLOBAL BRAIN
-import { db } from "@/database/db";
 import { useCart } from "../../context/CartContext";
+``;
 
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 
@@ -1456,6 +1457,7 @@ export default function RegisterScreen() {
 
               <ScrollView style={styles.checkoutBody}>
                 {/* Receipt Preview */}
+
                 <View style={styles.receiptPaper}>
                   <Text style={styles.receiptTitle}>D'FFOND SALON</Text>
                   <Text style={styles.receiptCenter}>

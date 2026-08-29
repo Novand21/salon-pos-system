@@ -3,12 +3,9 @@ import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { Tabs } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import React, { useEffect } from "react";
-import { Platform, View } from "react-native";
+import { Platform } from "react-native";
+import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-
-// NAVIGATION BAR LAYOUT PURPOSE BUT NOT USED FOR NOW
-// import * as NavigationBar from "expo-navigation-bar";
-// import { useEffect } from "react";
 
 export default function TabLayout() {
   const insets = useSafeAreaInsets();
@@ -33,7 +30,7 @@ export default function TabLayout() {
     }
   }, []);
   return (
-    <View style={{ flex: 1, paddingBottom: insets.bottom }}>
+    <GestureHandlerRootView style={{ flex: 1, paddingBottom: insets.bottom }}>
       <StatusBar style="light" backgroundColor="#000000" />
       <Tabs
         screenOptions={{
@@ -120,6 +117,6 @@ export default function TabLayout() {
           }}
         />
       </Tabs>
-    </View>
+    </GestureHandlerRootView>
   );
 }
